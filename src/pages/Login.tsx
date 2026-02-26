@@ -97,9 +97,7 @@ export default function Login() {
               playsInline
               preload="auto"
             >
-              <source src="/intro.mp4" type="video/mp4" />
-              <source src="https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" type="video/mp4" />
-              Your browser does not support the video tag.
+              <source src="./src/intro.webm" type="video/webm" />
             </video>
             
             {videoStarted && (
