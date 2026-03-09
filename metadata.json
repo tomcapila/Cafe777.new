@@ -1,5 +1,5 @@
 {
   "name": "Cafe777",
   "description": "A cross-platform app dedicated to motorcyclists and the surrounding ecosystem.",
-  "requestFramePermissions": []
+  "requestFramePermissions": ["camera", "geolocation"]
 }

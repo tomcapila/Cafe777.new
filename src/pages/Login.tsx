@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { LogIn, Loader2, ArrowRight, Play } from 'lucide-react';
+import { useLanguage } from '../contexts/LanguageContext';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -10,6 +11,7 @@ export default function Login() {
   const [error, setError] = useState('');
   const [showVideo, setShowVideo] = useState(true);
   const [videoStarted, setVideoStarted] = useState(false);
+  const { t } = useLanguage();
 
   const handleVideoEnd = () => {
     setShowVideo(false);
@@ -17,19 +19,10 @@ export default function Login() {
 
   const startVideo = () => {
     setVideoStarted(true);
-  };
-
-  useEffect(() => {
-    if (videoStarted && videoRef.current) {
-      videoRef.current.play().catch(err => {
-        // AbortError is often benign (e.g. user skipped)
-        if (err.name !== 'AbortError') {
-          console.error("Video play failed:", err);
-          setShowVideo(false); // Fallback if video fails
-        }
-      });
+    if (videoRef.current) {
+      videoRef.current.play();
     }
-  }, [videoStarted]);
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -45,6 +38,13 @@ export default function Login() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
+
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await res.text();
+        console.error("Server returned non-JSON response:", text);
+        throw new Error(`Server error: Received ${res.status} ${res.statusText}. Please try again later.`);
+      }
 
       const result = await res.json();
 
@@ -79,33 +79,37 @@ export default function Login() {
             transition={{ duration: 0.8 }}
             className="fixed inset-0 z-50 flex items-center justify-center bg-black"
           >
+            <video
+              ref={videoRef}
+              muted
+              onEnded={handleVideoEnd}
+              className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ${videoStarted ? 'opacity-100' : 'opacity-0'}`}
+              playsInline
+              preload="auto"
+            >
+              <source src="/Intro.webm" type="video/webm" />
+            </video>
+
             {!videoStarted && (
-              <button 
+              <motion.button
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
                 onClick={startVideo}
-                className="group flex flex-col items-center gap-4 text-white hover:text-orange-500 transition-colors"
+                className="group relative z-10 flex flex-col items-center gap-4 text-white hover:text-orange-500 transition-all"
               >
                 <div className="w-20 h-20 rounded-full border-2 border-white/20 flex items-center justify-center group-hover:border-orange-500/50 group-hover:bg-orange-500/10 transition-all">
                   <Play className="w-8 h-8 fill-current" />
                 </div>
-                <span className="font-bold tracking-widest text-sm uppercase">Enter Café777</span>
-              </button>
+                <span className="font-bold tracking-widest text-sm uppercase">{t('login.enter')}</span>
+              </motion.button>
             )}
-            <video
-              ref={videoRef}
-              onEnded={handleVideoEnd}
-              className={`w-full h-full object-cover transition-opacity duration-1000 ${!videoStarted ? 'opacity-0' : 'opacity-100'}`}
-              playsInline
-              preload="auto"
-            >
-              <source src="./src/intro.webm" type="video/webm" />
-            </video>
             
             {videoStarted && (
               <button 
                 onClick={() => setShowVideo(false)}
                 className="absolute bottom-8 right-8 text-white/50 hover:text-white text-sm font-medium transition-colors"
               >
-                Skip Intro
+                {t('login.skip')}
               </button>
             )}
           </motion.div>
@@ -117,36 +121,36 @@ export default function Login() {
             className="w-full max-w-md relative z-10"
           >
             <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold tracking-tight mb-2 text-orange-500">Welcome Back</h2>
-              <p className="text-zinc-400">Login to Café777</p>
+              <h2 className="text-4xl font-display font-black tracking-tighter mb-2 text-primary uppercase italic">{t('login.welcome')}</h2>
+              <p className="text-zinc-400 font-light">{t('login.subtitle')}</p>
             </div>
 
-            <div className="bg-zinc-900 rounded-3xl p-8 border border-white/10 shadow-xl">
+            <div className="glass-card p-8 shadow-2xl shadow-primary/5">
               {error && (
-                <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
+                <div className="mb-6 p-4 bg-accent/10 border border-accent/20 rounded-xl text-accent text-sm font-medium">
                   {error}
                 </div>
               )}
 
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
-                  <label className="block text-sm font-medium text-zinc-400 mb-1.5">Email Address</label>
+                  <label className="block text-xs font-mono uppercase tracking-widest text-zinc-500 mb-2">{t('login.email')}</label>
                   <input 
                     type="email" 
                     name="email" 
                     required
-                    className="w-full bg-zinc-950 border border-white/10 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all"
+                    className="input-field"
                     placeholder="you@example.com"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-zinc-400 mb-1.5">Password</label>
+                  <label className="block text-xs font-mono uppercase tracking-widest text-zinc-500 mb-2">{t('login.password')}</label>
                   <input 
                     type="password" 
                     name="password" 
                     required
-                    className="w-full bg-zinc-950 border border-white/10 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all"
+                    className="input-field"
                     placeholder="••••••••"
                   />
                 </div>
@@ -154,26 +158,31 @@ export default function Login() {
                 <button 
                   type="submit" 
                   disabled={loading}
-                  className="w-full bg-orange-500 text-zinc-950 font-bold rounded-xl py-3.5 flex items-center justify-center gap-2 hover:bg-orange-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full btn-primary py-4"
                 >
                   {loading ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <Loader2 className="w-5 h-5 animate-spin mx-auto" />
                   ) : (
-                    <>
-                      Login
+                    <div className="flex items-center justify-center gap-2">
+                      {t('nav.login')}
                       <ArrowRight className="w-5 h-5" />
-                    </>
+                    </div>
                   )}
                 </button>
               </form>
 
-              <div className="mt-8 pt-6 border-t border-white/5 text-center">
+              <div className="mt-8 pt-6 border-t border-white/5 text-center space-y-4">
                 <p className="text-zinc-500 text-sm">
-                  Don't have an account?{' '}
+                  {t('login.noAccount')}{' '}
                   <Link to="/register" className="text-orange-500 hover:text-orange-400 font-medium">
-                    Join the Network
+                    {t('nav.join')}
                   </Link>
                 </p>
+                <div className="pt-2">
+                  <Link to="/admin/login" className="text-zinc-600 hover:text-zinc-400 text-xs font-mono uppercase tracking-wider transition-colors">
+                    {t('login.admin')}
+                  </Link>
+                </div>
               </div>
             </div>
           </motion.div>
