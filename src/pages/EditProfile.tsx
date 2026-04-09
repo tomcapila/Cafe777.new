@@ -1,6 +1,7 @@
+import { fetchWithAuth } from '../utils/api';
 import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 import { User, Building2, ArrowLeft, Loader2, Save, ShieldAlert, Camera, Upload, Bike, Wrench, Plus, History, Calendar, MapPin, Clock } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -15,7 +16,10 @@ export default function EditProfile() {
   const [data, setData] = useState<any>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [profilePicUrl, setProfilePicUrl] = useState('');
+  const [coverPhotoUrl, setCoverPhotoUrl] = useState('');
   const { t } = useLanguage();
+  
+  const coverInputRef = useRef<HTMLInputElement>(null);
   
   // Maintenance log state
   const [activeMaintenanceMotoId, setActiveMaintenanceMotoId] = useState<number | null>(null);
@@ -41,11 +45,12 @@ export default function EditProfile() {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const res = await fetch(`/api/profile/${username}`);
-        if (!res.ok) throw new Error('Profile not found');
+        const res = await fetchWithAuth(`/api/profile/${encodeURIComponent(username!)}`);
+        if (!res.ok) throw new Error(t('profile.notFound'));
         const result = await res.json();
         setData(result);
         setProfilePicUrl(result.profile_picture_url);
+        setCoverPhotoUrl(result.cover_photo_url || '');
       } catch (err: any) {
         setError(err.message);
       } finally {
@@ -56,7 +61,7 @@ export default function EditProfile() {
     fetchProfile();
   }, [username]);
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'profile' | 'cover') => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -67,7 +72,7 @@ export default function EditProfile() {
     formData.append('file', file);
 
     try {
-      const res = await fetch('/api/upload', {
+      const res = await fetchWithAuth('/api/upload', {
         method: 'POST',
         body: formData,
       });
@@ -75,10 +80,14 @@ export default function EditProfile() {
       const result = await res.json();
 
       if (!res.ok) {
-        throw new Error(result.error || 'Upload failed');
+        throw new Error(result.error || t('profile.uploadFailed'));
       }
 
-      setProfilePicUrl(result.url);
+      if (type === 'profile') {
+        setProfilePicUrl(result.url);
+      } else {
+        setCoverPhotoUrl(result.url);
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -92,13 +101,31 @@ export default function EditProfile() {
     setError('');
 
     const formData = new FormData(e.currentTarget);
-    const data = Object.fromEntries(formData.entries());
+    const formDataObj = Object.fromEntries(formData.entries());
     
-    // Use the uploaded profile pic URL
-    const payload = { ...data, profile_picture_url: profilePicUrl };
+    // Use the uploaded URLs
+    const payload = { 
+      ...formDataObj, 
+      profile_picture_url: profilePicUrl,
+      cover_photo_url: coverPhotoUrl
+    };
 
     try {
-      const res = await fetch(`/api/profile/${username}`, {
+      // If admin is editing and email changed, update email first
+      if (isAdmin && formDataObj.email && formDataObj.email !== data.email) {
+        const emailRes = await fetchWithAuth(`/api/admin/users/${data.id}/email`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: formDataObj.email }),
+        });
+
+        if (!emailRes.ok) {
+          const emailResult = await emailRes.json();
+          throw new Error(emailResult.error || t('profile.updateFailed'));
+        }
+      }
+
+      const res = await fetchWithAuth(`/api/profile/${encodeURIComponent(username!)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -107,10 +134,15 @@ export default function EditProfile() {
       const result = await res.json();
 
       if (!res.ok) {
-        throw new Error(result.error || 'Failed to update profile');
+        throw new Error(result.error || t('profile.updateFailed'));
       }
 
-      navigate(`/profile/${username}`);
+      // Update localStorage with new user data
+      const updatedUser = { ...currentUser, username: result.username };
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      window.dispatchEvent(new Event('auth-change'));
+
+      navigate(`/profile/${result.username}`);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -122,7 +154,7 @@ export default function EditProfile() {
     e.preventDefault();
     setIsSubmittingLog(true);
     try {
-      const res = await fetch(`/api/motorcycles/${motoId}/maintenance`, {
+      const res = await fetchWithAuth(`/api/motorcycles/${motoId}/maintenance`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(maintenanceData),
@@ -132,12 +164,12 @@ export default function EditProfile() {
         setMaintenanceData({ service: '', km: '', shop: '' });
         setActiveMaintenanceMotoId(null);
         // Refresh profile data to show new log
-        const refreshRes = await fetch(`/api/profile/${username}`);
+        const refreshRes = await fetchWithAuth(`/api/profile/${encodeURIComponent(username!)}`);
         const refreshResult = await refreshRes.json();
         setData(refreshResult);
       } else {
         const result = await res.json();
-        setError(result.error || 'Failed to add maintenance log');
+        setError(result.error || t('profile.maintenanceFailed'));
       }
     } catch (err: any) {
       setError(err.message);
@@ -148,7 +180,7 @@ export default function EditProfile() {
 
   if (loading) {
     return (
-      <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center">
+      <div className="min-h-[calc(100dvh-5rem)] flex items-center justify-center">
         <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
       </div>
     );
@@ -159,13 +191,13 @@ export default function EditProfile() {
 
   if (!isOwner && !isAdmin) {
     return (
-      <div className="min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center text-center px-4">
-        <ShieldAlert className="w-20 h-20 text-zinc-800 mb-8" />
-        <h2 className="text-4xl font-display font-black uppercase italic mb-4">Access Denied</h2>
-        <p className="text-zinc-500 mb-10 font-light">You do not have permission to edit this profile.</p>
+      <div className="min-h-[calc(100dvh-5rem)] flex flex-col items-center justify-center text-center px-4">
+        <ShieldAlert className="w-20 h-20 text-engine mb-8" />
+        <h2 className="text-4xl font-display font-black uppercase italic mb-4">{t('profile.accessDenied')}</h2>
+        <p className="text-steel mb-10 font-light">{t('profile.noPermissionEdit')}</p>
         <Link to="/" className="btn-secondary">
           <ArrowLeft className="w-4 h-4 mr-2 inline" />
-          Back to Home
+          {t('profile.backHome')}
         </Link>
       </div>
     );
@@ -174,8 +206,8 @@ export default function EditProfile() {
   const isRider = data.type === 'rider';
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] py-12 px-4 sm:px-6 lg:px-8 max-w-2xl mx-auto">
-      <Link to={`/profile/${username}`} className="inline-flex items-center gap-2 text-zinc-500 hover:text-primary transition-colors mb-12 font-mono text-xs uppercase tracking-widest">
+    <div className="min-h-[calc(100dvh-5rem)] py-12 pb-28 px-4 sm:px-6 lg:px-8 max-w-2xl mx-auto">
+      <Link to={`/profile/${username}`} className="inline-flex items-center gap-2 text-steel hover:text-primary transition-colors mb-12 font-mono text-xs uppercase tracking-widest">
         <ArrowLeft className="w-4 h-4" />
         {t('eventDetails.back')}
       </Link>
@@ -186,7 +218,7 @@ export default function EditProfile() {
       >
         <div className="mb-12">
           <h1 className="text-4xl font-display font-black uppercase italic tracking-tighter mb-2 text-primary">{t('profile.edit')}</h1>
-          <p className="text-zinc-500 font-light">{t('profile.updateInfo')} @{username}</p>
+          <p className="text-steel font-light">{t('profile.updateInfo')} @{username}</p>
         </div>
 
         <div className="glass-card p-8 shadow-2xl shadow-primary/5">
@@ -197,9 +229,36 @@ export default function EditProfile() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-8">
+            <div className="mb-12">
+              <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-4">{t('profile.coverPhoto') || 'Cover Photo'}</label>
+              <div className="relative h-48 w-full rounded-3xl overflow-hidden border-4 border-asphalt bg-carbon shadow-2xl group">
+                <img 
+                  src={coverPhotoUrl || 'https://picsum.photos/seed/moto/1920/1080'} 
+                  alt="Cover" 
+                  className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500"
+                  referrerPolicy="no-referrer"
+                />
+                <div className="absolute inset-0 bg-asphalt/40 group-hover:bg-transparent transition-colors" />
+                <button
+                  type="button"
+                  onClick={() => coverInputRef.current?.click()}
+                  className="absolute bottom-4 right-4 p-3 bg-primary text-asphalt rounded-xl shadow-xl hover:bg-white transition-all hover:scale-110"
+                >
+                  <Upload className="w-5 h-5" />
+                </button>
+                <input 
+                  type="file" 
+                  ref={coverInputRef}
+                  onChange={(e) => handleFileUpload(e, 'cover')}
+                  accept="image/*"
+                  className="hidden" 
+                />
+              </div>
+            </div>
+
             <div className="flex flex-col items-center mb-12">
               <div className="relative group">
-                <div className="w-40 h-40 rounded-3xl overflow-hidden border-4 border-zinc-950 bg-zinc-900 shadow-2xl shadow-primary/20">
+                <div className="w-40 h-40 rounded-3xl overflow-hidden border-4 border-asphalt bg-carbon shadow-2xl shadow-primary/20">
                   <img 
                     src={profilePicUrl} 
                     alt="Profile" 
@@ -207,7 +266,7 @@ export default function EditProfile() {
                     referrerPolicy="no-referrer"
                   />
                   {uploading && (
-                    <div className="absolute inset-0 bg-zinc-950/80 flex items-center justify-center">
+                    <div className="absolute inset-0 bg-asphalt/80 flex items-center justify-center">
                       <Loader2 className="w-10 h-10 text-primary animate-spin" />
                     </div>
                   )}
@@ -215,36 +274,60 @@ export default function EditProfile() {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="absolute -bottom-3 -right-3 p-4 bg-primary text-zinc-950 rounded-2xl shadow-xl hover:bg-oil transition-all hover:scale-110 active:scale-95"
+                  className="absolute -bottom-3 -right-3 p-4 bg-primary text-asphalt rounded-2xl shadow-xl hover:bg-oil transition-all hover:scale-110 active:scale-95"
                 >
                   <Camera className="w-6 h-6" />
                 </button>
                 <input 
                   type="file" 
                   ref={fileInputRef}
-                  onChange={handleFileUpload}
+                  onChange={(e) => handleFileUpload(e, 'profile')}
                   accept="image/*"
                   className="hidden" 
                 />
               </div>
-              <p className="text-[10px] font-mono uppercase tracking-widest text-zinc-600 mt-6">Click the camera to upload a new photo</p>
+              <p className="text-[10px] font-mono uppercase tracking-widest text-steel mt-6">{t('profile.uploadNewPhoto')}</p>
             </div>
 
             <div className="hidden">
-              <label className="block text-xs font-mono uppercase tracking-widest text-zinc-500 mb-2">Profile Picture URL</label>
+              <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-2">{t('profile.picUrl')}</label>
               <input 
                 type="url" 
                 name="profile_picture_url" 
-                value={profilePicUrl}
+                value={profilePicUrl || ''}
                 readOnly
                 className="input-field"
               />
             </div>
 
+            <div>
+              <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-2">{t('profile.username')}</label>
+              <input 
+                type="text" 
+                name="new_username" 
+                required
+                defaultValue={username}
+                className="input-field"
+              />
+            </div>
+
+            {isAdmin && (
+              <div>
+                <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-2">{t('admin.editEmail.label')}</label>
+                <input 
+                  type="email" 
+                  name="email" 
+                  required
+                  defaultValue={data.email}
+                  className="input-field"
+                />
+              </div>
+            )}
+
             {isRider ? (
               <>
                 <div>
-                  <label className="block text-xs font-mono uppercase tracking-widest text-zinc-500 mb-2">Full Name</label>
+                  <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-2">{t('profile.fullName')}</label>
                   <input 
                     type="text" 
                     name="name" 
@@ -255,7 +338,7 @@ export default function EditProfile() {
                 </div>
                 <div className="grid grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-xs font-mono uppercase tracking-widest text-zinc-500 mb-2">Age</label>
+                    <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-2">{t('profile.age')}</label>
                     <input 
                       type="number" 
                       name="age" 
@@ -264,7 +347,7 @@ export default function EditProfile() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-mono uppercase tracking-widest text-zinc-500 mb-2">City</label>
+                    <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-2">{t('profile.city')}</label>
                     <input 
                       type="text" 
                       name="city" 
@@ -273,11 +356,41 @@ export default function EditProfile() {
                     />
                   </div>
                 </div>
+                <div>
+                  <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-2">{t('profile.bio') || 'Bio'}</label>
+                  <textarea 
+                    name="bio" 
+                    rows={3}
+                    defaultValue={data.bio}
+                    className="input-field resize-none"
+                    placeholder={t('profile.bioPlaceholder') || 'Tell us about your riding journey...'}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-2">{t('profile.motorcycle') || 'Current Motorcycle'}</label>
+                  <input 
+                    type="text" 
+                    name="motorcycle" 
+                    defaultValue={data.motorcycle}
+                    className="input-field"
+                    placeholder="e.g. 2023 Triumph Bonneville T120"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-2">{t('profile.interests') || 'Interests'}</label>
+                  <input 
+                    type="text" 
+                    name="interests" 
+                    defaultValue={data.interests}
+                    className="input-field"
+                    placeholder="e.g. Cafe Racers, Custom Builds, Road Trips"
+                  />
+                </div>
               </>
             ) : (
               <>
                 <div>
-                  <label className="block text-xs font-mono uppercase tracking-widest text-zinc-500 mb-2">Company Name</label>
+                  <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-2">{t('profile.companyName')}</label>
                   <input 
                     type="text" 
                     name="company_name" 
@@ -287,23 +400,23 @@ export default function EditProfile() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-mono uppercase tracking-widest text-zinc-500 mb-2">Category</label>
+                  <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-2">{t('profile.category')}</label>
                   <select 
                     name="service_category"
                     defaultValue={data.profile.service_category}
                     className="input-field appearance-none"
                   >
-                    <option value="repair">Repair Shop</option>
-                    <option value="dealership">Dealership</option>
-                    <option value="parts">Parts Store</option>
-                    <option value="club">Motorcycle Club</option>
-                    <option value="barbershop">Barbershop</option>
-                    <option value="band">Band / Entertainment</option>
-                    <option value="other">Other</option>
+                    <option value="repair">{t('category.repair')}</option>
+                    <option value="dealership">{t('category.dealership')}</option>
+                    <option value="parts">{t('category.parts')}</option>
+                    <option value="club">{t('category.club')}</option>
+                    <option value="barbershop">{t('category.barbershop')}</option>
+                    <option value="band">{t('category.band')}</option>
+                    <option value="other">{t('category.other')}</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-mono uppercase tracking-widest text-zinc-500 mb-2">Full Address</label>
+                  <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-2">{t('profile.fullAddress')}</label>
                   <input 
                     type="text" 
                     name="full_address" 
@@ -311,13 +424,45 @@ export default function EditProfile() {
                     className="input-field"
                   />
                 </div>
+                <div className="grid grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-2">Phone</label>
+                    <input 
+                      type="tel" 
+                      name="phone" 
+                      defaultValue={data.profile.phone || ''}
+                      className="input-field"
+                      placeholder="+1 234 567 8900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-2">Website</label>
+                    <input 
+                      type="url" 
+                      name="website" 
+                      defaultValue={data.profile.website || ''}
+                      className="input-field"
+                      placeholder="https://example.com"
+                    />
+                  </div>
+                </div>
                 <div>
-                  <label className="block text-xs font-mono uppercase tracking-widest text-zinc-500 mb-2">Details / Bio</label>
+                  <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-2">{t('profile.detailsBio')}</label>
                   <textarea 
                     name="details" 
                     rows={5}
-                    defaultValue={data.profile.details}
+                    defaultValue={data.profile.details || ''}
                     className="input-field resize-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-2">{t('profile.services') || 'Services Offered'}</label>
+                  <input 
+                    type="text" 
+                    name="services" 
+                    defaultValue={data.services}
+                    className="input-field"
+                    placeholder="e.g. Custom Paint, Engine Tuning, Parts"
                   />
                 </div>
               </>
@@ -338,135 +483,39 @@ export default function EditProfile() {
               )}
             </button>
           </form>
+
+          {isOwner && (
+            <div className="mt-12 pt-12 border-t border-white/10">
+              <h3 className="text-xs font-mono uppercase tracking-widest text-engine mb-4">Danger Zone</h3>
+              <p className="text-steel text-sm mb-6 font-light">
+                Once you delete your account, there is no going back. Please be certain.
+              </p>
+              <button
+                onClick={async () => {
+                  if (window.confirm("Are you absolutely sure you want to delete your account? This action cannot be undone.")) {
+                    try {
+                      const res = await fetchWithAuth('/api/user', { method: 'DELETE' });
+                      if (res.ok) {
+                        localStorage.clear();
+                        window.location.href = '/';
+                      } else {
+                        const result = await res.json();
+                        alert(result.error || "Failed to delete account");
+                      }
+                    } catch (err: any) {
+                      alert(err.message);
+                    }
+                  }
+                }}
+                className="w-full py-4 border border-engine/30 text-engine hover:bg-engine/10 rounded-2xl transition-all font-mono text-xs uppercase tracking-widest"
+              >
+                Delete My Account
+              </button>
+            </div>
+          )}
         </div>
 
-        {isRider && data.garage && data.garage.length > 0 && (
-          <div className="mt-20 space-y-10">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-primary/10 rounded-2xl">
-                <Bike className="w-6 h-6 text-primary" />
-              </div>
-              <h2 className="text-3xl font-display font-black uppercase italic tracking-tight">Garage Management</h2>
-            </div>
-
-            <div className="grid gap-8">
-              {data.garage.map((moto: any) => (
-                <div key={moto.id} className="glass-card p-8 shadow-xl relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -mr-16 -mt-16 blur-3xl group-hover:bg-primary/10 transition-all" />
-                  
-                  <div className="flex justify-between items-start mb-8 relative z-10">
-                    <div>
-                      <div className="text-xs font-mono font-bold text-primary mb-2 uppercase tracking-widest">{moto.year}</div>
-                      <h3 className="text-2xl font-display font-black uppercase italic mb-1 tracking-tight">{moto.make}</h3>
-                      <p className="text-zinc-400 font-light">{moto.model}</p>
-                    </div>
-                    <button 
-                      onClick={() => setActiveMaintenanceMotoId(activeMaintenanceMotoId === moto.id ? null : moto.id)}
-                      className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-[10px] font-mono font-bold uppercase tracking-widest transition-all ${
-                        activeMaintenanceMotoId === moto.id 
-                          ? 'bg-zinc-800 text-zinc-500' 
-                          : 'bg-primary text-zinc-950 hover:bg-oil shadow-lg shadow-primary/10'
-                      }`}
-                    >
-                      {activeMaintenanceMotoId === moto.id ? 'Cancel' : (
-                        <>
-                          <Plus className="w-4 h-4" />
-                          Add Maintenance Log
-                        </>
-                      )}
-                    </button>
-                  </div>
-
-                  {activeMaintenanceMotoId === moto.id && (
-                    <motion.div 
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      className="mb-10 p-8 bg-zinc-950/50 rounded-3xl border border-primary/20 relative z-10"
-                    >
-                      <form onSubmit={(e) => handleMaintenanceSubmit(e, moto.id)} className="space-y-6">
-                        <div>
-                          <label className="block text-[10px] font-mono font-bold text-zinc-600 uppercase tracking-widest mb-2 ml-1">Service Performed</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Oil Change, Tire Replacement"
-                            required
-                            value={maintenanceData.service}
-                            onChange={(e) => setMaintenanceData({...maintenanceData, service: e.target.value})}
-                            className="input-field"
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 gap-6">
-                          <div>
-                            <label className="block text-[10px] font-mono font-bold text-zinc-600 uppercase tracking-widest mb-2 ml-1">Current KM</label>
-                            <input
-                              type="number"
-                              placeholder="KM"
-                              value={maintenanceData.km}
-                              onChange={(e) => setMaintenanceData({...maintenanceData, km: e.target.value})}
-                              className="input-field"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] font-mono font-bold text-zinc-600 uppercase tracking-widest mb-2 ml-1">Shop / Location</label>
-                            <input
-                              type="text"
-                              placeholder="Shop Name"
-                              value={maintenanceData.shop}
-                              onChange={(e) => setMaintenanceData({...maintenanceData, shop: e.target.value})}
-                              className="input-field"
-                            />
-                          </div>
-                        </div>
-                        <button
-                          type="submit"
-                          disabled={isSubmittingLog}
-                          className="w-full btn-primary py-4"
-                        >
-                          {isSubmittingLog ? 'Saving Log...' : 'Save Maintenance Log'}
-                        </button>
-                      </form>
-                    </motion.div>
-                  )}
-
-                  {moto.maintenance_logs && moto.maintenance_logs.length > 0 && (
-                    <div className="space-y-4 relative z-10">
-                      <div className="flex items-center gap-3 text-[10px] font-mono font-bold text-zinc-600 uppercase tracking-widest mb-4">
-                        <History className="w-4 h-4" />
-                        Recent History
-                      </div>
-                      <div className="grid gap-4">
-                        {moto.maintenance_logs.slice(0, 3).map((log: any) => (
-                          <div key={log.id} className="bg-zinc-950/30 p-6 rounded-2xl border border-white/5 group/log hover:border-primary/20 transition-all">
-                            <div className="flex justify-between items-start mb-3">
-                              <div className="font-display font-bold uppercase italic text-zinc-200 tracking-tight">{log.service}</div>
-                              <div className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest">
-                                {new Date(log.date).toLocaleDateString()}
-                              </div>
-                            </div>
-                            <div className="flex gap-6 text-[10px] font-mono uppercase tracking-widest text-zinc-500">
-                              {log.km && (
-                                <div className="flex items-center gap-2">
-                                  <span className="text-primary font-black">KM:</span>
-                                  {log.km.toLocaleString()}
-                                </div>
-                              )}
-                              {log.shop && (
-                                <div className="flex items-center gap-2">
-                                  <span className="text-primary font-black">Shop:</span>
-                                  {log.shop}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Garage management removed from here as it is now fully managed in Profile.tsx */}
       </motion.div>
     </div>
   );

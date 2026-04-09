@@ -1,0 +1,243 @@
+20:const db = new Database("cafe777.db"); // Using file-based for persistence
+22:// Ensure uploads directory exists
+23:const uploadsDir = path.resolve(process.cwd(), "public/uploads");
+28:// Configure multer
+40:// Initialize Database Schema
+423:// Add missing columns if they don't exist
+440:// Backfill referral codes for existing users
+454:  // Ignore if column already exists
+459:  // Ignore if column already exists
+464:  // Ignore if column already exists
+469:  // Ignore if column already exists
+498:// Insert missing badges
+512:// Insert some mock data for demonstration
+531:  // Default Settings
+534:  // --- TEST USERS ---
+535:  // 1. Normal Rider
+536:  const tr = insertUser.run("test_rider", "rider@test.com", "password123", "rider", "https://picsum.photos/seed/test_rider/200/200", "user", "active", "TESTRIDER", null).lastInsertRowid;
+540:  // 2. Business/Shop User
+541:  const tb = insertUser.run("test_business", "shop@test.com", "password123", "ecosystem", "https://picsum.photos/seed/test_business/200/200", "user", "active", "TESTBIZ", null).lastInsertRowid;
+544:  // 3. MotoClub Owner User (Rider + Ambassador category motoclub)
+545:  const tc = insertUser.run("test_motoclub", "club@test.com", "password123", "rider", "https://picsum.photos/seed/test_motoclub/200/200", "user", "active", "TESTCLUB", null).lastInsertRowid;
+549:  // 4. Ambassador User (Rider + Ambassador category rider)
+550:  const ta = insertUser.run("test_ambassador", "ambassador@test.com", "password123", "rider", "https://picsum.photos/seed/test_ambassador/200/200", "user", "active", "TESTAMB", null).lastInsertRowid;
+554:  // 5. Admin User
+555:  const tad = insertUser.run("test_admin", "admin@test.com", "password123", "rider", "https://picsum.photos/seed/test_admin/200/200", "admin", "active", "TESTADM", null).lastInsertRowid;
+558:  // --- EXISTING MOCK DATA ---
+559:  // Rider 1 (Admin)
+560:  const r1 = insertUser.run("john_rider", "john@cafe777.com", "password123", "rider", "https://picsum.photos/seed/john/200/200", "admin", "active", "JOHNRIDER", null).lastInsertRowid;
+567:  // Rider 2 (Moderator)
+568:  const r2 = insertUser.run("sarah_speed", "sarah@cafe777.com", "password123", "rider", "https://picsum.photos/seed/sarah/200/200", "moderator", "active", "SARAHSPEED", null).lastInsertRowid;
+573:  // Ecosystem 1
+574:  const e1 = insertUser.run("moto_garage_la", "garage@cafe777.com", "password123", "ecosystem", "https://picsum.photos/seed/garage/200/200", "user", "active", "MOTOGARAGE", null).lastInsertRowid;
+577:  // Ecosystem 2
+578:  const e2 = insertUser.run("leather_n_steel", "leather@cafe777.com", "password123", "ecosystem", "https://picsum.photos/seed/leather/200/200", "user", "active", "LEATHERSTEEL", null).lastInsertRowid;
+581:  // Mock Badges
+590:  // Award Badges to Users
+598:  // Mock Events
+599:  insertEvent.run(e1, "Sunday Morning Canyon Run", "Join us for a scenic ride through the Malibu canyons. All skill levels welcome!", "2026-03-15", "08:00 AM", "Malibu, CA", "https://picsum.photos/seed/event1/800/600", 1);
+600:  insertEvent.run(e2, "Classic Bike Meetup", "Show off your vintage machines and enjoy some coffee with fellow enthusiasts.", "2026-03-22", "10:00 AM", "Santa Monica, CA", "https://picsum.photos/seed/event2/800/600", 1);
+601:  insertEvent.run(r1, "Night Ride: City Lights", "A late night cruise through the neon-lit streets of downtown LA.", "2026-03-10", "09:00 PM", "Downtown LA", "https://picsum.photos/seed/event3/800/600", 1);
+603:  // Mock Contests
+607:  // Mock Posts
+608:  insertPost.run(r1, "Just finished a long ride through the canyons. The Iron 883 handled like a dream!", "https://picsum.photos/seed/ride1/800/600", 1, 'public', null);
+609:  insertPost.run(e1, "New custom build just rolled out of the shop. Check out this vintage cafe racer style!", "https://picsum.photos/seed/shop1/800/600", null, 'public', null);
+610:  insertPost.run(r2, "Track day at Laguna Seca was intense. The Panigale V4 is a beast on the straights.", "https://picsum.photos/seed/track1/800/600", 3, 'public', null);
+612:  // Mock Routes
+624:    // 1. Stamps issued
+627:    // 2. Events hosted
+630:    // 3. Average rating (if ecosystem)
+636:        ratingScore = Math.floor(rating.average_rating * 10); // 4.5 -> 45
+640:    // Calculate total reputation
+641:    // 1 point per stamp issued
+642:    // 10 points per event hosted
+643:    // Rating score (up to 50 points)
+652:// Automation logic
+654:  // Find contests that ended and don't have a winner
+661:    // Select winner
+677:// Run check every minute
+686:  // Admin check middleware (must be used after authenticateToken)
+709:  // JWT Authentication middleware
+742:  // API Routes
+743:  app.post("/api/auth/google", async (req, res) => {
+767:      // Check if user exists
+772:        // Create new user
+779:          'rider', // Default to rider, will be updated in onboarding
+789:        // Link Google ID to existing email account
+798:      // Don't return the password
+801:      // Generate JWT
+816:  app.post("/api/login", (req, res) => {
+838:      // Don't return the password
+841:      // Generate JWT
+850:  app.post("/api/contests/current/submissions", authenticateToken, upload.single('photo'), (req: any, res) => {
+852:    const photo_url = (req as any).file ? `/uploads/${(req as any).file.filename}` : null;
+863:      // Find current active contest
+875:      // Check if user already submitted
+893:  app.get("/api/contests/current/submissions", (req, res) => {
+922:  app.post("/api/contests/current/votes", authenticateToken, (req: any, res) => {
+945:      // Check if user already voted
+963:  app.get("/api/submissions/:id/comments", (req, res) => {
+974:  app.post("/api/submissions/:id/comments", authenticateToken, (req: any, res) => {
+993:  app.get("/api/notifications", authenticateToken, (req: any, res) => {
+1005:  app.post("/api/notifications/:id/read", authenticateToken, (req: any, res) => {
+1017:  app.get("/api/search", (req, res) => {
+1024:      // Search Routes
+1031:      // Search Events
+1038:      // Search Clubs (Ecosystems with service_category = 'club')
+1047:      // Search Riders
+1056:      // Search Locations (Ecosystems with service_category != 'club')
+1077:  app.get("/api/users/search", (req, res) => {
+1089:      `).all(`${q}%`); // Search for usernames starting with q
+1096:  app.get("/api/users", authenticateToken, checkAdmin, (req, res) => {
+1101:  app.get("/api/users/:username/badges", (req, res) => {
+1122:  app.get("/api/badges", (req, res) => {
+1136:  app.post("/api/badges", authenticateToken, checkAdmin, (req, res) => {
+1147:  app.post("/api/badges/award", authenticateToken, checkAdmin, (req, res) => {
+1161:  app.get("/api/roads", (req, res) => {
+1164:      // Parse JSON strings back to arrays/objects
+1188:  app.post("/api/roads/predict", authenticateToken, (req, res) => {
+1191:    // Simulated ML Model for "Motorcycle Fun Score"
+1192:    // Weights based on typical rider preferences
+1207:    // Add some random noise to simulate ML variance
+1208:    const noise = (Math.random() * 5) - 2.5; // -2.5 to +2.5
+1213:      confidence: parseFloat((Math.random() * (0.99 - 0.85) + 0.85).toFixed(2)) // 85% to 99%
+1217:  app.get("/api/users/:id/recommendations", (req, res) => {
+1226:  app.post("/api/recommendations", authenticateToken, (req: any, res) => {
+1237:      // Check if already recommended
+1253:  app.delete("/api/recommendations/:id", authenticateToken, (req: any, res) => {
+1269:  // Reviews Routes
+1270:  app.get("/api/reviews/:target_type/:target_id", (req, res) => {
+1285:  app.post("/api/reviews", authenticateToken, (req: any, res) => {
+1302:      // Update rating summary
+1307:        average_rating = ((average_rating * total_reviews) + ?) / (total_reviews + 1),
+1324:  app.get("/api/rating-summaries/:target_type/:target_id", (req, res) => {
+1333:  app.post("/api/reviews/:review_id/verify", authenticateToken, (req, res) => {
+1344:      // Update verified count in summary
+1356:  // QR & Verification Routes
+1358:  app.get("/api/qr/:target_type/:target_id", async (req, res) => {
+1368:  app.post("/api/checkpoints", authenticateToken, checkAmbassador, (req, res) => {
+1371:      // Fetch route to check distance
+1388:  // Helper function to calculate distance between two coordinates in km
+1390:    const R = 6371; // Radius of the earth in km
+1391:    const dLat = (lat2 - lat1) * (Math.PI / 180);
+1392:    const dLon = (lon2 - lon1) * (Math.PI / 180);
+1394:      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+1395:      Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+1396:      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+1401:  app.post("/api/checkpoints/scan", authenticateToken, (req: any, res) => {
+1416:      // Anti-fraud: Distance validation (e.g., within 1km)
+1419:        if (distance > 1) { // 1 km radius
+1424:      // Initialize progress if not exists
+1439:  app.get("/api/ecosystems", (req, res) => {
+1448:  app.get("/api/profile/:username", (req, res) => {
+1490:      // Fetch maintenance logs for each motorcycle
+1496:      // Fetch events created by user
+1506:      // Fetch events RSVP'd by user
+1523:      // Fetch events hosted by this business
+1533:      // Fetch events RSVP'd by this business
+1548:  app.get("/api/posts", (req, res) => {
+1576:  app.post("/api/posts/:id/like", authenticateToken, (req: any, res) => {
+1595:        // Check for badges
+1601:            // Award Community Builder badge
+1607:            // Award Influencer Rider badge
+1614:          // Create notification
+1618:              post.user_id, 'like', `${liker.username} liked your post.`, `/profile/${liker.username}`
+1630:  app.post("/api/users/:id/follow", authenticateToken, (req: any, res) => {
+1649:        // Create notification
+1652:          user_id, 'follow', `${follower.username} started following you.`, `/profile/${follower.username}`
+1662:  // Event Photo Management
+1663:  app.post("/api/events/:id/photos", authenticateToken, upload.single("image"), (req: any, res) => {
+1666:    const imageUrl = `/uploads/${(req as any).file?.filename}`;
+1678:  app.get("/api/events/:id/photos", (req, res) => {
+1683:  app.get("/api/events/:id/pending-photos", authenticateToken, (req: any, res) => {
+1699:  app.post("/api/events/photos/:photoId/status", authenticateToken, (req: any, res) => {
+1720:  app.get("/api/events", (req, res) => {
+1742:  app.get("/api/events/:id", (req, res) => {
+1773:  app.post("/api/events", authenticateToken, (req: any, res) => {
+1787:      // Admins/Moderators/Ambassadors auto-approve their own events
+1790:      insertEvent.run(user.id, title, description, date, time, location, image_url || `https://picsum.photos/seed/${Math.random()}/800/600`, isApproved);
+1800:  app.put("/api/events/:id", authenticateToken, (req: any, res) => {
+1824:  app.get("/api/events/:id/attendees", authenticateToken, (req: any, res) => {
+1847:  app.post("/api/events/:id/checkin", authenticateToken, (req: any, res) => {
+1870:  app.post("/api/events/:id/rsvp", authenticateToken, (req: any, res) => {
+1884:      // Check if already RSVP'd
+1899:  app.put("/api/admin/submissions/:id/approve", authenticateToken, checkAdmin, (req, res) => {
+1909:  app.get("/api/admin/submissions", authenticateToken, checkAdmin, (req, res) => {
+1925:  // Admin Contest Routes
+1926:  app.get("/api/admin/contests", authenticateToken, checkAdmin, (req, res) => {
+1960:  app.post("/api/admin/contests", authenticateToken, checkAdmin, (req, res) => {
+1974:  app.put("/api/admin/contests/:id", authenticateToken, checkAdmin, (req, res) => {
+1990:  app.delete("/api/admin/contests/:id", authenticateToken, checkAdmin, (req, res) => {
+1993:      // Check if there are submissions
+2005:  app.post("/api/admin/contests/:id/pick-winner", authenticateToken, checkAdmin, (req, res) => {
+2008:      // Find top submission
+2020:      // Update contest winner
+2023:      // Award reputation points (e.g. 500)
+2026:      // Add notification for the winner
+2038:  app.get("/api/admin/events", authenticateToken, checkAdmin, (req, res) => {
+2055:  app.put("/api/admin/events/:id/approve", authenticateToken, checkAdmin, (req, res) => {
+2065:  app.put("/api/admin/events/:id/promote", authenticateToken, checkAdmin, (req, res) => {
+2075:  app.post("/api/motorcycles", authenticateToken, (req: any, res) => {
+2103:  app.post("/api/motorcycles/:id/maintenance", authenticateToken, (req: any, res) => {
+2124:  app.post("/api/posts", authenticateToken, upload.single('image'), (req, res) => {
+2126:    const image_url = (req as any).file ? `/uploads/${(req as any).file.filename}` : req.body.image_url;
+2128:    // Ensure the authenticated user matches the username they are trying to post as
+2154:  app.put("/api/profile/:username", authenticateToken, (req: any, res) => {
+2198:  // MotoClubs Endpoints
+2199:  app.get("/api/clubs", (req, res) => {
+2214:  app.get("/api/clubs/my", authenticateToken, (req: any, res) => {
+2217:      // Clubs the user owns
+2225:      // Clubs the user is a member of
+2240:  app.get("/api/clubs/:id", (req, res) => {
+2268:  app.post("/api/clubs/:id/apply", authenticateToken, (req: any, res) => {
+2287:  app.put("/api/clubs/:id/members/:membership_id", authenticateToken, (req: any, res) => {
+2292:    // Check if current user is club owner or admin
+2313:  app.delete("/api/clubs/:id/members/:membership_id", authenticateToken, (req: any, res) => {
+2319:      // Check if the membership belongs to the user OR if the user is the club owner/admin
+2337:  app.post("/api/clubs/:id/roles", authenticateToken, (req: any, res) => {
+2354:  app.put("/api/clubs/:id/roles/:role_id", authenticateToken, (req: any, res) => {
+2372:  app.delete("/api/clubs/:id/roles/:role_id", authenticateToken, (req: any, res) => {
+2389:  app.post("/api/clubs/:id/chapters", authenticateToken, (req: any, res) => {
+2406:  // Ambassador Network Endpoints
+2407:  app.post("/api/ambassadors/apply", authenticateToken, (req: any, res) => {
+2425:  app.get("/api/ambassadors/applications", authenticateToken, checkAdmin, (req, res) => {
+2439:  app.post("/api/ambassadors/applications/:id/approve", authenticateToken, checkAdmin, (req, res) => {
+2449:        // Notify user
+2451:          app.user_id, 'system', 'Your ambassador application has been approved!', `/profile`
+2460:  app.get("/api/ambassadors", (req, res) => {
+2479:  app.get("/api/ambassadors/:id", (req, res) => {
+2499:  app.post("/api/ambassadors/stamps", authenticateToken, (req: any, res) => {
+2521:  app.get("/api/ambassadors/:id/stamps", (req, res) => {
+2531:  app.post("/api/stamps/scan", authenticateToken, (req: any, res) => {
+2547:      // Anti-fraud: Distance validation (e.g., within 1km)
+2550:        if (distance > 1) { // 1 km radius
+2574:  app.get("/api/users/:id/passport", optionalAuthenticateToken, (req: any, res) => {
+2600:  app.post("/api/upload", authenticateToken, upload.single("file"), (req: any, res) => {
+2604:    const fileUrl = `/uploads/${req.file.filename}`;
+2608:  app.post("/api/register", (req, res) => {
+2626:          password || null, // Allow null for Google Auth
+2628:          `https://picsum.photos/seed/${username}/200/200`,
+2637:          insertRider.run(userId, fullName, null, location); // age is null for now
+2639:          // Optional: Handle motorcycle and interests if you have tables for them
+2640:          // For now, we'll just log them or ignore if tables don't exist
+2643:          insertEco.run(userId, businessName, location, businessType, bio, null, null); // lat, lng are null for now
+2645:          // Optional: Handle services
+2655:  app.put("/api/user/onboarding", authenticateToken, (req, res) => {
+2667:        // Update user type and status based on type
+2672:          // Check if rider record exists, if not create it, else update
+2681:          // Check if eco record exists, if not create it, else update
+2699:  // Admin Routes
+2700:  // Note: In a real app, you would get the current user from the session/token
+2701:  // For this prototype, we'll simulate a permission check
+2703:  app.get("/api/admin/users", authenticateToken, checkAdmin, (req, res) => {
+2716:  app.put("/api/admin/users/:id/status", authenticateToken, checkAdmin, (req, res) => {
+2730:  app.put("/api/admin/users/:id/role", authenticateToken, checkAdmin, (req, res) => {
+2744:  app.delete("/api/admin/users/:id", authenticateToken, checkAdmin, (req, res) => {
+2759:  app.get("/api/settings", (req, res) => {
+2772:  app.put("/api/admin/settings", authenticateToken, checkAdmin, (req, res) => {
+2782:  // API 404 handler
+2783:  app.all("/api/*", (req, res) => {
+2787:  // Serve uploads
+2788:  app.use("/uploads", express.static(uploadsDir));
+2790:  // Vite middleware for development
+2806:    console.log(`Server running on http://localhost:${PORT}`);

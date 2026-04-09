@@ -1,0 +1,2 @@
+src/pages/Login.tsx:      const contentType = res.headers.get("content-type");
+src/pages/AdminLogin.tsx:      const contentType = res.headers.get("content-type");

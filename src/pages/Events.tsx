@@ -1,22 +1,34 @@
+import { fetchWithAuth } from '../utils/api';
 import React, { useEffect, useState } from 'react';
-import { Calendar, MapPin, Clock, Users, Plus, Star, ShieldCheck, Search, Filter, X, Bike } from 'lucide-react';
+import { Calendar, MapPin, Clock, Users, Plus, Star, ShieldCheck, Search, Filter, X, Bike, LayoutGrid, List } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useNotification } from '../contexts/NotificationContext';
+import PremiumBadge from '../components/PremiumBadge';
+import { useFeatureAccess } from '../hooks/useFeatureAccess';
 
 export default function Events() {
   const [events, setEvents] = useState<any[]>([]);
   const [myEvents, setMyEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setLoading(false);
+    }, 15000);
+    return () => clearTimeout(timer);
+  }, []);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'all' | 'my'>('all');
   const { t } = useLanguage();
+  const { showNotification } = useNotification();
+  const { canAccess } = useFeatureAccess();
   
   // Filter states
-  const [searchTitle, setSearchTitle] = useState('');
-  const [searchLocation, setSearchLocation] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [searchDate, setSearchDate] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
+  const [eventCategory, setEventCategory] = useState('all');
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
 
   // Modal state
   const [showModal, setShowModal] = useState(false);
@@ -28,7 +40,30 @@ export default function Events() {
     time: '',
     location: '',
     image_url: '',
+    category: 'road_trip',
+    participation_stamp_id: null as number | null,
   });
+  const [stamps, setStamps] = useState<any[]>([]);
+  const [stampSearchTerm, setStampSearchTerm] = useState('');
+  const [isStampSelectorOpen, setIsStampSelectorOpen] = useState(false);
+
+  const fetchStamps = async () => {
+    try {
+      const res = await fetchWithAuth('/api/stamps');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setStamps(data);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch stamps:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchStamps();
+  }, []);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
 
@@ -54,7 +89,7 @@ export default function Events() {
         username = user.username;
         
         // Fetch My Events if logged in
-        const profileRes = await fetch(`/api/profile/${username}`);
+        const profileRes = await fetchWithAuth(`/api/profile/${encodeURIComponent(username)}`);
         const profileData = await profileRes.json();
         
         const hosted = (profileData.events || []).map((e: any) => ({ 
@@ -75,7 +110,7 @@ export default function Events() {
         setMyEvents(combinedMyEvents);
       }
       
-      const res = await fetch(`/api/events?username=${username}`);
+      const res = await fetchWithAuth(`/api/events?username=${username}`);
       const data = await res.json();
       setEvents(data);
     } catch (err) {
@@ -87,11 +122,11 @@ export default function Events() {
 
   const handleRSVP = async (eventId: number) => {
     if (!currentUser) {
-      alert('Please login to RSVP');
+      showNotification('error', t('events.loginToRSVP'));
       return;
     }
     try {
-      const res = await fetch(`/api/events/${eventId}/rsvp`, {
+      const res = await fetchWithAuth(`/api/events/${eventId}/rsvp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: currentUser.username }),
@@ -109,7 +144,7 @@ export default function Events() {
     if (!currentUser) return;
     setIsSubmitting(true);
     try {
-      const res = await fetch('/api/events', {
+      const res = await fetchWithAuth('/api/events', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -119,7 +154,9 @@ export default function Events() {
       });
       if (res.ok) {
         setShowModal(false);
-        setEventData({ title: '', description: '', date: '', time: '', location: '', image_url: '' });
+        setEventData({ title: '', description: '', date: '', time: '', location: '', image_url: '', category: 'road_trip', participation_stamp_id: null });
+        setStampSearchTerm('');
+        setIsStampSelectorOpen(false);
         fetchEvents();
       }
     } catch (err) {
@@ -138,7 +175,7 @@ export default function Events() {
     formData.append('file', file);
 
     try {
-      const res = await fetch('/api/upload', {
+      const res = await fetchWithAuth('/api/upload', {
         method: 'POST',
         body: formData,
       });
@@ -159,7 +196,7 @@ export default function Events() {
 
   const handlePromote = async (eventId: number, currentStatus: number) => {
     try {
-      const res = await fetch(`/api/admin/events/${eventId}/promote`, {
+      const res = await fetchWithAuth(`/api/admin/events/${eventId}/promote`, {
         method: 'PUT',
         headers: { 
           'Content-Type': 'application/json',
@@ -177,45 +214,40 @@ export default function Events() {
   };
 
   const filteredEvents = (activeTab === 'all' ? events : myEvents).filter(event => {
-    const matchesTitle = event.title.toLowerCase().includes(searchTitle.toLowerCase());
-    const matchesLocation = event.location.toLowerCase().includes(searchLocation.toLowerCase());
+    const matchesQuery = event.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         event.location.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesDate = searchDate ? event.date.includes(searchDate) : true;
-    return matchesTitle && matchesLocation && matchesDate;
+    const matchesCategory = eventCategory === 'all' ? true : event.category === eventCategory;
+    return matchesQuery && matchesDate && matchesCategory;
   });
 
   if (loading) {
     return (
-      <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center">
+      <div className="min-h-[calc(100dvh-5rem)] flex items-center justify-center">
         <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] py-12 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto">
+    <div className="min-h-[calc(100dvh-5rem)] py-12 pb-28 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-8">
         <div>
           <div className="flex items-center justify-between mb-8">
             <h1 className="text-4xl font-display font-black uppercase italic tracking-tighter mb-2 text-primary">{t('events.title')}</h1>
-            <Link to="/submit-photo" className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded-xl transition-colors">
-              {t('events.submitPhoto')}
-            </Link>
-            <Link to="/contest" className="bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-2 px-4 rounded-xl transition-colors">
-              {t('events.vote')}
-            </Link>
           </div>
-          <p className="text-zinc-500 font-light">{t('events.subtitle')}</p>
+          <p className="text-steel font-light">{t('events.subtitle')}</p>
         </div>
         <div className="flex items-center gap-3">
-          <button 
-            onClick={() => setShowFilters(!showFilters)}
-            className={`p-3 rounded-2xl border transition-all ${showFilters ? 'bg-primary/10 border-primary/50 text-primary' : 'bg-zinc-900 border-white/5 text-zinc-500 hover:text-white'}`}
-          >
-            <Filter className="w-5 h-5" />
-          </button>
           {currentUser && (
             <button 
-              onClick={() => setShowModal(true)}
+              onClick={() => {
+                if (canAccess('create_event', currentUser.plan, currentUser.role, currentUser.type)) {
+                  setShowModal(true);
+                } else {
+                  showNotification(t('admin.featureAccess.allowedPlan'), 'error');
+                }
+              }}
               className="btn-primary"
             >
               <Plus className="w-5 h-5 mr-2 inline" />
@@ -226,11 +258,11 @@ export default function Events() {
       </div>
 
       {currentUser && (
-        <div className="flex items-center gap-2 mb-10 bg-zinc-950 p-1.5 rounded-2xl border border-white/5 w-fit">
+        <div className="flex items-center gap-2 mb-10 bg-asphalt p-1.5 rounded-2xl border border-white/5 w-fit">
           <button
             onClick={() => setActiveTab('all')}
             className={`px-6 py-2.5 rounded-xl text-[10px] font-mono font-black uppercase tracking-widest transition-all ${
-              activeTab === 'all' ? 'bg-primary text-zinc-950 shadow-lg shadow-primary/20' : 'text-zinc-500 hover:text-white'
+              activeTab === 'all' ? 'bg-primary text-asphalt shadow-lg shadow-primary/20' : 'text-steel hover:text-white'
             }`}
           >
             {t('nav.events')}
@@ -238,7 +270,7 @@ export default function Events() {
           <button
             onClick={() => setActiveTab('my')}
             className={`px-6 py-2.5 rounded-xl text-[10px] font-mono font-black uppercase tracking-widest transition-all ${
-              activeTab === 'my' ? 'bg-primary text-zinc-950 shadow-lg shadow-primary/20' : 'text-zinc-500 hover:text-white'
+              activeTab === 'my' ? 'bg-primary text-asphalt shadow-lg shadow-primary/20' : 'text-steel hover:text-white'
             }`}
           >
             {t('nav.myEvents')}
@@ -246,50 +278,62 @@ export default function Events() {
         </div>
       )}
 
-      <AnimatePresence>
-        {showFilters && (
-          <motion.div 
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="mb-12 overflow-hidden"
-          >
-            <div className="glass-card p-6 grid sm:grid-cols-3 gap-6">
-              <div className="relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
-                <input 
-                  type="text" 
-                  placeholder={t('events.filter.title')}
-                  value={searchTitle}
-                  onChange={(e) => setSearchTitle(e.target.value)}
-                  className="input-field pl-12"
-                />
-              </div>
-              <div className="relative">
-                <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
-                <input 
-                  type="text" 
-                  placeholder={t('events.filter.location')}
-                  value={searchLocation}
-                  onChange={(e) => setSearchLocation(e.target.value)}
-                  className="input-field pl-12"
-                />
-              </div>
-              <div className="relative">
-                <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
-                <input 
-                  type="date" 
-                  value={searchDate}
-                  onChange={(e) => setSearchDate(e.target.value)}
-                  className="input-field pl-12"
-                />
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <div className="mb-12">
+        <div className="glass-card p-4 flex flex-col md:flex-row gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-steel" />
+            <input 
+              type="text" 
+              placeholder={t('events.searchPlaceholder')}
+              value={searchQuery || ''}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="input-field pl-12"
+            />
+          </div>
+          <div className="relative md:w-48">
+            <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-steel" />
+            <input 
+              type="date" 
+              value={searchDate || ''}
+              onChange={(e) => setSearchDate(e.target.value)}
+              className="input-field pl-12"
+            />
+          </div>
+          <div className="relative md:w-48">
+            <Filter className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-steel" />
+            <select
+              value={eventCategory}
+              onChange={(e) => setEventCategory(e.target.value)}
+              className="input-field pl-12 appearance-none"
+            >
+              <option value="all">{t('events.category.all')}</option>
+              <option value="road_trip">{t('events.category.road_trip')}</option>
+              <option value="club_meetup">{t('events.category.club_meetup')}</option>
+              <option value="shop_event">{t('events.category.shop_event')}</option>
+              <option value="track_day">{t('events.category.track_day')}</option>
+              <option value="other">{t('events.category.other')}</option>
+            </select>
+          </div>
+          <div className="hidden lg:flex items-center gap-2 bg-asphalt p-1.5 rounded-2xl border border-white/5">
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-2.5 rounded-xl transition-all ${viewMode === 'list' ? 'bg-primary text-asphalt shadow-lg' : 'text-steel hover:text-white'}`}
+              title={t('events.view.list')}
+            >
+              <List className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`p-2.5 rounded-xl transition-all ${viewMode === 'grid' ? 'bg-primary text-asphalt shadow-lg' : 'text-steel hover:text-white'}`}
+              title={t('events.view.grid')}
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </div>
 
-      <div className="grid gap-8">
+      <div className={`grid gap-8 ${viewMode === 'grid' ? 'lg:grid-cols-2' : 'grid-cols-1'}`}>
         {activeTab === 'all' ? (
           filteredEvents.length > 0 ? (
             filteredEvents.map((event) => (
@@ -300,6 +344,7 @@ export default function Events() {
                 isAdmin={isAdmin} 
                 handleRSVP={handleRSVP} 
                 handlePromote={handlePromote} 
+                viewMode={viewMode}
               />
             ))
           ) : (
@@ -309,11 +354,11 @@ export default function Events() {
           <div className="space-y-12">
             {/* Hosted Events */}
             <div>
-              <h3 className="text-xs font-mono font-black text-zinc-600 uppercase tracking-[0.2em] mb-6 flex items-center gap-3">
+              <h3 className="text-xs font-mono font-black text-steel uppercase tracking-[0.2em] mb-6 flex items-center gap-3">
                 <div className="w-2 h-2 rounded-full bg-primary shadow-lg shadow-primary/50" />
-                {t('profile.hostedBy')} {t('profile.me')}
+                {t('eventDetails.hostedBy')} {t('profile.me')}
               </h3>
-              <div className="grid gap-6">
+              <div className={`grid gap-6 ${viewMode === 'grid' ? 'lg:grid-cols-2' : 'grid-cols-1'}`}>
                 {filteredEvents.filter(e => e.type === 'hosted').length > 0 ? (
                   filteredEvents.filter(e => e.type === 'hosted').map((event) => (
                     <EventListItem 
@@ -323,10 +368,11 @@ export default function Events() {
                       isAdmin={isAdmin} 
                       handleRSVP={handleRSVP} 
                       handlePromote={handlePromote} 
+                      viewMode={viewMode}
                     />
                   ))
                 ) : (
-                  <div className="p-8 rounded-2xl border border-dashed border-white/5 text-center text-zinc-600 font-mono text-[10px] uppercase tracking-widest">
+                  <div className="p-8 rounded-2xl border border-dashed border-white/5 text-center text-steel font-mono text-[10px] uppercase tracking-widest">
                     {t('events.noHosted')}
                   </div>
                 )}
@@ -335,11 +381,11 @@ export default function Events() {
 
             {/* Attending Events */}
             <div>
-              <h3 className="text-xs font-mono font-black text-zinc-600 uppercase tracking-[0.2em] mb-6 flex items-center gap-3">
+              <h3 className="text-xs font-mono font-black text-steel uppercase tracking-[0.2em] mb-6 flex items-center gap-3">
                 <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/50" />
-                {t('profile.attending')}
+                {t('events.attending')}
               </h3>
-              <div className="grid gap-6">
+              <div className={`grid gap-6 ${viewMode === 'grid' ? 'lg:grid-cols-2' : 'grid-cols-1'}`}>
                 {filteredEvents.filter(e => e.type === 'attending').length > 0 ? (
                   filteredEvents.filter(e => e.type === 'attending').map((event) => (
                     <EventListItem 
@@ -349,10 +395,11 @@ export default function Events() {
                       isAdmin={isAdmin} 
                       handleRSVP={handleRSVP} 
                       handlePromote={handlePromote} 
+                      viewMode={viewMode}
                     />
                   ))
                 ) : (
-                  <div className="p-8 rounded-2xl border border-dashed border-white/5 text-center text-zinc-600 font-mono text-[10px] uppercase tracking-widest">
+                  <div className="p-8 rounded-2xl border border-dashed border-white/5 text-center text-steel font-mono text-[10px] uppercase tracking-widest">
                     {t('events.notAttending')}
                   </div>
                 )}
@@ -370,7 +417,7 @@ export default function Events() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setShowModal(false)}
-              className="absolute inset-0 bg-zinc-950/90 backdrop-blur-md"
+              className="absolute inset-0 bg-asphalt/90 backdrop-blur-md"
             />
             <motion.div 
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -380,45 +427,62 @@ export default function Events() {
             >
               <button 
                 onClick={() => setShowModal(false)}
-                className="absolute top-8 right-8 p-2 text-zinc-600 hover:text-white transition-colors"
+                className="absolute top-8 right-8 p-2 text-steel hover:text-white transition-colors"
               >
                 <X className="w-6 h-6" />
               </button>
               
               <h2 className="text-3xl font-display font-black uppercase italic tracking-tighter mb-2 text-primary">{t('event.modal.title')}</h2>
-              <p className="text-zinc-500 font-light mb-10">{t('event.modal.subtitle')}</p>
+              <p className="text-steel font-light mb-10">{t('event.modal.subtitle')}</p>
               
               <form onSubmit={handleCreateEvent} className="space-y-6">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-mono font-bold text-zinc-600 uppercase tracking-widest ml-1">{t('event.field.title')}</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Sunday Morning Canyon Run"
-                    value={eventData.title}
-                    onChange={(e) => setEventData({...eventData, title: e.target.value})}
-                    className="input-field"
-                  />
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-mono font-bold text-steel uppercase tracking-widest ml-1">{t('event.field.title')}</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder={t('event.modal.titlePlaceholder')}
+                      value={eventData.title || ''}
+                      onChange={(e) => setEventData({...eventData, title: e.target.value})}
+                      className="input-field"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-mono font-bold text-steel uppercase tracking-widest ml-1">{t('event.field.category')}</label>
+                    <select
+                      required
+                      value={eventData.category || 'road_trip'}
+                      onChange={(e) => setEventData({...eventData, category: e.target.value})}
+                      className="input-field appearance-none"
+                    >
+                      <option value="road_trip">{t('events.category.road_trip')}</option>
+                      <option value="club_meetup">{t('events.category.club_meetup')}</option>
+                      <option value="shop_event">{t('events.category.shop_event')}</option>
+                      <option value="track_day">{t('events.category.track_day')}</option>
+                      <option value="other">{t('events.category.other')}</option>
+                    </select>
+                  </div>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-mono font-bold text-zinc-600 uppercase tracking-widest ml-1">{t('event.field.date')}</label>
+                    <label className="text-[10px] font-mono font-bold text-steel uppercase tracking-widest ml-1">{t('event.field.date')}</label>
                     <input
                       type="date"
                       required
-                      value={eventData.date}
+                      value={eventData.date || ''}
                       onChange={(e) => setEventData({...eventData, date: e.target.value})}
                       className="input-field"
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-mono font-bold text-zinc-600 uppercase tracking-widest ml-1">{t('event.field.time')}</label>
+                    <label className="text-[10px] font-mono font-bold text-steel uppercase tracking-widest ml-1">{t('event.field.time')}</label>
                     <input
                       type="text"
                       required
-                      placeholder="e.g. 08:00 AM"
-                      value={eventData.time}
+                      placeholder={t('event.modal.timePlaceholder')}
+                      value={eventData.time || ''}
                       onChange={(e) => setEventData({...eventData, time: e.target.value})}
                       className="input-field"
                     />
@@ -426,23 +490,23 @@ export default function Events() {
                 </div>
                 
                 <div className="space-y-2">
-                  <label className="text-[10px] font-mono font-bold text-zinc-600 uppercase tracking-widest ml-1">{t('event.field.location')}</label>
+                  <label className="text-[10px] font-mono font-bold text-steel uppercase tracking-widest ml-1">{t('event.field.location')}</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Mulholland Hwy, Malibu"
-                    value={eventData.location}
+                    placeholder={t('event.modal.locationPlaceholder')}
+                    value={eventData.location || ''}
                     onChange={(e) => setEventData({...eventData, location: e.target.value})}
                     className="input-field"
                   />
                 </div>
                 
                 <div className="space-y-4">
-                  <label className="text-[10px] font-mono font-bold text-zinc-600 uppercase tracking-widest ml-1">{t('event.field.image')}</label>
+                  <label className="text-[10px] font-mono font-black text-steel uppercase tracking-widest ml-1">{t('event.field.coverImage')}</label>
                   <div className="flex items-center gap-6">
                     <div 
                       onClick={() => fileInputRef.current?.click()}
-                      className="w-28 h-28 rounded-3xl bg-zinc-950 border border-white/10 flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 transition-all overflow-hidden relative group shadow-xl"
+                      className="w-28 h-28 rounded-3xl bg-asphalt border border-white/10 flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 transition-all overflow-hidden relative group shadow-xl"
                     >
                       {eventData.image_url ? (
                         <>
@@ -453,18 +517,18 @@ export default function Events() {
                         </>
                       ) : (
                         <>
-                          <Plus className="w-8 h-8 text-zinc-800 mb-1" />
-                          <span className="text-[10px] text-zinc-600 font-mono font-bold uppercase tracking-widest">{t('event.field.upload')}</span>
+                          <Plus className="w-8 h-8 text-engine mb-1" />
+                          <span className="text-[10px] text-steel font-mono font-bold uppercase tracking-widest">{t('event.field.uploadCover')}</span>
                         </>
                       )}
                       {isUploading && (
-                        <div className="absolute inset-0 bg-zinc-950/90 flex items-center justify-center">
+                        <div className="absolute inset-0 bg-asphalt/90 flex items-center justify-center">
                           <Clock className="w-6 h-6 text-primary animate-spin" />
                         </div>
                       )}
                     </div>
                     <div className="flex-1">
-                      <p className="text-[10px] font-mono uppercase tracking-widest text-zinc-600 mb-3 leading-relaxed">{t('event.upload.desc')}</p>
+                      <p className="text-[10px] font-mono uppercase tracking-widest text-steel mb-3 leading-relaxed">{t('event.upload.coverDesc')}</p>
                       <input 
                         type="file" 
                         ref={fileInputRef}
@@ -485,15 +549,15 @@ export default function Events() {
                   </div>
 
                   {/* Image Preview Area */}
-                  <div className="mt-4 p-4 rounded-2xl bg-zinc-950 border border-white/5">
-                    <div className="text-[10px] font-mono font-bold text-zinc-600 uppercase tracking-widest mb-4">{t('event.preview.title')}</div>
-                    <div className="aspect-video w-full rounded-xl overflow-hidden bg-zinc-900 border border-white/5 flex items-center justify-center relative group">
+                  <div className="mt-4 p-4 rounded-2xl bg-asphalt border border-white/5">
+                    <div className="text-[10px] font-mono font-bold text-steel uppercase tracking-widest mb-4">{t('event.preview.title')}</div>
+                    <div className="aspect-video w-full rounded-xl overflow-hidden bg-carbon border border-white/5 flex items-center justify-center relative group">
                       {eventData.image_url ? (
                         <img src={eventData.image_url} alt="Preview" className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500" />
                       ) : (
                         <div className="flex flex-col items-center gap-3">
-                          <Bike className="w-12 h-12 text-zinc-800" />
-                          <span className="text-[10px] font-mono font-bold text-zinc-700 uppercase tracking-widest">{t('event.preview.noImage')}</span>
+                          <Bike className="w-12 h-12 text-engine" />
+                          <span className="text-[10px] font-mono font-bold text-steel uppercase tracking-widest">{t('event.preview.noImage')}</span>
                         </div>
                       )}
                     </div>
@@ -501,12 +565,107 @@ export default function Events() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] font-mono font-bold text-zinc-600 uppercase tracking-widest ml-1">{t('event.field.description')}</label>
+                  <label className="text-[10px] font-mono font-bold text-steel uppercase tracking-widest ml-1">
+                    Participation Stamp
+                  </label>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setIsStampSelectorOpen(!isStampSelectorOpen)}
+                      className="w-full input-field flex items-center justify-between text-left"
+                    >
+                      <div className="flex items-center gap-3">
+                        {eventData.participation_stamp_id ? (
+                          <>
+                            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
+                              <ShieldCheck className="w-4 h-4 text-primary" />
+                            </div>
+                            <span className="text-white">
+                              {stamps.find(s => s.id === eventData.participation_stamp_id)?.name}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-steel italic">No stamp selected</span>
+                        )}
+                      </div>
+                      <Plus className={`w-4 h-4 text-steel transition-transform ${isStampSelectorOpen ? 'rotate-45' : ''}`} />
+                    </button>
+
+                    <AnimatePresence>
+                      {isStampSelectorOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: 10 }}
+                          className="absolute z-50 w-full mt-2 bg-asphalt border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
+                        >
+                          <div className="p-4 border-bottom border-white/5">
+                            <div className="relative">
+                              <Search className="w-4 h-4 text-steel absolute left-3 top-1/2 -translate-y-1/2" />
+                              <input
+                                type="text"
+                                placeholder="Search stamps..."
+                                value={stampSearchTerm}
+                                onChange={(e) => setStampSearchTerm(e.target.value)}
+                                className="w-full bg-carbon border border-white/5 rounded-xl pl-10 pr-4 py-2 text-xs text-white focus:outline-none focus:border-primary transition-all"
+                              />
+                            </div>
+                          </div>
+                          <div className="max-h-60 overflow-y-auto custom-scrollbar">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEventData({ ...eventData, participation_stamp_id: null });
+                                setIsStampSelectorOpen(false);
+                              }}
+                              className="w-full px-4 py-3 text-left hover:bg-white/5 transition-colors flex items-center gap-3 border-b border-white/5"
+                            >
+                              <div className="w-8 h-8 rounded-full bg-carbon flex items-center justify-center border border-white/10">
+                                <X className="w-4 h-4 text-steel" />
+                              </div>
+                              <span className="text-[10px] font-mono font-black uppercase tracking-widest text-steel">
+                                No Stamp
+                              </span>
+                            </button>
+                            {stamps
+                              .filter(s => s.name.toLowerCase().includes(stampSearchTerm.toLowerCase()))
+                              .map(stamp => (
+                                <button
+                                  key={stamp.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setEventData({ ...eventData, participation_stamp_id: stamp.id });
+                                    setIsStampSelectorOpen(false);
+                                  }}
+                                  className="w-full px-4 py-3 text-left hover:bg-white/5 transition-colors flex items-center gap-3 border-b border-white/5 last:border-0"
+                                >
+                                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20">
+                                    <ShieldCheck className="w-4 h-4 text-primary" />
+                                  </div>
+                                  <div className="flex flex-col">
+                                    <span className="text-[10px] font-mono font-black uppercase tracking-widest text-white">
+                                      {stamp.name}
+                                    </span>
+                                    <span className="text-[8px] font-mono text-steel uppercase tracking-widest">
+                                      {stamp.type}
+                                    </span>
+                                  </div>
+                                </button>
+                              ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-mono font-bold text-steel uppercase tracking-widest ml-1">{t('event.field.description')}</label>
                   <textarea
                     required
                     rows={4}
-                    placeholder="What's the plan? Route details, skill level, etc."
-                    value={eventData.description}
+                    placeholder={t('event.modal.descPlaceholder')}
+                    value={eventData.description || ''}
                     onChange={(e) => setEventData({...eventData, description: e.target.value})}
                     className="input-field resize-none"
                   />
@@ -528,21 +687,24 @@ export default function Events() {
   );
 }
 
-function EventListItem({ event, t, isAdmin, handleRSVP, handlePromote }: any) {
+function EventListItem({ event, t, isAdmin, handleRSVP, handlePromote, viewMode = 'list' }: any) {
+  const { language } = useLanguage();
+  const locale = language === 'pt' ? 'pt-BR' : 'en-US';
+
   return (
     <div 
-      className={`glass-card p-8 transition-all flex flex-col md:flex-row gap-8 relative overflow-hidden group ${
+      className={`glass-card p-8 transition-all flex flex-col ${viewMode === 'list' ? 'md:flex-row' : ''} gap-8 relative overflow-hidden group ${
         event.is_promoted ? 'border-primary/30 ring-1 ring-primary/10' : 'hover:border-primary/20'
       }`}
     >
       {event.is_promoted === 1 && (
-        <div className="absolute top-0 right-0 bg-primary text-zinc-950 text-[10px] font-black uppercase tracking-widest px-4 py-1.5 rounded-bl-2xl flex items-center gap-2 shadow-lg z-20">
+        <div className="absolute top-0 right-0 bg-primary text-asphalt text-[10px] font-black uppercase tracking-widest px-4 py-1.5 rounded-bl-2xl flex items-center gap-2 shadow-lg z-20">
           <Star className="w-3 h-3 fill-current" />
           {t('events.promoted')}
         </div>
       )}
 
-      <div className="md:w-56 shrink-0 flex flex-col justify-center items-center bg-zinc-950 rounded-3xl border border-white/5 overflow-hidden relative group/img shadow-2xl">
+      <div className={`${viewMode === 'list' ? 'md:w-56' : 'w-full h-48'} shrink-0 flex flex-col justify-center items-center bg-asphalt rounded-3xl border border-white/5 overflow-hidden relative group/img shadow-2xl`}>
         {event.image_url ? (
           <img src={event.image_url} alt="" className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover/img:opacity-60 grayscale group-hover/img:grayscale-0 transition-all duration-700" referrerPolicy="no-referrer" />
         ) : (
@@ -550,12 +712,12 @@ function EventListItem({ event, t, isAdmin, handleRSVP, handlePromote }: any) {
         )}
         <div className="relative z-10 flex flex-col items-center">
           <span className="text-primary font-mono font-black text-xs uppercase tracking-[0.2em] mb-2">
-            {new Date(event.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short' })}
+            {new Date(event.date + 'T12:00:00').toLocaleDateString(locale, { month: 'short' })}
           </span>
           <span className="text-6xl font-display font-black italic tracking-tighter">
             {new Date(event.date + 'T12:00:00').getDate()}
           </span>
-          <div className="flex items-center gap-2 text-zinc-500 font-mono text-[10px] uppercase tracking-widest mt-4 bg-zinc-950/80 px-3 py-1 rounded-full border border-white/5">
+          <div className="flex items-center gap-2 text-steel font-mono text-[10px] uppercase tracking-widest mt-4 bg-asphalt/80 px-3 py-1 rounded-full border border-white/5">
             <Clock className="w-3 h-3" />
             {event.time}
           </div>
@@ -568,39 +730,54 @@ function EventListItem({ event, t, isAdmin, handleRSVP, handlePromote }: any) {
             <div className="w-8 h-8 rounded-full overflow-hidden border border-white/10 shadow-lg">
               <img src={event.profile_picture_url} alt="" className="w-full h-full object-cover grayscale group-hover/author:grayscale-0 transition-all" referrerPolicy="no-referrer" />
             </div>
-            <span className="text-xs font-mono font-black uppercase tracking-widest text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/20 group-hover/author:bg-primary group-hover/author:text-zinc-950 transition-all">
+            <span className="text-xs font-mono font-black uppercase tracking-widest text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/20 group-hover/author:bg-primary group-hover/author:text-asphalt transition-all flex items-center gap-1.5">
               {event.company_name || event.username}
+              {event.plan === 'premium' && <PremiumBadge size={10} />}
             </span>
           </Link>
-          <span className="w-1 h-1 rounded-full bg-zinc-800" />
+          <span className="w-1 h-1 rounded-full bg-engine" />
           <span className="text-[10px] font-mono font-black text-primary uppercase tracking-widest px-3 py-1 rounded-full bg-primary/5 border border-primary/10">
-            {t(`category.${event.service_category}`) || 'Community'}
+            {event.category ? t(`events.category.${event.category}`) : t('events.category.other')}
           </span>
         </div>
         
         <Link to={`/events/${event.id}`} className="hover:text-primary transition-colors">
           <h2 className="text-3xl font-display font-black uppercase italic tracking-tighter mb-4">{event.title}</h2>
         </Link>
-        <p className="text-zinc-500 font-light mb-6 line-clamp-2 leading-relaxed">{event.description}</p>
+        <p className="text-steel font-light mb-6 line-clamp-2 leading-relaxed">{event.description}</p>
         
-        <div className="flex flex-wrap items-center gap-6 text-[10px] font-mono uppercase tracking-widest text-zinc-600">
+        <div className="flex flex-wrap items-center gap-6 text-[10px] font-mono uppercase tracking-widest text-steel">
           <div className="flex items-center gap-2">
-            <MapPin className="w-4 h-4 text-zinc-800" />
+            <MapPin className="w-4 h-4 text-engine" />
             {event.location}
           </div>
-          <div className="flex items-center gap-2 text-primary font-bold">
-            <Users className="w-4 h-4" />
-            {event.rsvp_count || 0} {t('event.details.ridersAttending')}
-          </div>
+          {event.rsvp_count > 0 && (
+            <div className="flex items-center gap-2 text-primary font-bold bg-primary/5 px-3 py-1 rounded-full border border-primary/10 shadow-sm shadow-primary/5">
+              <Users className="w-4 h-4" />
+              {event.rsvp_count} {t('event.details.ridersAttending')}
+            </div>
+          )}
+          {event.participation_badge_name && (
+            <div className="flex items-center gap-2 text-primary font-bold">
+              <ShieldCheck className="w-4 h-4" />
+              {t('event.field.participationBadge')}: {event.participation_badge_name}
+            </div>
+          )}
+          {event.stamp_name && (
+            <div className="flex items-center gap-2 text-primary font-bold">
+              <ShieldCheck className="w-4 h-4" />
+              {t('event.field.participationStamp')}: {event.stamp_name}
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="md:w-40 shrink-0 flex flex-col justify-center gap-4">
+      <div className={`${viewMode === 'list' ? 'md:w-40' : 'w-full'} shrink-0 flex flex-col justify-center gap-4`}>
         <button 
           onClick={() => handleRSVP(event.id)}
           className={`w-full py-3 rounded-2xl font-display font-black uppercase italic tracking-widest text-xs transition-all border ${
             event.has_rsvpd 
-              ? 'bg-primary text-zinc-950 border-primary hover:bg-oil shadow-lg shadow-primary/20' 
+              ? 'bg-primary text-asphalt border-primary hover:bg-oil shadow-lg shadow-primary/20' 
               : 'bg-white/5 text-white border-white/10 hover:bg-white/10'
           }`}
         >
@@ -611,7 +788,7 @@ function EventListItem({ event, t, isAdmin, handleRSVP, handlePromote }: any) {
             onClick={() => handlePromote(event.id, event.is_promoted)}
             className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-2xl text-[10px] font-mono font-bold uppercase tracking-widest transition-all ${
               event.is_promoted 
-                ? 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700' 
+                ? 'bg-engine text-steel hover:bg-carbon' 
                 : 'bg-primary/5 text-primary border border-primary/20 hover:bg-primary/10'
             }`}
           >
@@ -627,9 +804,9 @@ function EventListItem({ event, t, isAdmin, handleRSVP, handlePromote }: any) {
 function EmptyEvents({ t }: any) {
   return (
     <div className="text-center py-32 glass-card border-dashed border-white/10">
-      <Calendar className="w-16 h-16 text-zinc-800 mx-auto mb-6" />
+      <Calendar className="w-16 h-16 text-engine mx-auto mb-6" />
       <h3 className="text-2xl font-display font-black uppercase italic mb-4 tracking-tight">{t('events.noFound')}</h3>
-      <p className="text-zinc-500 font-light">{t('events.checkBack')}</p>
+      <p className="text-steel font-light">{t('events.checkBack')}</p>
     </div>
   );
 }

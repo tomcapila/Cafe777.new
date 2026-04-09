@@ -1,0 +1,122 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: /users/{userId}
+    // Fields:
+    //   - uid: string (required, immutable) - Firebase Auth UID
+    //   - displayName: string (required, immutable) - User display name
+    //   - photoURL: string (optional) - User profile photo URL
+    //
+    // Collection: /chats/{chatId}
+    // Fields:
+    //   - title: string (optional) - Chat title
+    //   - type: string (required, enum: ["one-on-one", "group"]) - Type of chat
+    //   - createdAt: timestamp (required, immutable) - Creation timestamp
+    //
+    // Collection: /chats/{chatId}/messages/{messageId}
+    // Fields:
+    //   - senderId: string (required, immutable) - Sender's User UID
+    //   - text: string (required, max 1000 chars) - Message content
+    //   - timestamp: timestamp (required, immutable) - Message timestamp
+    //   - readBy: list (required, items: string) - List of User UIDs who read this message
+    //
+    // Collection: /chats/{chatId}/participants/{participantId}
+    // Fields:
+    //   - userId: string (required, immutable) - User UID
+    //   - joinedAt: timestamp (required, immutable) - Timestamp when user joined
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "thomaz.capila@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(['uid', 'displayName', 'photoURL', 'role']) &&
+             data.uid is string &&
+             data.displayName is string && data.displayName.size() > 0 && data.displayName.size() < 100 &&
+             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() < 2000));
+    }
+
+    function isValidChat(data) {
+      return hasOnlyAllowedFields(['title', 'type', 'createdAt']) &&
+             data.type in ['one-on-one', 'group'] &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidMessage(data) {
+      return hasOnlyAllowedFields(['senderId', 'text', 'timestamp', 'readBy']) &&
+             data.senderId is string &&
+             data.text is string && data.text.size() > 0 && data.text.size() <= 1000 &&
+             data.timestamp is timestamp &&
+             data.readBy is list && data.readBy.size() < 100;
+    }
+
+    function isValidParticipant(data) {
+      return hasOnlyAllowedFields(['userId', 'joinedAt']) &&
+             data.userId is string &&
+             data.joinedAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isAuthenticated() && isOwner(userId);
+      allow create: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && areImmutableFieldsUnchanged(['uid', 'displayName']);
+    }
+
+    match /chats/{chatId} {
+      allow read: if isAuthenticated() && exists(/databases/$(database)/documents/chats/$(chatId)/participants/$(request.auth.uid));
+      allow create: if isAuthenticated() && isValidChat(request.resource.data);
+      
+      match /messages/{messageId} {
+        allow read: if isAuthenticated() && exists(/databases/$(database)/documents/chats/$(chatId)/participants/$(request.auth.uid));
+        allow create: if isAuthenticated() && isValidMessage(request.resource.data) && request.resource.data.senderId == request.auth.uid;
+        allow update: if isAuthenticated() && request.resource.data.readBy.hasAll(resource.data.readBy) && request.resource.data.readBy.size() == resource.data.readBy.size() + 1;
+      }
+
+      match /participants/{participantId} {
+        allow read: if isAuthenticated() && exists(/databases/$(database)/documents/chats/$(chatId)/participants/$(request.auth.uid));
+        allow create: if isAuthenticated() && isValidParticipant(request.resource.data);
+      }
+    }
+  }
+}

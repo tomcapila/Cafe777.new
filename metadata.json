@@ -1,5 +1,8 @@
 {
-  "name": "Cafe777",
-  "description": "A cross-platform app dedicated to motorcyclists and the surrounding ecosystem.",
-  "requestFramePermissions": ["camera", "geolocation"]
+  "name": "Cafe777.app",
+  "description": "A modern motorcycle social network and exploration platform for riders, clubs, and the biker ecosystem.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
 }

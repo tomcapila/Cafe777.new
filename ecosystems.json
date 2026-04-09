@@ -1,0 +1,852 @@
+[
+  {
+    "type": "ecosystem",
+    "username": "custom_garage_1",
+    "email": "contact1@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Bruno Silva",
+    "bio": "Custom Garage 1 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Nova Lima, MG, Brazil",
+    "businessName": "Custom Garage 1",
+    "businessType": "shop",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "power_moto_2",
+    "email": "contact2@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Fernando Costa",
+    "bio": "Power Moto 2 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Belo Horizonte, MG, Brazil",
+    "businessName": "Power Moto 2",
+    "businessType": "shop",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "rider_point_3",
+    "email": "contact3@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Lucas Costa",
+    "bio": "Rider Point 3 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Betim, MG, Brazil",
+    "businessName": "Rider Point 3",
+    "businessType": "mechanic",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "power_moto_4",
+    "email": "contact4@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Fernando Costa",
+    "bio": "Power Moto 4 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Ibirité, MG, Brazil",
+    "businessName": "Power Moto 4",
+    "businessType": "shop",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "mototech_5",
+    "email": "contact5@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Ricardo Oliveira",
+    "bio": "MotoTech 5 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Sabará, MG, Brazil",
+    "businessName": "MotoTech 5",
+    "businessType": "mechanic",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "moto_center_6",
+    "email": "contact6@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Bruno Pereira",
+    "bio": "Moto Center 6 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Vespasiano, MG, Brazil",
+    "businessName": "Moto Center 6",
+    "businessType": "mechanic",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "garage_381_7",
+    "email": "contact7@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Carlos Silva",
+    "bio": "Garage 381 7 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Lagoa Santa, MG, Brazil",
+    "businessName": "Garage 381 7",
+    "businessType": "mechanic",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "mototech_8",
+    "email": "contact8@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Fernando Costa",
+    "bio": "MotoTech 8 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Betim, MG, Brazil",
+    "businessName": "MotoTech 8",
+    "businessType": "shop",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "moto_prime_9",
+    "email": "contact9@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Carlos Silva",
+    "bio": "Moto Prime 9 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Belo Horizonte, MG, Brazil",
+    "businessName": "Moto Prime 9",
+    "businessType": "shop",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "custom_garage_10",
+    "email": "contact10@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Bruno Oliveira",
+    "bio": "Custom Garage 10 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Vespasiano, MG, Brazil",
+    "businessName": "Custom Garage 10",
+    "businessType": "shop",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "oficina_probike_11",
+    "email": "contact11@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Rafael Souza",
+    "bio": "Oficina ProBike 11 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Contagem, MG, Brazil",
+    "businessName": "Oficina ProBike 11",
+    "businessType": "mechanic",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "full_throttle_bh_12",
+    "email": "contact12@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Fernando Pereira",
+    "bio": "Full Throttle BH 12 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Santa Luzia, MG, Brazil",
+    "businessName": "Full Throttle BH 12",
+    "businessType": "shop",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "bh_performance_13",
+    "email": "contact13@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Rafael Oliveira",
+    "bio": "BH Performance 13 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Betim, MG, Brazil",
+    "businessName": "BH Performance 13",
+    "businessType": "mechanic",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "mototech_14",
+    "email": "contact14@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Rafael Souza",
+    "bio": "MotoTech 14 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Betim, MG, Brazil",
+    "businessName": "MotoTech 14",
+    "businessType": "shop",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "bh_moto_garage_15",
+    "email": "contact15@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Ricardo Oliveira",
+    "bio": "BH Moto Garage 15 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Belo Horizonte, MG, Brazil",
+    "businessName": "BH Moto Garage 15",
+    "businessType": "mechanic",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "oficina_probike_16",
+    "email": "contact16@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Rafael Pereira",
+    "bio": "Oficina ProBike 16 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Belo Horizonte, MG, Brazil",
+    "businessName": "Oficina ProBike 16",
+    "businessType": "shop",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "moto_center_17",
+    "email": "contact17@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Carlos Silva",
+    "bio": "Moto Center 17 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Nova Lima, MG, Brazil",
+    "businessName": "Moto Center 17",
+    "businessType": "mechanic",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "street_moto_18",
+    "email": "contact18@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Fernando Souza",
+    "bio": "Street Moto 18 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Vespasiano, MG, Brazil",
+    "businessName": "Street Moto 18",
+    "businessType": "shop",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "racing_bh_19",
+    "email": "contact19@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Fernando Souza",
+    "bio": "Racing BH 19 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Vespasiano, MG, Brazil",
+    "businessName": "Racing BH 19",
+    "businessType": "shop",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "motomax_20",
+    "email": "contact20@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Ricardo Silva",
+    "bio": "MotoMax 20 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Ibirité, MG, Brazil",
+    "businessName": "MotoMax 20",
+    "businessType": "shop",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "bh_moto_garage_21",
+    "email": "contact21@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Carlos Oliveira",
+    "bio": "BH Moto Garage 21 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Nova Lima, MG, Brazil",
+    "businessName": "BH Moto Garage 21",
+    "businessType": "shop",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "racing_bh_22",
+    "email": "contact22@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Ricardo Oliveira",
+    "bio": "Racing BH 22 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Betim, MG, Brazil",
+    "businessName": "Racing BH 22",
+    "businessType": "shop",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "racing_bh_23",
+    "email": "contact23@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Bruno Souza",
+    "bio": "Racing BH 23 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Belo Horizonte, MG, Brazil",
+    "businessName": "Racing BH 23",
+    "businessType": "mechanic",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "street_moto_24",
+    "email": "contact24@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Carlos Pereira",
+    "bio": "Street Moto 24 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Ibirité, MG, Brazil",
+    "businessName": "Street Moto 24",
+    "businessType": "mechanic",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "full_throttle_bh_25",
+    "email": "contact25@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Bruno Silva",
+    "bio": "Full Throttle BH 25 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Lagoa Santa, MG, Brazil",
+    "businessName": "Full Throttle BH 25",
+    "businessType": "shop",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "oficina_probike_26",
+    "email": "contact26@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Lucas Pereira",
+    "bio": "Oficina ProBike 26 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Santa Luzia, MG, Brazil",
+    "businessName": "Oficina ProBike 26",
+    "businessType": "mechanic",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "bh_performance_27",
+    "email": "contact27@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Rafael Souza",
+    "bio": "BH Performance 27 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Ibirité, MG, Brazil",
+    "businessName": "BH Performance 27",
+    "businessType": "shop",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "oficina_probike_28",
+    "email": "contact28@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Fernando Oliveira",
+    "bio": "Oficina ProBike 28 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Belo Horizonte, MG, Brazil",
+    "businessName": "Oficina ProBike 28",
+    "businessType": "mechanic",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "duas_rodas_bh_29",
+    "email": "contact29@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Bruno Costa",
+    "bio": "Duas Rodas BH 29 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Betim, MG, Brazil",
+    "businessName": "Duas Rodas BH 29",
+    "businessType": "shop",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "torque_motors_30",
+    "email": "contact30@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Ricardo Pereira",
+    "bio": "Torque Motors 30 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Betim, MG, Brazil",
+    "businessName": "Torque Motors 30",
+    "businessType": "shop",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "duas_rodas_bh_31",
+    "email": "contact31@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Rafael Souza",
+    "bio": "Duas Rodas BH 31 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Lagoa Santa, MG, Brazil",
+    "businessName": "Duas Rodas BH 31",
+    "businessType": "shop",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "oficina_probike_32",
+    "email": "contact32@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Lucas Costa",
+    "bio": "Oficina ProBike 32 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Nova Lima, MG, Brazil",
+    "businessName": "Oficina ProBike 32",
+    "businessType": "shop",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "moto_prime_33",
+    "email": "contact33@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Rafael Souza",
+    "bio": "Moto Prime 33 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Belo Horizonte, MG, Brazil",
+    "businessName": "Moto Prime 33",
+    "businessType": "shop",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "racing_bh_34",
+    "email": "contact34@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Bruno Souza",
+    "bio": "Racing BH 34 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Ibirité, MG, Brazil",
+    "businessName": "Racing BH 34",
+    "businessType": "shop",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "racing_bh_35",
+    "email": "contact35@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Fernando Silva",
+    "bio": "Racing BH 35 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Betim, MG, Brazil",
+    "businessName": "Racing BH 35",
+    "businessType": "shop",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "torque_motors_36",
+    "email": "contact36@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Ricardo Costa",
+    "bio": "Torque Motors 36 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Vespasiano, MG, Brazil",
+    "businessName": "Torque Motors 36",
+    "businessType": "mechanic",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "moto_works_37",
+    "email": "contact37@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Fernando Souza",
+    "bio": "Moto Works 37 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Nova Lima, MG, Brazil",
+    "businessName": "Moto Works 37",
+    "businessType": "mechanic",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "moto_prime_38",
+    "email": "contact38@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Fernando Oliveira",
+    "bio": "Moto Prime 38 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Nova Lima, MG, Brazil",
+    "businessName": "Moto Prime 38",
+    "businessType": "mechanic",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "power_moto_39",
+    "email": "contact39@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Lucas Pereira",
+    "bio": "Power Moto 39 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Lagoa Santa, MG, Brazil",
+    "businessName": "Power Moto 39",
+    "businessType": "shop",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "custom_garage_40",
+    "email": "contact40@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Fernando Pereira",
+    "bio": "Custom Garage 40 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Vespasiano, MG, Brazil",
+    "businessName": "Custom Garage 40",
+    "businessType": "shop",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "moto_prime_41",
+    "email": "contact41@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Rafael Oliveira",
+    "bio": "Moto Prime 41 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Betim, MG, Brazil",
+    "businessName": "Moto Prime 41",
+    "businessType": "mechanic",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "mototech_42",
+    "email": "contact42@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Carlos Costa",
+    "bio": "MotoTech 42 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Vespasiano, MG, Brazil",
+    "businessName": "MotoTech 42",
+    "businessType": "shop",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "moto_center_43",
+    "email": "contact43@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Ricardo Silva",
+    "bio": "Moto Center 43 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Nova Lima, MG, Brazil",
+    "businessName": "Moto Center 43",
+    "businessType": "shop",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "moto_prime_44",
+    "email": "contact44@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Bruno Costa",
+    "bio": "Moto Prime 44 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Nova Lima, MG, Brazil",
+    "businessName": "Moto Prime 44",
+    "businessType": "shop",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "iron_moto_45",
+    "email": "contact45@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Lucas Silva",
+    "bio": "Iron Moto 45 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Lagoa Santa, MG, Brazil",
+    "businessName": "Iron Moto 45",
+    "businessType": "mechanic",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "duas_rodas_bh_46",
+    "email": "contact46@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Lucas Costa",
+    "bio": "Duas Rodas BH 46 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Santa Luzia, MG, Brazil",
+    "businessName": "Duas Rodas BH 46",
+    "businessType": "shop",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "custom_garage_47",
+    "email": "contact47@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Ricardo Oliveira",
+    "bio": "Custom Garage 47 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Betim, MG, Brazil",
+    "businessName": "Custom Garage 47",
+    "businessType": "mechanic",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "full_throttle_bh_48",
+    "email": "contact48@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Bruno Pereira",
+    "bio": "Full Throttle BH 48 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Ibirité, MG, Brazil",
+    "businessName": "Full Throttle BH 48",
+    "businessType": "mechanic",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "power_moto_49",
+    "email": "contact49@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Rafael Pereira",
+    "bio": "Power Moto 49 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Belo Horizonte, MG, Brazil",
+    "businessName": "Power Moto 49",
+    "businessType": "mechanic",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  },
+  {
+    "type": "ecosystem",
+    "username": "power_moto_50",
+    "email": "contact50@motobh.com",
+    "password": "businessSecurePass",
+    "fullName": "Ricardo Oliveira",
+    "bio": "Power Moto 50 is a trusted motorcycle service and parts provider in the Belo Horizonte region.",
+    "location": "Ibirité, MG, Brazil",
+    "businessName": "Power Moto 50",
+    "businessType": "shop",
+    "services": [
+      "motorcycles",
+      "parts",
+      "repair"
+    ],
+    "referralCode": "LEGACY"
+  }
+]

@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 import { ShieldCheck, Loader2, ArrowRight, Lock } from 'lucide-react';
+import { useLanguage } from '../contexts/LanguageContext';
 
 export default function AdminLogin() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -46,11 +48,12 @@ export default function AdminLogin() {
         throw new Error(result.error || 'Login failed');
       }
 
-      if (result.role !== 'admin' && result.role !== 'moderator') {
-        throw new Error('Access denied: Administrator privileges required');
+      if (result.user.role !== 'admin' && result.user.role !== 'moderator') {
+        throw new Error(t('admin.login.error.denied'));
       }
 
-      localStorage.setItem('user', JSON.stringify(result));
+      localStorage.setItem('user', JSON.stringify(result.user));
+      localStorage.setItem('token', result.token);
       window.dispatchEvent(new Event('auth-change'));
       navigate('/admin');
     } catch (err: any) {
@@ -61,7 +64,7 @@ export default function AdminLogin() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-black relative overflow-hidden grid-pattern">
+    <div className="min-h-[calc(100dvh-5rem)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-black relative overflow-hidden grid-pattern">
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -71,8 +74,8 @@ export default function AdminLogin() {
           <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-primary/5 border border-primary/20 mb-6 shadow-2xl shadow-primary/10">
             <ShieldCheck className="w-10 h-10 text-primary" />
           </div>
-          <h2 className="text-4xl font-display font-black uppercase italic tracking-tighter mb-2 text-white">Admin Access</h2>
-          <p className="text-zinc-600 font-mono text-[10px] uppercase tracking-[0.3em]">Secure Terminal v1.0.4</p>
+          <h2 className="text-4xl font-display font-black uppercase italic tracking-tighter mb-2 text-white">{t('admin.login.title')}</h2>
+          <p className="text-steel font-mono text-[10px] uppercase tracking-[0.3em]">{t('admin.login.subtitle')}</p>
         </div>
 
         <div className="glass-card p-10 shadow-2xl border-white/5 relative overflow-hidden group">
@@ -87,7 +90,7 @@ export default function AdminLogin() {
 
           <form onSubmit={handleSubmit} className="space-y-8 relative z-10">
             <div>
-              <label className="block text-[10px] font-mono font-black text-zinc-600 uppercase tracking-[0.2em] mb-3">Admin Credentials</label>
+              <label className="block text-[10px] font-mono font-black text-steel uppercase tracking-[0.2em] mb-3">{t('admin.login.credentials')}</label>
               <input 
                 type="email" 
                 name="email" 
@@ -98,7 +101,7 @@ export default function AdminLogin() {
             </div>
 
             <div>
-              <label className="block text-[10px] font-mono font-black text-zinc-600 uppercase tracking-[0.2em] mb-3">Security Key</label>
+              <label className="block text-[10px] font-mono font-black text-steel uppercase tracking-[0.2em] mb-3">{t('admin.login.securityKey')}</label>
               <input 
                 type="password" 
                 name="password" 
@@ -117,7 +120,7 @@ export default function AdminLogin() {
                 <Loader2 className="w-6 h-6 animate-spin" />
               ) : (
                 <>
-                  Authenticate
+                  {t('admin.login.authenticate')}
                   <ArrowRight className="w-6 h-6 group-hover:translate-x-2 transition-transform" />
                 </>
               )}
@@ -125,15 +128,15 @@ export default function AdminLogin() {
           </form>
 
           <div className="mt-10 pt-8 border-t border-white/5 text-center relative z-10">
-            <Link to="/login" className="text-zinc-600 hover:text-primary text-[10px] font-mono font-black uppercase tracking-widest transition-all">
-              Standard User Login
+            <Link to="/login" className="text-steel hover:text-primary text-[10px] font-mono font-black uppercase tracking-widest transition-all">
+              {t('admin.login.standardLogin')}
             </Link>
           </div>
         </div>
 
         <div className="mt-10 text-center">
-          <p className="text-[10px] text-zinc-800 font-mono uppercase tracking-[0.4em] font-black">
-            Authorized Personnel Only • IP Logged
+          <p className="text-[10px] text-engine font-mono uppercase tracking-[0.4em] font-black">
+            {t('admin.login.authorizedOnly')}
           </p>
         </div>
       </motion.div>

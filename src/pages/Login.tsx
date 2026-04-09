@@ -1,17 +1,101 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { motion, AnimatePresence } from 'motion/react';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import { LogIn, Loader2, ArrowRight, Play } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [message, setMessage] = useState(location.state?.message || '');
   const [showVideo, setShowVideo] = useState(true);
-  const [videoStarted, setVideoStarted] = useState(false);
+  const [videoStarted, setVideoStarted] = useState(true);
   const { t } = useLanguage();
+  
+  useEffect(() => {
+    if (showVideo && videoRef.current) {
+      videoRef.current.play().catch(err => {
+        console.log("Autoplay blocked:", err);
+        setVideoStarted(false); // Show play button if blocked
+      });
+    }
+  }, [showVideo]);
+
+  const handleGoogleResponse = async (response: any) => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch('/api/auth/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential: response.credential }),
+      });
+
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Google login failed');
+
+      localStorage.setItem('user', JSON.stringify(result.user));
+      localStorage.setItem('token', result.token);
+      window.dispatchEvent(new Event('auth-change'));
+      
+      if (result.isNewUser) {
+        navigate('/onboarding', { 
+          state: { 
+            fromGoogleAuth: true,
+            googleData: result.googleData
+          } 
+        });
+      } else {
+        navigate(`/profile/${result.user.username}`);
+      }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleResponseRef = useRef<any>(null);
+  handleGoogleResponseRef.current = handleGoogleResponse;
+
+  useEffect(() => {
+    const initGoogle = () => {
+      if (!showVideo && typeof window !== 'undefined' && (window as any).google?.accounts?.id) {
+        // Initialize only once per session to avoid GSI_LOGGER warning
+        if (!(window as any).google_gsi_initialized) {
+          (window as any).google.accounts.id.initialize({
+            client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+            callback: (response: any) => {
+              if (handleGoogleResponseRef.current) {
+                handleGoogleResponseRef.current(response);
+              }
+            },
+          });
+          (window as any).google_gsi_initialized = true;
+        }
+
+        const googleDiv = document.getElementById("googleSignInDiv");
+        if (googleDiv) {
+          (window as any).google.accounts.id.renderButton(
+            googleDiv,
+            { theme: "outline", size: "large", width: "100%" }
+          );
+          return true;
+        }
+      }
+      return false;
+    };
+
+    if (!initGoogle()) {
+      const interval = setInterval(() => {
+        if (initGoogle()) clearInterval(interval);
+      }, 500);
+      return () => clearInterval(interval);
+    }
+  }, [t, showVideo]);
 
   const handleVideoEnd = () => {
     setShowVideo(false);
@@ -52,14 +136,15 @@ export default function Login() {
         throw new Error(result.error || 'Login failed');
       }
 
-      // Store user info in localStorage for this prototype
-      localStorage.setItem('user', JSON.stringify(result));
+      // Store user info and token in localStorage
+      localStorage.setItem('user', JSON.stringify(result.user));
+      localStorage.setItem('token', result.token);
       
       // Dispatch event to notify Navbar and other components
       window.dispatchEvent(new Event('auth-change'));
 
       // Redirect to profile
-      navigate(`/profile/${result.username}`);
+      navigate(`/profile/${result.user.username}`);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -68,7 +153,7 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-zinc-950 overflow-hidden">
+    <div className="min-h-[calc(100dvh-5rem)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-asphalt overflow-hidden">
       <AnimatePresence mode="wait">
         {showVideo ? (
           <motion.div
@@ -81,6 +166,7 @@ export default function Login() {
           >
             <video
               ref={videoRef}
+              autoPlay
               muted
               onEnded={handleVideoEnd}
               className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ${videoStarted ? 'opacity-100' : 'opacity-0'}`}
@@ -95,23 +181,21 @@ export default function Login() {
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 onClick={startVideo}
-                className="group relative z-10 flex flex-col items-center gap-4 text-white hover:text-orange-500 transition-all"
+                className="group relative z-10 flex flex-col items-center gap-4 text-white hover:text-primary transition-all"
               >
-                <div className="w-20 h-20 rounded-full border-2 border-white/20 flex items-center justify-center group-hover:border-orange-500/50 group-hover:bg-orange-500/10 transition-all">
+                <div className="w-20 h-20 rounded-full border-2 border-white/20 flex items-center justify-center group-hover:border-primary/50 group-hover:bg-primary/10 transition-all">
                   <Play className="w-8 h-8 fill-current" />
                 </div>
                 <span className="font-bold tracking-widest text-sm uppercase">{t('login.enter')}</span>
               </motion.button>
             )}
             
-            {videoStarted && (
-              <button 
-                onClick={() => setShowVideo(false)}
-                className="absolute bottom-8 right-8 text-white/50 hover:text-white text-sm font-medium transition-colors"
-              >
-                {t('login.skip')}
-              </button>
-            )}
+            <button 
+              onClick={() => setShowVideo(false)}
+              className="absolute bottom-8 right-8 text-white/50 hover:text-white text-sm font-medium transition-colors z-[60]"
+            >
+              {t('login.skip') || 'Skip to Login'}
+            </button>
           </motion.div>
         ) : (
           <motion.div 
@@ -122,10 +206,15 @@ export default function Login() {
           >
             <div className="text-center mb-8">
               <h2 className="text-4xl font-display font-black tracking-tighter mb-2 text-primary uppercase italic">{t('login.welcome')}</h2>
-              <p className="text-zinc-400 font-light">{t('login.subtitle')}</p>
+              <p className="text-steel font-light">{t('login.subtitle')}</p>
             </div>
 
             <div className="glass-card p-8 shadow-2xl shadow-primary/5">
+              {message && (
+                <div className="mb-6 p-4 bg-green-500/10 border border-green-500/20 rounded-xl text-green-500 text-sm font-medium">
+                  {message}
+                </div>
+              )}
               {error && (
                 <div className="mb-6 p-4 bg-accent/10 border border-accent/20 rounded-xl text-accent text-sm font-medium">
                   {error}
@@ -134,7 +223,7 @@ export default function Login() {
 
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
-                  <label className="block text-xs font-mono uppercase tracking-widest text-zinc-500 mb-2">{t('login.email')}</label>
+                  <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-2">{t('login.email')}</label>
                   <input 
                     type="email" 
                     name="email" 
@@ -145,7 +234,7 @@ export default function Login() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-mono uppercase tracking-widest text-zinc-500 mb-2">{t('login.password')}</label>
+                  <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-2">{t('login.password')}</label>
                   <input 
                     type="password" 
                     name="password" 
@@ -153,6 +242,9 @@ export default function Login() {
                     className="input-field"
                     placeholder="••••••••"
                   />
+                  <div className="text-right mt-2">
+                    <a href="/forgot-password" className="text-xs text-primary hover:underline">Forgot password?</a>
+                  </div>
                 </div>
 
                 <button 
@@ -171,16 +263,34 @@ export default function Login() {
                 </button>
               </form>
 
+              <div className="mt-6">
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-white/5"></div>
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-asphalt px-2 text-steel font-mono tracking-widest">{t('login.orContinueWith')}</span>
+                  </div>
+                </div>
+
+                <div className="mt-6">
+                  <div id="googleSignInDiv" className="min-h-[44px] flex justify-center"></div>
+                </div>
+              </div>
+
               <div className="mt-8 pt-6 border-t border-white/5 text-center space-y-4">
-                <p className="text-zinc-500 text-sm">
+                <p className="text-steel text-sm">
                   {t('login.noAccount')}{' '}
-                  <Link to="/register" className="text-orange-500 hover:text-orange-400 font-medium">
+                  <Link to="/onboarding" className="text-primary hover:text-accent font-medium">
                     {t('nav.join')}
                   </Link>
                 </p>
-                <div className="pt-2">
-                  <Link to="/admin/login" className="text-zinc-600 hover:text-zinc-400 text-xs font-mono uppercase tracking-wider transition-colors">
+                <div className="pt-2 flex flex-col gap-2">
+                  <Link to="/admin/login" className="text-steel hover:text-steel text-xs font-mono uppercase tracking-wider transition-colors">
                     {t('login.admin')}
+                  </Link>
+                  <Link to="/privacy" className="text-steel/50 hover:text-primary text-[10px] font-mono uppercase tracking-widest transition-colors">
+                    Privacy Policy
                   </Link>
                 </div>
               </div>

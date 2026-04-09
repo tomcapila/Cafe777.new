@@ -1,0 +1,66 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents a user in the system.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "displayName": { "type": "string", "description": "User display name" },
+        "photoURL": { "type": "string", "description": "User profile photo URL" }
+      },
+      "required": ["uid", "displayName"]
+    },
+    "Chat": {
+      "title": "Chat",
+      "description": "Represents a chat room (one-on-one or group).",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Chat title (for group chats)" },
+        "type": { "type": "string", "enum": ["one-on-one", "group"], "description": "Type of chat" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["type", "createdAt"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Represents a message within a chat.",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string", "description": "Sender's User UID" },
+        "text": { "type": "string", "description": "Message content" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "Message timestamp" },
+        "readBy": { "type": "array", "items": { "type": "string" }, "description": "List of User UIDs who read this message" }
+      },
+      "required": ["senderId", "text", "timestamp"]
+    },
+    "Participant": {
+      "title": "Participant",
+      "description": "Links a user to a chat.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "User UID" },
+        "joinedAt": { "type": "string", "format": "date-time", "description": "Timestamp when user joined" }
+      },
+      "required": ["userId", "joinedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "User" },
+      "description": "User profiles"
+    },
+    "/chats/{chatId}": {
+      "schema": { "$ref": "Chat" },
+      "description": "Chat rooms"
+    },
+    "/chats/{chatId}/messages/{messageId}": {
+      "schema": { "$ref": "Message" },
+      "description": "Messages in a chat"
+    },
+    "/chats/{chatId}/participants/{participantId}": {
+      "schema": { "$ref": "Participant" },
+      "description": "Participants in a chat"
+    }
+  }
+}

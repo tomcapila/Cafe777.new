@@ -6,15 +6,18 @@
   --font-display: "Space Grotesk", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
-  --color-primary: #f97316; /* orange-500 */
-  --color-accent: #dc2626; /* red-600 */
-  --color-chrome: #a1a1aa; /* zinc-400 */
-  --color-oil: #f59e0b; /* amber-500 */
+  --color-primary: #FF5500; /* Ignition Orange */
+  --color-accent: #FFB800; /* Dashboard Amber */
+  --color-chrome: #FFFFFF; /* Chrome White */
+  --color-steel: #8E8E93; /* Steel Grey */
+  --color-asphalt: #0A0A0A; /* Deep Asphalt */
+  --color-carbon: #141414; /* Carbon Grey */
+  --color-engine: #1E1E1E; /* Engine Matte */
 }
 
 @layer base {
   body {
-    @apply bg-zinc-950 text-zinc-50 antialiased;
+    @apply bg-asphalt text-chrome antialiased;
     font-feature-settings: "ss01", "ss02", "cv01", "cv02";
   }
 
@@ -25,19 +28,24 @@
 
 @layer components {
   .glass-card {
-    @apply bg-zinc-900/50 backdrop-blur-md border border-zinc-800/50 rounded-2xl;
+    @apply bg-carbon/60 backdrop-blur-[20px] border border-white/10 rounded-2xl;
+  }
+
+  .mask-linear-fade {
+    mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
+    -webkit-mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
   }
 
   .btn-primary {
-    @apply px-6 py-3 bg-primary text-black font-display font-bold rounded-xl hover:bg-oil transition-all active:scale-95 shadow-lg shadow-primary/20;
+    @apply px-6 py-3 bg-primary text-asphalt font-display font-bold rounded-xl hover:bg-accent transition-all active:scale-95 shadow-[0_0_20px_rgba(255,85,0,0.3)];
   }
 
   .btn-secondary {
-    @apply px-6 py-3 bg-zinc-800 text-zinc-100 font-display font-bold rounded-xl hover:bg-zinc-700 transition-all active:scale-95 border border-zinc-700;
+    @apply px-6 py-3 bg-engine text-chrome font-display font-bold rounded-xl hover:bg-carbon transition-all active:scale-95 border border-white/10;
   }
 
   .input-field {
-    @apply w-full px-4 py-3 bg-zinc-900 border border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all text-zinc-100 placeholder:text-zinc-600;
+    @apply w-full px-4 py-3 bg-carbon border border-white/10 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all text-chrome placeholder:text-steel;
   }
 
   .badge-primary {
@@ -45,11 +53,19 @@
   }
 
   .badge-chrome {
-    @apply px-2 py-1 text-[10px] font-mono uppercase tracking-wider rounded-md border bg-zinc-400/10 border-zinc-400/20 text-zinc-400;
+    @apply px-2 py-1 text-[10px] font-mono uppercase tracking-wider rounded-md border bg-white/5 border-white/10 text-steel;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
 }
 
 .grid-pattern {
-  background-image: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.05) 1px, transparent 0);
+  background-image: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.03) 1px, transparent 0);
   background-size: 24px 24px;
 }

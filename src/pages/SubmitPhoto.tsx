@@ -1,7 +1,9 @@
+import { fetchWithAuth } from '../utils/api';
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Camera, Upload, X, Bike } from 'lucide-react';
-import { motion } from 'motion/react';
+import { Camera, Upload, X, Bike, ChevronLeft, ChevronRight } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useNotification } from '../contexts/NotificationContext';
 
 export default function SubmitPhoto() {
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -10,9 +12,12 @@ export default function SubmitPhoto() {
   const [description, setDescription] = useState('');
   const [motorcycleId, setMotorcycleId] = useState('');
   const [motorcycles, setMotorcycles] = useState<any[]>([]);
+  const [contests, setContests] = useState<any[]>([]);
+  const [selectedContestId, setSelectedContestId] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+  const { showNotification } = useNotification();
 
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
@@ -21,14 +26,36 @@ export default function SubmitPhoto() {
       setCurrentUser(user);
       fetchMotorcycles(user.username);
     }
+    fetchActiveContests();
   }, []);
+
+  const fetchActiveContests = async () => {
+    try {
+      const res = await fetchWithAuth('/api/contests/active');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setContests(data);
+          if (data.length > 0) {
+            setSelectedContestId(data[0].id.toString());
+          }
+        } else {
+          console.error('Active contests data is not an array:', data);
+          setContests([]);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch active contests:', err);
+    }
+  };
 
   const fetchMotorcycles = async (username: string) => {
     try {
-      const res = await fetch(`/api/profile/${username}`);
+      const res = await fetchWithAuth(`/api/profile/${encodeURIComponent(username)}`);
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
-      if (data.motorcycles) {
-        setMotorcycles(data.motorcycles);
+      if (data.garage) {
+        setMotorcycles(data.garage);
       }
     } catch (err) {
       console.error('Failed to fetch motorcycles:', err);
@@ -45,7 +72,7 @@ export default function SubmitPhoto() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!photo || !currentUser) return;
+    if (!photo || !currentUser || !selectedContestId) return;
 
     setIsSubmitting(true);
     const formData = new FormData();
@@ -55,84 +82,147 @@ export default function SubmitPhoto() {
     if (motorcycleId) formData.append('motorcycle_id', motorcycleId);
 
     try {
-      const res = await fetch('/api/contests/current/submissions', {
+      const res = await fetchWithAuth(`/api/contests/${selectedContestId}/submissions`, {
         method: 'POST',
         body: formData,
       });
 
       if (res.ok) {
-        navigate('/events'); // Redirect to events or a dedicated contest page
+        showNotification('success', 'Photo submitted successfully! Waiting for approval.');
+        navigate('/contest');
       } else {
         const error = await res.json();
-        alert(error.error || 'Failed to submit photo');
+        showNotification('error', error.error || 'Failed to submit photo');
       }
     } catch (err) {
       console.error('Submission failed:', err);
-      alert('An error occurred');
+      showNotification('error', 'An error occurred during submission');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-6">Submit Photo of the Week</h1>
-      <form onSubmit={handleSubmit} className="bg-zinc-900 border border-white/10 rounded-2xl p-6 space-y-6">
-        
-        {/* Photo Uploader */}
-        <div 
-          onClick={() => fileInputRef.current?.click()}
-          className="border-2 border-dashed border-zinc-700 rounded-xl h-64 flex flex-col items-center justify-center cursor-pointer hover:border-orange-500 transition-colors relative overflow-hidden"
+    <div className="min-h-[calc(100dvh-5rem)] bg-asphalt text-white font-sans p-8 pb-28">
+      <div className="max-w-4xl mx-auto">
+        <button 
+          onClick={() => navigate('/contest')}
+          className="flex items-center gap-2 text-steel hover:text-primary transition-colors mb-8 font-mono text-xs uppercase tracking-widest"
         >
-          {preview ? (
-            <>
-              <img src={preview} alt="Preview" className="w-full h-full object-cover" />
-              <button 
-                type="button"
-                onClick={(e) => { e.stopPropagation(); setPhoto(null); setPreview(null); }}
-                className="absolute top-2 right-2 p-1 bg-black/50 rounded-full text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </>
-          ) : (
-            <div className="flex flex-col items-center text-zinc-500">
-              <Upload className="w-12 h-12 mb-2" />
-              <p>Click to upload photo</p>
-            </div>
-          )}
-          <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
-        </div>
-
-        {/* Description */}
-        <textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="Short description of your photo..."
-          className="w-full bg-zinc-950 border border-white/10 rounded-xl p-4 text-white focus:outline-none focus:border-orange-500"
-          rows={3}
-        />
-
-        {/* Motorcycle Selector */}
-        <select
-          value={motorcycleId}
-          onChange={(e) => setMotorcycleId(e.target.value)}
-          className="w-full bg-zinc-950 border border-white/10 rounded-xl p-4 text-white focus:outline-none focus:border-orange-500"
-        >
-          <option value="">Select your motorcycle (optional)</option>
-          {motorcycles.map((moto: any) => (
-            <option key={moto.id} value={moto.id}>{moto.make} {moto.model} ({moto.year})</option>
-          ))}
-        </select>
-
-        <button
-          type="submit"
-          disabled={isSubmitting || !photo}
-          className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl transition-colors disabled:opacity-50"
-        >
-          {isSubmitting ? 'Submitting...' : 'Submit Entry'}
+          <ChevronLeft className="w-4 h-4" /> Back to Contest
         </button>
-      </form>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+          {/* Left Side: Header & Form */}
+          <div className="space-y-8">
+            <div>
+              <h1 className="text-6xl font-black uppercase tracking-tighter leading-[0.85] mb-4">
+                Submit <br /> Your Shot
+              </h1>
+              <p className="text-xl text-steel font-medium leading-tight">
+                Enter the weekly contest for a chance to win exclusive badges and reputation points.
+              </p>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="block font-mono text-[10px] uppercase tracking-widest text-steel mb-2">Select Contest</label>
+                  <div className="relative">
+                    <select
+                      value={selectedContestId}
+                      onChange={(e) => setSelectedContestId(e.target.value)}
+                      required
+                      className="w-full bg-carbon border-2 border-black p-4 text-white focus:border-primary outline-none appearance-none transition-colors"
+                    >
+                      <option value="" disabled>Select an active contest</option>
+                      {contests.map((c: any) => (
+                        <option key={c.id} value={c.id}>{c.title}</option>
+                      ))}
+                    </select>
+                    <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-steel pointer-events-none rotate-90" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-mono text-[10px] uppercase tracking-widest text-steel mb-2">Description</label>
+                  <textarea
+                    value={description || ''}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Tell us about this shot..."
+                    className="w-full bg-carbon border-2 border-black p-4 text-white focus:border-primary outline-none min-h-[120px] transition-colors"
+                    rows={3}
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-mono text-[10px] uppercase tracking-widest text-steel mb-2">Tagged Motorcycle (Optional)</label>
+                  <div className="relative">
+                    <select
+                      value={motorcycleId || ''}
+                      onChange={(e) => setMotorcycleId(e.target.value)}
+                      className="w-full bg-carbon border-2 border-black p-4 text-white focus:border-primary outline-none appearance-none transition-colors"
+                    >
+                      <option value="">None</option>
+                      {motorcycles.map((moto: any) => (
+                        <option key={moto.id} value={moto.id}>{moto.make} {moto.model} ({moto.year})</option>
+                      ))}
+                    </select>
+                    <Bike className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-steel pointer-events-none" />
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSubmitting || !photo}
+                className="group relative w-full bg-primary text-black font-black uppercase tracking-widest py-6 text-xl hover:bg-white transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span className="relative z-10 flex items-center justify-center gap-3">
+                  {isSubmitting ? 'Submitting...' : 'Submit Entry'} <ChevronRight className="w-6 h-6 group-hover:translate-x-2 transition-transform" />
+                </span>
+                <div className="absolute top-2 left-2 w-full h-full border-2 border-primary -z-10 group-hover:top-0 group-hover:left-0 transition-all" />
+              </button>
+            </form>
+          </div>
+
+          {/* Right Side: Photo Preview */}
+          <div className="relative">
+            <div 
+              onClick={() => fileInputRef.current?.click()}
+              className={`group relative aspect-[4/5] bg-carbon border-4 border-dashed border-black hover:border-primary transition-all cursor-pointer flex flex-col items-center justify-center overflow-hidden ${preview ? 'border-solid' : ''}`}
+            >
+              {preview ? (
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="w-full h-full"
+                >
+                  <img src={preview} alt="Preview" className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <p className="bg-white text-black font-black uppercase tracking-widest px-6 py-3 border-2 border-black">Change Photo</p>
+                  </div>
+                </motion.div>
+              ) : (
+                <div className="text-center p-12">
+                  <div className="w-24 h-24 bg-engine border-4 border-black flex items-center justify-center mx-auto mb-6 group-hover:bg-primary transition-colors">
+                    <Upload className="w-10 h-10 text-steel group-hover:text-black transition-colors" />
+                  </div>
+                  <h3 className="text-2xl font-black uppercase tracking-tighter mb-2">Upload Photo</h3>
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-steel">
+                    JPG, PNG or WEBP. Max 5MB.
+                  </p>
+                </div>
+              )}
+              <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
+            </div>
+
+            {/* Decorative Elements */}
+            <div className="absolute -top-4 -right-4 w-24 h-24 border-t-4 border-right-4 border-primary -z-10" />
+            <div className="absolute -bottom-4 -left-4 w-24 h-24 border-b-4 border-left-4 border-primary -z-10" />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
