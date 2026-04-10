@@ -92,10 +92,32 @@ export default function Onboarding() {
         setError(t('onboarding.errorFields'));
         return;
       }
+      
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(data.email)) {
+        setError("Invalid email format");
+        return;
+      }
+
+      const usernameRegex = /^[a-zA-Z0-9_]{3,30}$/;
+      if (!usernameRegex.test(data.username)) {
+        setError("Username must be 3-30 characters and contain only letters, numbers, and underscores");
+        return;
+      }
+
+      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+      if (!passwordRegex.test(data.password)) {
+        setError("Password must contain at least 8 characters, one uppercase letter, one lowercase letter, one number and one special character");
+        return;
+      }
     }
     if (step === 3) {
       if (!data.location || !data.fullName) {
         setError(t('onboarding.errorFields'));
+        return;
+      }
+      if (data.fullName.length < 2) {
+        setError("Full name must be at least 2 characters");
         return;
       }
     }
@@ -201,6 +223,13 @@ export default function Onboarding() {
       const result = await res.json();
 
       if (!res.ok) {
+        if (result.details) {
+          const messages = Object.entries(result.details)
+            .filter(([key]) => key !== '_errors')
+            .map(([key, value]: [string, any]) => `${key}: ${value._errors.join(', ')}`)
+            .join(' | ');
+          throw new Error(`${result.error}: ${messages}`);
+        }
         throw new Error(result.error || t('onboarding.errorComplete'));
       }
 

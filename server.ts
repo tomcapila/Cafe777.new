@@ -4080,6 +4080,7 @@ async function startServer() {
   app.post("/api/register", async (req, res) => {
     const validation = registerSchema.safeParse(req.body);
     if (!validation.success) {
+      console.error("Register validation failed:", JSON.stringify(validation.error.format(), null, 2));
       return res.status(400).json({ error: "Invalid input", details: validation.error.format() });
     }
     const { username, email, password, type, fullName, location, bio, motorcycle, businessName, businessType, interests, services, referralCode } = validation.data;
