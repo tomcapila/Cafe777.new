@@ -13,8 +13,8 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { MailerSend, EmailParams, Sender, Recipient } from "mailersend";
-
 import { OAuth2Client } from 'google-auth-library';
+import { fetchOSMPlaces } from './src/services/osmService.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -60,6 +60,14 @@ console.log("Database initialized successfully");
 const uploadsDir = isProd ? '/tmp/uploads' : path.resolve(process.cwd(), "public/uploads");
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Migration: Add chapter_label to ecosystems if it doesn't exist
+try {
+  db.prepare("ALTER TABLE ecosystems ADD COLUMN chapter_label TEXT DEFAULT 'Chapter'").run();
+  console.log("Migration: Added chapter_label to ecosystems table");
+} catch (e) {
+  // Column likely already exists
 }
 
 // Configure multer
@@ -159,7 +167,10 @@ db.exec(`
     lng REAL,
     phone TEXT,
     website TEXT,
-    FOREIGN KEY(user_id) REFERENCES users(id)
+    chapter_label TEXT DEFAULT 'Chapter',
+    owner_id INTEGER,
+    FOREIGN KEY(user_id) REFERENCES users(id),
+    FOREIGN KEY(owner_id) REFERENCES users(id)
   );
 `);
 
@@ -571,7 +582,74 @@ db.exec(`
     FOREIGN KEY(chat_id) REFERENCES chats(id),
     FOREIGN KEY(sender_id) REFERENCES users(id)
   );
+
+  CREATE TABLE IF NOT EXISTS keywords_config (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    category_name TEXT NOT NULL,
+    keywords TEXT NOT NULL, -- JSON array
+    radius INTEGER DEFAULT 5000,
+    icon TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS places_cache (
+    place_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    lat REAL NOT NULL,
+    lng REAL NOT NULL,
+    rating REAL,
+    reviews INTEGER,
+    category TEXT,
+    source_keyword TEXT,
+    city TEXT,
+    details TEXT,
+    full_address TEXT,
+    source TEXT DEFAULT 'google',
+    last_fetched DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS places_control (
+    place_id TEXT PRIMARY KEY,
+    is_approved INTEGER DEFAULT 0,
+    is_hidden INTEGER DEFAULT 0,
+    custom_category TEXT,
+    priority_score INTEGER DEFAULT 0
+  );
+
+  -- Seed default keywords if empty
+  INSERT INTO keywords_config (category_name, keywords, radius, icon)
+  SELECT 'dealership', '["motorcycle dealership", "concessionária moto", "yamaha", "honda", "bmw motorrad", "triumph"]', 10000, 'Building2'
+  WHERE NOT EXISTS (SELECT 1 FROM keywords_config WHERE category_name = 'dealership');
+
+  INSERT INTO keywords_config (category_name, keywords, radius, icon)
+  SELECT 'repair', '["motorcycle repair", "oficina moto", "mecanico moto", "pneus moto"]', 5000, 'Wrench'
+  WHERE NOT EXISTS (SELECT 1 FROM keywords_config WHERE category_name = 'repair');
+
+  INSERT INTO keywords_config (category_name, keywords, radius, icon)
+  SELECT 'biker_cafe', '["biker cafe", "motocafé", "coffee shop", "cafeteria"]', 5000, 'Coffee'
+  WHERE NOT EXISTS (SELECT 1 FROM keywords_config WHERE category_name = 'biker_cafe');
+
+  INSERT INTO keywords_config (category_name, keywords, radius, icon)
+  SELECT 'meeting_spot', '["motorcycle meeting", "ponto de encontro moto", "mirante"]', 10000, 'Users'
+  WHERE NOT EXISTS (SELECT 1 FROM keywords_config WHERE category_name = 'meeting_spot');
+
+  INSERT INTO keywords_config (category_name, keywords, radius, icon)
+  SELECT 'gear_shop', '["motorcycle gear", "capacete moto", "jaqueta moto"]', 10000, 'ShoppingBag'
+  WHERE NOT EXISTS (SELECT 1 FROM keywords_config WHERE category_name = 'gear_shop');
 `);
+
+// Add columns to existing places_cache table if they don't exist
+try {
+  db.prepare("ALTER TABLE places_cache ADD COLUMN city TEXT").run();
+} catch (e) { /* Column might already exist */ }
+try {
+  db.prepare("ALTER TABLE places_cache ADD COLUMN details TEXT").run();
+} catch (e) { /* Column might already exist */ }
+try {
+  db.prepare("ALTER TABLE places_cache ADD COLUMN full_address TEXT").run();
+} catch (e) { /* Column might already exist */ }
+try {
+  db.prepare("ALTER TABLE places_cache ADD COLUMN source TEXT DEFAULT 'google'").run();
+} catch (e) { /* Column might already exist */ }
 
 // Migration: Add respect_count and comment_count if they don't exist
 try {
@@ -806,7 +884,7 @@ const insertUser = db.prepare("INSERT INTO users (username, email, password, typ
 const insertRider = db.prepare("INSERT INTO riders (user_id, name, age, city) VALUES (?, ?, ?, ?)");
 const insertMoto = db.prepare("INSERT INTO motorcycles (rider_id, make, model, year, image_url) VALUES (?, ?, ?, ?, ?)");
 const insertMaintenance = db.prepare("INSERT INTO maintenance_logs (motorcycle_id, service, km, shop) VALUES (?, ?, ?, ?)");
-const insertEco = db.prepare("INSERT INTO ecosystems (user_id, company_name, full_address, service_category, details, lat, lng) VALUES (?, ?, ?, ?, ?, ?, ?)");
+const insertEco = db.prepare("INSERT INTO ecosystems (user_id, company_name, full_address, service_category, details, lat, lng, owner_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
 const insertPost = db.prepare("INSERT INTO posts (user_id, content, image_url, tagged_motorcycle_id, privacy_level, shared_event_id) VALUES (?, ?, ?, ?, ?, ?)");
 const insertEvent = db.prepare("INSERT INTO events (user_id, title, description, date, time, location, image_url, is_approved, participation_badge_id, category, participation_stamp_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
 const insertContest = db.prepare("INSERT INTO contests (title, type, start_date, voting_start_date, end_date) VALUES (?, ?, ?, ?, ?)");
@@ -828,6 +906,8 @@ db.transaction(() => {
   insertSetting.run("feature_promote_photo_contest", "premium");
   insertSetting.run("photo_contest_enabled", "true");
   insertSetting.run("photo_contest_allowed_types", JSON.stringify(['premium']));
+  insertSetting.run("api_google_maps", "true");
+  insertSetting.run("api_osm", "true");
   
   // --- TEST USERS ---
   // 1. Normal Rider
@@ -837,7 +917,7 @@ db.transaction(() => {
 
   // 2. Business/Shop User
   const tb = insertUser.run("test_business", "shop@test.com", "password123", "ecosystem", "https://picsum.photos/seed/test_business/200/200", "user", "active", "TESTBIZ", null, "freemium", 0, "Test Moto Shop", "Chicago, IL", "A test shop for all your needs.", null, "Test Moto Shop", "repair", null, null, "TESTBIZ").lastInsertRowid;
-  insertEco.run(tb, "Test Moto Shop", "789 Bike Lane, Chicago, IL", "repair", "A test shop for all your needs.", 41.8781, -87.6298);
+  insertEco.run(tb, "Test Moto Shop", "789 Bike Lane, Chicago, IL", "repair", "A test shop for all your needs.", 41.8781, -87.6298, tb);
 
   // 3. MotoClub Owner User (Rider + Ambassador category motoclub)
   const tc = insertUser.run("test_motoclub", "club@test.com", "password123", "rider", "https://picsum.photos/seed/test_motoclub/200/200", "user", "active", "TESTCLUB", null, "freemium", 0, "Club Owner", "Miami", "Riding together", null, null, null, null, null, "TESTCLUB").lastInsertRowid;
@@ -870,11 +950,11 @@ db.transaction(() => {
 
   // Ecosystem 1
   const e1 = insertUser.run("moto_garage_la", "garage@cafe777.com", "password123", "ecosystem", "https://picsum.photos/seed/garage/200/200", "user", "active", "MOTOGARAGE", null, "freemium", 0, "Moto Garage LA", "Los Angeles, CA", "Premium motorcycle repair and custom builds.", null, "Moto Garage LA", "repair", null, null, "MOTOGARAGE").lastInsertRowid;
-  insertEco.run(e1, "Moto Garage LA", "123 Sunset Blvd, Los Angeles, CA", "repair", "Premium motorcycle repair and custom builds.", 34.0928, -118.3287);
+  insertEco.run(e1, "Moto Garage LA", "123 Sunset Blvd, Los Angeles, CA", "repair", "Premium motorcycle repair and custom builds.", 34.0928, -118.3287, e1);
 
   // Ecosystem 2
   const e2 = insertUser.run("leather_n_steel", "leather@cafe777.com", "password123", "ecosystem", "https://picsum.photos/seed/leather/200/200", "user", "active", "LEATHERSTEEL", null, "freemium", 0, "Leather & Steel Barbers", "Santa Monica, CA", "Classic cuts and shaves for the modern rider.", null, "Leather & Steel Barbers", "barbershop", null, null, "LEATHERSTEEL").lastInsertRowid;
-  insertEco.run(e2, "Leather & Steel Barbers", "456 Route 66, Santa Monica, CA", "barbershop", "Classic cuts and shaves for the modern rider.", 34.0195, -118.4912);
+  insertEco.run(e2, "Leather & Steel Barbers", "456 Route 66, Santa Monica, CA", "barbershop", "Classic cuts and shaves for the modern rider.", 34.0195, -118.4912, e2);
 
   // BH Ecosystems Mock Data
   [
@@ -952,7 +1032,7 @@ db.transaction(() => {
       (services as string[]).join(', '),
       `LEGACY_${(username as string).toUpperCase()}`
     ).lastInsertRowid;
-    insertEco.run(uid, businessName as string, location as string, businessType as string, details, null, null);
+    insertEco.run(uid, businessName as string, location as string, businessType as string, details, null, null, uid);
   });
 
   // Mock Badges
@@ -1109,7 +1189,8 @@ async function startServer() {
   app.use("/api/forgot-password", authLimiter);
   app.use("/api/reset-password", authLimiter);
 
-  app.use(express.json());
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
   // Admin check middleware (must be used after authenticateToken)
   const checkAdmin = (req: any, res: any, next: any) => {
@@ -1796,6 +1877,454 @@ async function startServer() {
     res.json({ message: "Notification marked as read" });
   });
 
+  // Admin: Get keywords config
+  app.get("/api/admin/keywords", authenticateToken, async (req, res) => {
+    if ((req as any).user.role !== 'admin') return res.status(403).json({ error: "Forbidden" });
+    try {
+      const keywords = db.prepare("SELECT * FROM keywords_config").all();
+      res.json(keywords.map((k: any) => ({ ...k, keywords: JSON.parse(k.keywords) })));
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch keywords" });
+    }
+  });
+
+  // Admin: Create keyword config
+  app.post("/api/admin/keywords", authenticateToken, async (req, res) => {
+    if ((req as any).user.role !== 'admin') return res.status(403).json({ error: "Forbidden" });
+    const { category_name, keywords, radius, icon } = req.body;
+    try {
+      const stmt = db.prepare("INSERT INTO keywords_config (category_name, keywords, radius, icon) VALUES (?, ?, ?, ?)");
+      const result = stmt.run(category_name, JSON.stringify(keywords), radius || 5000, icon);
+      res.json({ id: result.lastInsertRowid, category_name, keywords, radius, icon });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create keyword config" });
+    }
+  });
+
+  // Admin: Update keyword config
+  app.put("/api/admin/keywords/:id", authenticateToken, async (req, res) => {
+    if ((req as any).user.role !== 'admin') return res.status(403).json({ error: "Forbidden" });
+    const { category_name, keywords, radius, icon } = req.body;
+    try {
+      const stmt = db.prepare("UPDATE keywords_config SET category_name = ?, keywords = ?, radius = ?, icon = ? WHERE id = ?");
+      stmt.run(category_name, JSON.stringify(keywords), radius, icon, req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update keyword config" });
+    }
+  });
+
+  // Admin: Delete keyword config
+  app.delete("/api/admin/keywords/:id", authenticateToken, async (req, res) => {
+    if ((req as any).user.role !== 'admin') return res.status(403).json({ error: "Forbidden" });
+    try {
+      db.prepare("DELETE FROM keywords_config WHERE id = ?").run(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete keyword config" });
+    }
+  });
+
+  // Admin: Get places control
+  app.get("/api/admin/places", authenticateToken, async (req, res) => {
+    if ((req as any).user.role !== 'admin') return res.status(403).json({ error: "Forbidden" });
+    try {
+      const places = db.prepare(`
+        SELECT c.*, p.is_approved, p.is_hidden, p.custom_category, p.priority_score 
+        FROM places_cache c
+        LEFT JOIN places_control p ON c.place_id = p.place_id
+      `).all();
+      res.json(places);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch places" });
+    }
+  });
+
+  // Admin: Bulk import places
+  app.post("/api/admin/places/bulk-import", authenticateToken, async (req, res) => {
+    if ((req as any).user.role !== 'admin') return res.status(403).json({ error: "Forbidden" });
+    const { places } = req.body;
+    if (!Array.isArray(places)) return res.status(400).json({ error: "Invalid data format" });
+
+    try {
+      const insertCache = db.prepare(`
+        INSERT OR REPLACE INTO places_cache 
+        (place_id, name, lat, lng, rating, reviews, category, source_keyword, last_fetched)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `);
+
+      const insertControl = db.prepare(`
+        INSERT OR REPLACE INTO places_control 
+        (place_id, is_approved, is_hidden, custom_category, priority_score)
+        VALUES (?, ?, ?, ?, ?)
+      `);
+
+      db.transaction(() => {
+        for (const p of places) {
+          const placeId = p.place_id || p.id;
+          if (!placeId) continue;
+
+          // Insert into cache
+          insertCache.run(
+            placeId,
+            p.name,
+            p.lat,
+            p.lng,
+            p.rating || 0,
+            p.reviews || 0,
+            p.category || 'other',
+            p.source_keyword || 'manual_import'
+          );
+
+          // Insert into control (default to approved if not specified)
+          insertControl.run(
+            placeId,
+            p.is_approved !== undefined ? (p.is_approved ? 1 : 0) : 1,
+            p.is_hidden !== undefined ? (p.is_hidden ? 1 : 0) : 0,
+            p.custom_category || p.category || null,
+            p.priority_score || 0
+          );
+        }
+      })();
+
+      res.json({ success: true, count: places.length });
+    } catch (error) {
+      console.error("Error bulk importing places:", error);
+      res.status(500).json({ error: "Failed to bulk import places" });
+    }
+  });
+
+  // Admin: Update place control
+  app.post("/api/admin/places/:id/control", authenticateToken, async (req, res) => {
+    if ((req as any).user.role !== 'admin') return res.status(403).json({ error: "Forbidden" });
+    const { is_approved, is_hidden, custom_category, priority_score } = req.body;
+    try {
+      const existing = db.prepare("SELECT * FROM places_control WHERE place_id = ?").get(req.params.id) as any;
+      
+      if (existing) {
+        const final_approved = is_approved !== undefined ? (is_approved ? 1 : 0) : existing.is_approved;
+        const final_hidden = is_hidden !== undefined ? (is_hidden ? 1 : 0) : existing.is_hidden;
+        const final_category = custom_category !== undefined ? custom_category : existing.custom_category;
+        const final_priority = priority_score !== undefined ? priority_score : existing.priority_score;
+
+        db.prepare("UPDATE places_control SET is_approved = ?, is_hidden = ?, custom_category = ?, priority_score = ? WHERE place_id = ?")
+          .run(final_approved, final_hidden, final_category, final_priority, req.params.id);
+      } else {
+        db.prepare("INSERT INTO places_control (place_id, is_approved, is_hidden, custom_category, priority_score) VALUES (?, ?, ?, ?, ?)")
+          .run(
+            req.params.id, 
+            is_approved !== undefined ? (is_approved ? 1 : 0) : 0, 
+            is_hidden !== undefined ? (is_hidden ? 1 : 0) : 0, 
+            custom_category || null, 
+            priority_score || 0
+          );
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error updating place control:", error);
+      res.status(500).json({ error: "Failed to update place control" });
+    }
+  });
+
+  // Advanced Search Endpoint
+  app.post("/api/places/advanced-search", async (req, res) => {
+    const { mode, lat, lng, radius, bounds, polyline, keywords } = req.body;
+    const apiKey = process.env.GOOGLE_MAPS_PLATFORM_KEY || process.env.VITE_GOOGLE_MAPS_PLATFORM_KEY || (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY;
+    
+    const settings = db.prepare("SELECT key, value FROM settings").all() as any[];
+    const settingsMap = settings.reduce((acc, curr) => { acc[curr.key] = curr.value; return acc; }, {} as any);
+    const enableGoogleMaps = settingsMap['api_google_maps'] === 'true';
+    const enableOSM = settingsMap['api_osm'] === 'true';
+
+    const getDistance = (p1: number[], p2: number[]) => {
+      const R = 6371e3; // metres
+      const φ1 = p1[0] * Math.PI/180;
+      const φ2 = p2[0] * Math.PI/180;
+      const Δφ = (p2[0]-p1[0]) * Math.PI/180;
+      const Δλ = (p2[1]-p1[1]) * Math.PI/180;
+      const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ/2) * Math.sin(Δλ/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    };
+
+    try {
+      // 1. Get all keywords config
+      const keywordConfigs = db.prepare("SELECT * FROM keywords_config").all();
+      const activeKeywords = keywords && keywords.length > 0 
+        ? keywordConfigs.filter((k: any) => keywords.includes(k.category_name))
+        : keywordConfigs;
+
+      let allPlaces: any[] = [];
+      let samplePoints: number[][] = [];
+
+      // Helper function to fetch from Google Places
+      const fetchPlaces = async (searchLat: number, searchLng: number, searchRadius: number, keywordStr: string, category: string) => {
+        if (!enableGoogleMaps || !apiKey) return [];
+        const url = new URL("https://maps.googleapis.com/maps/api/place/nearbysearch/json");
+        url.searchParams.append("location", `${searchLat},${searchLng}`);
+        url.searchParams.append("radius", searchRadius.toString());
+        url.searchParams.append("keyword", keywordStr);
+        url.searchParams.append("key", apiKey);
+
+        const response = await fetch(url.toString());
+        const data = await response.json();
+        
+        if (data.status === 'OK') {
+          const places = data.results.map((p: any) => ({
+            place_id: p.place_id,
+            name: p.name,
+            lat: p.geometry.location.lat,
+            lng: p.geometry.location.lng,
+            rating: p.rating || 0,
+            reviews: p.user_ratings_total || 0,
+            category: category,
+            source_keyword: keywordStr,
+            city: '',
+            details: '',
+            full_address: p.vicinity || '',
+            source: 'google'
+          }));
+
+          // Cache places
+          const insertCache = db.prepare(`
+            INSERT OR REPLACE INTO places_cache 
+            (place_id, name, lat, lng, rating, reviews, category, source_keyword, city, details, full_address, source, last_fetched)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          `);
+          
+          db.transaction(() => {
+            for (const p of places) {
+              insertCache.run(p.place_id, p.name, p.lat, p.lng, p.rating, p.reviews, p.category, p.source_keyword, p.city, p.details, p.full_address, p.source);
+            }
+          })();
+
+          return places;
+        }
+        return [];
+      };
+
+      // Helper function to fetch from OSM
+      const fetchOSM = async (searchLat: number, searchLng: number, searchRadius: number) => {
+        if (!enableOSM) return [];
+        try {
+          const osmPlaces = await fetchOSMPlaces(searchLat, searchLng, searchRadius);
+          const mappedOSM = osmPlaces.map(p => ({
+            place_id: p.id,
+            name: p.name,
+            lat: p.lat,
+            lng: p.lng,
+            rating: p.rating,
+            reviews: p.reviews,
+            category: p.category,
+            source_keyword: 'osm_search',
+            city: p.city,
+            details: p.details,
+            full_address: p.full_address,
+            source: 'osm'
+          }));
+
+          // Cache OSM places
+          const insertCache = db.prepare(`
+            INSERT OR REPLACE INTO places_cache 
+            (place_id, name, lat, lng, rating, reviews, category, source_keyword, city, details, full_address, source, last_fetched)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          `);
+          
+          db.transaction(() => {
+            for (const p of mappedOSM) {
+              insertCache.run(p.place_id, p.name, p.lat, p.lng, p.rating, p.reviews, p.category, p.source_keyword, p.city, p.details, p.full_address, p.source);
+            }
+          })();
+
+          return mappedOSM;
+        } catch (e) {
+          console.error("OSM fetch error in advanced-search:", e);
+          return [];
+        }
+      };
+
+      // 2. Execute search based on mode
+      if (mode === 'near_me' && lat && lng) {
+        const searchRadius = radius || 5000;
+        for (const config of activeKeywords) {
+          const kws = JSON.parse((config as any).keywords);
+          for (const kw of kws) {
+            const places = await fetchPlaces(lat, lng, searchRadius, kw, (config as any).category_name);
+            allPlaces = [...allPlaces, ...places];
+          }
+        }
+        const osmPlaces = await fetchOSM(lat, lng, searchRadius);
+        allPlaces = [...allPlaces, ...osmPlaces];
+      } else if (mode === 'viewport' && bounds) {
+        // Calculate center and radius from bounds
+        const centerLat = (bounds.north + bounds.south) / 2;
+        const centerLng = (bounds.east + bounds.west) / 2;
+        const viewportRadius = Math.min((getDistance([bounds.north, bounds.west], [bounds.south, bounds.east])) / 2, 50000); // Max 50km
+
+        for (const config of activeKeywords) {
+          const kws = JSON.parse((config as any).keywords);
+          for (const kw of kws) {
+            const places = await fetchPlaces(centerLat, centerLng, viewportRadius, kw, (config as any).category_name);
+            allPlaces = [...allPlaces, ...places];
+          }
+        }
+        const osmPlaces = await fetchOSM(centerLat, centerLng, viewportRadius);
+        allPlaces = [...allPlaces, ...osmPlaces];
+      } else if (mode === 'route' && polyline) {
+        const points = polyline;
+        if (points.length > 0) {
+          samplePoints = [points[0]];
+          let lastPoint = points[0];
+          
+          for (let i = 1; i < points.length; i++) {
+            const dist = getDistance(lastPoint, points[i]);
+            if (dist > 5000) {
+              samplePoints.push(points[i]);
+              lastPoint = points[i];
+            }
+          }
+          
+          if (getDistance(lastPoint, points[points.length - 1]) > 1000) {
+            samplePoints.push(points[points.length - 1]);
+          }
+          
+          const limitedSamples = samplePoints.slice(0, 10);
+          
+          for (const pt of limitedSamples) {
+            for (const config of activeKeywords) {
+              const kws = JSON.parse((config as any).keywords);
+              for (const kw of kws) {
+                const places = await fetchPlaces(pt[0], pt[1], 3000, kw, (config as any).category_name);
+                allPlaces = [...allPlaces, ...places];
+              }
+            }
+            const osmPlaces = await fetchOSM(pt[0], pt[1], 3000);
+            allPlaces = [...allPlaces, ...osmPlaces];
+          }
+        }
+      }
+
+      // 3. Deduplicate
+      const uniquePlacesMap = new Map();
+      for (const p of allPlaces) {
+        if (!uniquePlacesMap.has(p.place_id)) {
+          uniquePlacesMap.set(p.place_id, p);
+        }
+      }
+
+      // 3.5 Add approved places from control table that might not be in the current search results
+      // This ensures that "Deka Customs" and others show up if they are in the cache and approved
+      try {
+        const approvedPlaces = db.prepare(`
+          SELECT c.*, p.is_approved, p.is_hidden, p.custom_category, p.priority_score 
+          FROM places_control p
+          JOIN places_cache c ON p.place_id = c.place_id
+          WHERE p.is_approved = 1 AND p.is_hidden = 0
+        `).all();
+
+        for (const p of approvedPlaces as any[]) {
+          if (!uniquePlacesMap.has(p.place_id)) {
+            // Only add if it's within a reasonable distance of the search area
+            let shouldAdd = false;
+            if (mode === 'near_me' && lat && lng) {
+              const dist = getDistance([lat, lng], [p.lat, p.lng]);
+              if (dist <= (radius || 50000)) shouldAdd = true;
+            } else if (mode === 'viewport' && bounds) {
+              if (p.lat <= bounds.north && p.lat >= bounds.south && p.lng <= bounds.east && p.lng >= bounds.west) {
+                shouldAdd = true;
+              }
+            } else if (mode === 'route' && polyline) {
+              // For routes, we check if it's near any of the sample points
+              for (const pt of samplePoints) {
+                if (getDistance(pt, [p.lat, p.lng]) <= 10000) { // 10km radius from any route point
+                  shouldAdd = true;
+                  break;
+                }
+              }
+            }
+
+            if (shouldAdd) {
+              uniquePlacesMap.set(p.place_id, p);
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Error adding approved places to search results:", e);
+      }
+
+      let uniquePlaces = Array.from(uniquePlacesMap.values());
+
+      // 4. Apply Admin Controls & Filtering
+      const placeIds = uniquePlaces.map(p => `'${p.place_id}'`).join(',');
+      let controls: any[] = [];
+      if (placeIds.length > 0) {
+        controls = db.prepare(`SELECT * FROM places_control WHERE place_id IN (${placeIds})`).all();
+      }
+      
+      const controlMap = new Map(controls.map(c => [c.place_id, c]));
+
+      uniquePlaces = uniquePlaces.filter(p => {
+        const control = controlMap.get(p.place_id);
+        if (control && control.is_hidden) return false;
+        // Hybrid mode: Show if approved OR (rating >= 4.0 and reviews >= 10)
+        if (control && control.is_approved) return true;
+        // More inclusive default filtering: rating >= 3.5 OR (rating > 0 and reviews >= 5)
+        return p.rating >= 3.5 || (p.rating > 0 && p.reviews >= 5);
+      });
+
+      // Apply custom categories and priority
+      uniquePlaces = uniquePlaces.map(p => {
+        const control = controlMap.get(p.place_id);
+        if (control) {
+          return {
+            ...p,
+            category: control.custom_category || p.category,
+            priority_score: control.priority_score || 0
+          };
+        }
+        return { ...p, priority_score: 0 };
+      });
+
+      // 5. Ranking Logic
+      // score = (rating * 10) + (reviews * 0.1) + priority_score
+      uniquePlaces.sort((a, b) => {
+        const scoreA = (a.rating * 10) + (a.reviews * 0.1) + a.priority_score;
+        const scoreB = (b.rating * 10) + (b.reviews * 0.1) + b.priority_score;
+        return scoreB - scoreA;
+      });
+
+      // 6. Deduplicate with internal places
+      // Get internal places to check for duplicates
+      const internalPlaces = db.prepare(`
+        SELECT company_name as name, lat, lng FROM ecosystems
+        UNION ALL
+        SELECT COALESCE(e.company_name, r.name) as name, e.lat, e.lng 
+        FROM ambassadors a
+        JOIN users u ON a.user_id = u.id
+        LEFT JOIN ecosystems e ON u.id = e.user_id
+        LEFT JOIN riders r ON u.id = r.user_id
+        WHERE e.lat IS NOT NULL AND e.lng IS NOT NULL
+      `).all();
+
+      uniquePlaces = uniquePlaces.filter(p => {
+        const isDuplicate = internalPlaces.some((internal: any) => 
+          internal.name && p.name &&
+          internal.name.toLowerCase() === p.name.toLowerCase() &&
+          Math.abs(internal.lat - p.lat) < 0.01 &&
+          Math.abs(internal.lng - p.lng) < 0.01
+        );
+        return !isDuplicate;
+      });
+
+      res.json(uniquePlaces);
+    } catch (error: any) {
+      console.error("Advanced Search Error:", error);
+      res.status(500).json({ error: error.message || "Internal server error during search" });
+    }
+  });
+
   app.get("/api/places/nearby", async (req, res) => {
     const { lat, lng, radius, keyword } = req.query;
     const apiKey = process.env.GOOGLE_MAPS_PLATFORM_KEY || process.env.VITE_GOOGLE_MAPS_PLATFORM_KEY || (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY;
@@ -1822,6 +2351,22 @@ async function startServer() {
       res.json(data.results || []);
     } catch (error: any) {
       console.error("Places API Exception:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/places/osm", async (req, res) => {
+    const { lat, lng, radius } = req.query;
+    
+    if (!lat || !lng) {
+      return res.status(400).json({ error: "Missing lat or lng parameters" });
+    }
+
+    try {
+      const places = await fetchOSMPlaces(Number(lat), Number(lng), radius ? Number(radius) : 10000);
+      res.json(places);
+    } catch (error: any) {
+      console.error("OSM Places API Exception:", error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -3077,12 +3622,27 @@ async function startServer() {
   });
 
   app.get("/api/admin/photo-contest-settings", authenticateToken, (req, res) => {
-    const enabled = db.prepare("SELECT value FROM settings WHERE key = 'photo_contest_enabled'").get() as any;
-    const allowedTypes = db.prepare("SELECT value FROM settings WHERE key = 'photo_contest_allowed_types'").get() as any;
-    res.json({
-      enabled: enabled ? enabled.value === 'true' : false,
-      allowedTypes: allowedTypes ? JSON.parse(allowedTypes.value) : ['premium']
-    });
+    try {
+      const enabled = db.prepare("SELECT value FROM settings WHERE key = 'photo_contest_enabled'").get() as any;
+      const allowedTypes = db.prepare("SELECT value FROM settings WHERE key = 'photo_contest_allowed_types'").get() as any;
+      
+      let parsedAllowedTypes = ['premium'];
+      if (allowedTypes && allowedTypes.value) {
+        try {
+          parsedAllowedTypes = JSON.parse(allowedTypes.value);
+        } catch (e) {
+          console.error("Error parsing photo_contest_allowed_types:", e);
+        }
+      }
+
+      res.json({
+        enabled: enabled ? enabled.value === 'true' : false,
+        allowedTypes: parsedAllowedTypes
+      });
+    } catch (error: any) {
+      console.error("Error fetching photo contest settings:", error);
+      res.status(500).json({ error: error.message });
+    }
   });
 
   app.post("/api/admin/photo-contest-settings", authenticateToken, checkAdmin, (req, res) => {
@@ -3478,7 +4038,7 @@ async function startServer() {
           db.prepare("UPDATE users SET fullName = ?, location = ?, bio = ?, motorcycle = ?, interests = ? WHERE id = ?")
             .run(profileData.name || null, profileData.city || null, profileData.bio || null, profileData.motorcycle || null, interestsStr || null, user.id);
         } else {
-          db.prepare("UPDATE ecosystems SET company_name = ?, full_address = ?, service_category = ?, details = ?, phone = ?, website = ? WHERE user_id = ?")
+          db.prepare("UPDATE ecosystems SET company_name = ?, full_address = ?, service_category = ?, details = ?, phone = ?, website = ?, chapter_label = ? WHERE user_id = ?")
             .run(
               profileData.company_name || null, 
               profileData.full_address || null, 
@@ -3486,6 +4046,7 @@ async function startServer() {
               profileData.details || null, 
               profileData.phone || null, 
               profileData.website || null, 
+              profileData.chapter_label || 'Chapter',
               user.id
             );
           db.prepare("UPDATE users SET businessName = ?, location = ?, businessType = ?, bio = ?, services = ? WHERE id = ?")
@@ -3538,21 +4099,21 @@ async function startServer() {
   app.get("/api/clubs/my", authenticateToken, (req: any, res) => {
     const userId = req.user.id;
     try {
-      // Clubs the user owns
+      // Clubs the user owns (either as the club account itself or as the owner/ambassador)
       const ownedClubs = db.prepare(`
-        SELECT u.id as club_id, u.username, u.profile_picture_url as logo_url, e.company_name as name, e.details as description, u.created_at as founded_date, u.plan
+        SELECT u.id as club_id, u.username, u.profile_picture_url as logo_url, e.company_name as name, e.details as description, u.created_at as founded_date, u.plan, e.chapter_label
         FROM users u
         JOIN ecosystems e ON u.id = e.user_id
-        WHERE u.id = ? AND u.type = 'ecosystem' AND e.service_category = 'club'
-      `).all(userId);
+        WHERE (u.id = ? OR e.owner_id = ?) AND e.service_category = 'club'
+      `).all(userId, userId);
 
       // Clubs the user is a member of
       const memberships = db.prepare(`
-        SELECT cm.*, u.username, u.profile_picture_url as logo_url, e.company_name as name, e.details as description, u.plan
+        SELECT cm.*, u.username, u.profile_picture_url as logo_url, e.company_name as name, e.details as description, u.plan, e.chapter_label
         FROM club_memberships cm
         JOIN users u ON cm.club_id = u.id
         JOIN ecosystems e ON u.id = e.user_id
-        WHERE cm.user_id = ?
+        WHERE cm.user_id = ? AND cm.status != 'rejected'
       `).all(userId);
 
       res.json({ ownedClubs, memberships });
@@ -3565,16 +4126,16 @@ async function startServer() {
     const clubId = req.params.id;
     try {
       const club = db.prepare(`
-        SELECT u.id as club_id, u.username, u.profile_picture_url as logo_url, e.company_name as name, e.details as description, u.created_at as founded_date, u.plan
+        SELECT u.id as club_id, u.username, u.profile_picture_url as logo_url, e.company_name as name, e.details as description, u.created_at as founded_date, u.plan, e.chapter_label
         FROM users u
         JOIN ecosystems e ON u.id = e.user_id
-        WHERE u.id = ? AND u.type = 'ecosystem' AND e.service_category = 'club'
+        WHERE u.id = ? AND e.service_category = 'club'
       `).get(clubId);
 
       if (!club) return res.status(404).json({ error: "Club not found" });
 
       const chapters = db.prepare("SELECT * FROM club_chapters WHERE club_id = ?").all(clubId);
-      const roles = db.prepare("SELECT * FROM club_roles WHERE club_id = ?").all(clubId);
+      const roles = db.prepare("SELECT * FROM club_roles WHERE club_id = ? ORDER BY hierarchy_order ASC").all(clubId);
       const members = db.prepare(`
         SELECT cm.*, u.username, u.profile_picture_url as avatar_url, r.name as rider_name, u.plan
         FROM club_memberships cm
@@ -3584,6 +4145,30 @@ async function startServer() {
       `).all(clubId);
 
       res.json({ club, chapters, roles, members });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/clubs/:id/members", authenticateToken, (req: any, res) => {
+    const clubId = req.params.id;
+    const { user_id, chapter_id, role_id } = req.body;
+
+    try {
+      const club = db.prepare("SELECT user_id, owner_id FROM ecosystems WHERE user_id = ?").get(clubId) as any;
+      if (!club || (Number(club.user_id) !== Number(req.user.id) && Number(club.owner_id) !== Number(req.user.id) && req.user.role !== 'admin')) {
+        return res.status(403).json({ error: "Forbidden: Only club owners can add members" });
+      }
+
+      const existing = db.prepare("SELECT id FROM club_memberships WHERE club_id = ? AND user_id = ?").get(clubId, user_id);
+      if (existing) {
+        return res.status(400).json({ error: "User is already a member or has a pending application" });
+      }
+
+      db.prepare("INSERT INTO club_memberships (club_id, chapter_id, user_id, role_id, status) VALUES (?, ?, ?, ?, 'approved')")
+        .run(clubId, chapter_id || null, user_id, role_id || null);
+      
+      res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -3611,18 +4196,19 @@ async function startServer() {
   app.put("/api/clubs/:id/members/:membership_id", authenticateToken, (req: any, res) => {
     const clubId = req.params.id;
     const membershipId = req.params.membership_id;
-    const { status, role_id } = req.body;
+    const { status, role_id, chapter_id } = req.body;
     
-    // Check if current user is club owner or admin
-    if (Number(clubId) !== Number(req.user.id) && req.user.role !== 'admin') {
-      return res.status(403).json({ error: "Forbidden: Only club owners can manage members" });
-    }
-
     try {
+      const club = db.prepare("SELECT user_id, owner_id FROM ecosystems WHERE user_id = ?").get(clubId) as any;
+      if (!club || (Number(club.user_id) !== Number(req.user.id) && Number(club.owner_id) !== Number(req.user.id) && req.user.role !== 'admin')) {
+        return res.status(403).json({ error: "Forbidden: Only club owners can manage members" });
+      }
+
       const updates = [];
       const params = [];
       if (status) { updates.push("status = ?"); params.push(status); }
       if (role_id !== undefined) { updates.push("role_id = ?"); params.push(role_id); }
+      if (chapter_id !== undefined) { updates.push("chapter_id = ?"); params.push(chapter_id); }
       
       if (updates.length > 0) {
         params.push(membershipId, clubId);
@@ -3662,14 +4248,39 @@ async function startServer() {
     const clubId = req.params.id;
     const { name, description, permissions } = req.body;
 
-    if (Number(clubId) !== Number(req.user.id) && req.user.role !== 'admin') {
-      return res.status(403).json({ error: "Forbidden: Only club owners can manage roles" });
-    }
-
     try {
+      const club = db.prepare("SELECT user_id, owner_id FROM ecosystems WHERE user_id = ?").get(clubId) as any;
+      if (!club || (Number(club.user_id) !== Number(req.user.id) && Number(club.owner_id) !== Number(req.user.id) && req.user.role !== 'admin')) {
+        return res.status(403).json({ error: "Forbidden: Only club owners can manage roles" });
+      }
+
       const info = db.prepare("INSERT INTO club_roles (club_id, name, description, permissions) VALUES (?, ?, ?, ?)")
         .run(clubId, name, description, JSON.stringify(permissions || []));
       res.json({ success: true, role_id: info.lastInsertRowid });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put("/api/clubs/:id/roles/reorder", authenticateToken, (req: any, res) => {
+    const clubId = req.params.id;
+    const { roles } = req.body; // Array of { id, hierarchy_order }
+
+    try {
+      const club = db.prepare("SELECT user_id, owner_id FROM ecosystems WHERE user_id = ?").get(clubId) as any;
+      if (!club || (Number(club.user_id) !== Number(req.user.id) && Number(club.owner_id) !== Number(req.user.id) && req.user.role !== 'admin')) {
+        return res.status(403).json({ error: "Forbidden: Only club owners can manage roles" });
+      }
+
+      const updateStmt = db.prepare("UPDATE club_roles SET hierarchy_order = ? WHERE id = ? AND club_id = ?");
+      const transaction = db.transaction((rolesToUpdate) => {
+        for (const role of rolesToUpdate) {
+          updateStmt.run(role.hierarchy_order, role.id, clubId);
+        }
+      });
+
+      transaction(roles);
+      res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -3680,11 +4291,12 @@ async function startServer() {
     const roleId = req.params.role_id;
     const { name, description, permissions } = req.body;
 
-    if (Number(clubId) !== Number(req.user.id) && req.user.role !== 'admin') {
-      return res.status(403).json({ error: "Forbidden: Only club owners can manage roles" });
-    }
-
     try {
+      const club = db.prepare("SELECT user_id, owner_id FROM ecosystems WHERE user_id = ?").get(clubId) as any;
+      if (!club || (Number(club.user_id) !== Number(req.user.id) && Number(club.owner_id) !== Number(req.user.id) && req.user.role !== 'admin')) {
+        return res.status(403).json({ error: "Forbidden: Only club owners can manage roles" });
+      }
+
       db.prepare("UPDATE club_roles SET name = ?, description = ?, permissions = ? WHERE id = ? AND club_id = ?")
         .run(name, description, JSON.stringify(permissions || []), roleId, clubId);
       res.json({ success: true });
@@ -3697,14 +4309,64 @@ async function startServer() {
     const clubId = req.params.id;
     const roleId = req.params.role_id;
 
-    if (Number(clubId) !== Number(req.user.id) && req.user.role !== 'admin') {
-      return res.status(403).json({ error: "Forbidden: Only club owners can manage roles" });
-    }
-
     try {
+      const club = db.prepare("SELECT user_id, owner_id FROM ecosystems WHERE user_id = ?").get(clubId) as any;
+      if (!club || (Number(club.user_id) !== Number(req.user.id) && Number(club.owner_id) !== Number(req.user.id) && req.user.role !== 'admin')) {
+        return res.status(403).json({ error: "Forbidden: Only club owners can manage roles" });
+      }
+
       db.prepare("UPDATE club_memberships SET role_id = NULL WHERE role_id = ? AND club_id = ?").run(roleId, clubId);
       db.prepare("DELETE FROM club_roles WHERE id = ? AND club_id = ?").run(roleId, clubId);
       res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put("/api/clubs/:id/settings", authenticateToken, (req: any, res) => {
+    const clubId = req.params.id;
+    const userId = req.user.id;
+    const { chapter_label, company_name, details } = req.body;
+
+    try {
+      const club = db.prepare("SELECT user_id, owner_id FROM ecosystems WHERE user_id = ?").get(clubId) as any;
+      if (!club) return res.status(404).json({ error: "Club not found" });
+      if (Number(club.user_id) !== Number(userId) && Number(club.owner_id) !== Number(userId) && req.user.role !== 'admin') {
+        return res.status(403).json({ error: "Not authorized to manage this club" });
+      }
+
+      db.prepare("UPDATE ecosystems SET chapter_label = ?, company_name = ?, details = ? WHERE user_id = ?")
+        .run(chapter_label || 'Chapter', company_name, details, clubId);
+
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/clubs/create", authenticateToken, (req: any, res) => {
+    const userId = req.user.id;
+    const { name, description, location } = req.body;
+
+    try {
+      // Check if user is an approved ambassador
+      const ambassador = db.prepare("SELECT * FROM ambassadors WHERE user_id = ?").get(userId);
+      if (!ambassador && req.user.role !== 'admin') {
+        return res.status(400).json({ error: "Only approved ambassadors can create clubs" });
+      }
+
+      // Create a new user entry for the club (ecosystem type)
+      const username = name.toLowerCase().replace(/\s+/g, '_') + '_club_' + Date.now();
+      const email = `${username}@motoclub.local`;
+      const password = 'NoLoginRequired123!';
+      const result = db.prepare("INSERT INTO users (username, email, password, type, role) VALUES (?, ?, ?, 'ecosystem', 'user')").run(username, email, password);
+      const clubUserId = result.lastInsertRowid;
+
+      // Create ecosystem entry
+      db.prepare("INSERT INTO ecosystems (user_id, company_name, details, full_address, service_category, owner_id) VALUES (?, ?, ?, ?, 'club', ?)")
+        .run(clubUserId, name, description, location, userId);
+
+      res.json({ success: true, club_id: clubUserId });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -3714,11 +4376,12 @@ async function startServer() {
     const clubId = req.params.id;
     const { name, city, country, description } = req.body;
 
-    if (Number(clubId) !== Number(req.user.id) && req.user.role !== 'admin') {
-      return res.status(403).json({ error: "Forbidden: Only club owners can manage chapters" });
-    }
-
     try {
+      const club = db.prepare("SELECT user_id, owner_id FROM ecosystems WHERE user_id = ?").get(clubId) as any;
+      if (!club || (Number(club.user_id) !== Number(req.user.id) && Number(club.owner_id) !== Number(req.user.id) && req.user.role !== 'admin')) {
+        return res.status(403).json({ error: "Forbidden: Only club owners can manage chapters" });
+      }
+
       const info = db.prepare("INSERT INTO club_chapters (club_id, name, city, country, description) VALUES (?, ?, ?, ?, ?)")
         .run(clubId, name, city, country, description);
       res.json({ success: true, chapter_id: info.lastInsertRowid });
@@ -4136,7 +4799,7 @@ async function startServer() {
           // For now, we'll just log them or ignore if tables don't exist
           console.log(`Rider ${username} registered with motorcycle: ${motorcycle}, interests: ${interests}`);
         } else {
-          insertEco.run(userId, businessName, location, businessType, bio, null, null); // lat, lng are null for now
+          insertEco.run(userId, businessName, location, businessType, bio, null, null, userId); // lat, lng are null for now
           
           // Optional: Handle services
           console.log(`Ecosystem ${username} registered with services: ${services}`);
@@ -4213,7 +4876,7 @@ async function startServer() {
           if (eco) {
             db.prepare("UPDATE ecosystems SET company_name = ?, full_address = ?, service_category = ?, details = ? WHERE user_id = ?").run(businessName || null, location || null, businessType || null, bio || null, userId);
           } else {
-            insertEco.run(userId, businessName || null, location || null, businessType || null, bio || null, null, null);
+            insertEco.run(userId, businessName || null, location || null, businessType || null, bio || null, null, null, userId);
           }
           console.log(`Ecosystem updated with services: ${services}`);
         }
@@ -4358,6 +5021,24 @@ async function startServer() {
       const settings = db.prepare("SELECT * FROM settings").all() as any[];
       const settingsMap = settings.reduce((acc, curr) => {
         acc[curr.key] = curr.value === 'true' ? true : curr.value === 'false' ? false : curr.value;
+        return acc;
+      }, {});
+      res.json(settingsMap);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/admin/settings", authenticateToken, checkAdmin, (req, res) => {
+    try {
+      const settings = db.prepare("SELECT * FROM settings").all() as any[];
+      const settingsMap = settings.reduce((acc, curr) => {
+        let val = curr.value;
+        if (val === 'true') val = true;
+        else if (val === 'false') val = false;
+        else if (!isNaN(Number(val)) && val !== '') val = Number(val);
+        
+        acc[curr.key] = val;
         return acc;
       }, {});
       res.json(settingsMap);

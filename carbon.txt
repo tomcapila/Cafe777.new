@@ -1,0 +1,163 @@
+src/components/reviews/ReviewCard.tsx:              className="flex items-center gap-1 text-xs bg-engine hover:bg-carbon text-chrome px-2 py-1 rounded transition-colors"
+src/components/reviews/ReviewCard.tsx:        <div className="mt-4 p-4 bg-carbon rounded-xl border border-inverse/10">
+src/components/reviews/ReviewModal.tsx:              className="w-10 h-10 rounded-full bg-carbon flex items-center justify-center text-steel hover:text-chrome hover:bg-engine transition-all"
+src/components/reviews/ReviewModal.tsx:            <div className="bg-carbon/50 rounded-2xl p-6 border border-inverse/5">
+src/components/reviews/ReviewModal.tsx:            <div className="text-center p-4 bg-carbon/50 rounded-2xl border border-inverse/5">
+src/components/reviews/ReviewForm.tsx:        className="w-full p-2 bg-carbon border border-engine rounded-lg text-chrome"
+src/components/EventAttendanceModal.tsx:              className="w-full bg-carbon border border-inverse/10 rounded-xl py-2 pl-10 pr-4 text-sm text-white focus:outline-none focus:border-primary transition-colors"
+src/components/EventAttendanceModal.tsx:              className="px-4 py-2 bg-carbon hover:bg-engine border border-inverse/10 rounded-xl text-chrome font-mono text-[10px] uppercase tracking-widest flex items-center gap-2 transition-colors"
+src/components/EventAttendanceModal.tsx:                <div key={attendee.id} className="flex items-center justify-between p-4 bg-carbon/50 rounded-xl border border-inverse/5">
+src/components/LocationAutocomplete.tsx:        className={className || "w-full bg-carbon/50 border border-inverse/10 rounded-xl pl-12 pr-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"}
+src/components/FloatingActionButton.tsx:                <span className="bg-carbon border border-inverse/10 px-3 py-1.5 rounded-xl text-[10px] font-mono font-black uppercase tracking-widest text-chrome opacity-0 group-hover:opacity-100 transition-opacity shadow-2xl">
+src/components/FloatingActionButton.tsx:          isOpen ? 'bg-carbon text-chrome rotate-45' : 'bg-primary text-asphalt shadow-primary/20'
+src/components/UniversalSearch.tsx:        className={`relative w-full transition-all duration-300 ${isFocused ? 'bg-carbon border-primary/50 shadow-[0_0_30px_rgba(255,85,0,0.15)]' : 'bg-carbon/70 border-inverse/10 backdrop-blur-xl'} border rounded-2xl overflow-hidden`}
+src/components/UniversalSearch.tsx:              className="border-t border-inverse/5 max-h-[70vh] overflow-y-auto custom-scrollbar bg-carbon"
+src/components/ChatWindow.tsx:            <div className={`max-w-[70%] p-3 rounded-2xl ${msg.sender_id === currentUser?.id ? 'bg-primary text-asphalt' : 'bg-carbon text-chrome'}`}>
+src/components/Gauges.tsx:        <div className="absolute inset-0 rounded-full border-4 border-asphalt shadow-[inset_0_0_20px_rgba(0,0,0,0.8),0_0_30px_rgba(0,0,0,0.5)] bg-carbon" />
+src/components/Gauges.tsx:        <div className="relative bg-carbon/40 backdrop-blur-sm border border-inverse/5 p-8 rounded-2xl flex flex-col items-center">
+src/components/Gauges.tsx:        <div className="relative bg-carbon/40 backdrop-blur-sm border border-inverse/5 p-8 rounded-2xl flex flex-col items-center">
+src/components/Navbar.tsx:                  <div className="w-8 h-8 rounded-xl bg-carbon border border-inverse/5 flex items-center justify-center group-hover/profile:border-primary/30 transition-all">
+src/pages/Discover.tsx:                  : 'bg-carbon/80 backdrop-blur-md text-steel border-inverse/5 hover:border-inverse/10'}
+src/pages/Discover.tsx:                    : 'bg-carbon/80 backdrop-blur-md text-steel border-inverse/5 hover:border-inverse/10'}
+src/pages/Discover.tsx:                          : 'bg-carbon/80 backdrop-blur-md text-steel border-inverse/5 hover:border-inverse/10'}
+src/pages/Discover.tsx:            className="absolute top-24 right-4 z-[1000] bg-carbon/90 backdrop-blur-xl border border-primary/30 p-3 rounded-2xl shadow-2xl shadow-primary/10 flex items-center gap-3 max-w-[250px] cursor-pointer hover:border-primary/60 transition-colors"
+src/pages/Discover.tsx:              className="bg-carbon/90 backdrop-blur-xl border border-inverse/10 px-4 py-2 rounded-full shadow-xl text-xs font-mono font-bold uppercase tracking-widest text-chrome hover:bg-primary hover:text-asphalt hover:text-asphalt transition-all disabled:opacity-50 flex items-center gap-2"
+src/pages/Discover.tsx:        <div className="bg-carbon/90 backdrop-blur-xl border border-inverse/10 p-1.5 rounded-full flex items-center shadow-2xl">
+src/pages/Discover.tsx:          className="w-12 h-12 rounded-full bg-carbon/90 backdrop-blur-xl border border-inverse/10 flex items-center justify-center text-steel hover:text-chrome hover:border-inverse/30 transition-all shadow-xl"
+src/pages/Discover.tsx:            <label className="w-12 h-12 rounded-full bg-carbon/90 backdrop-blur-xl border border-inverse/10 flex items-center justify-center text-steel hover:text-chrome hover:border-inverse/30 transition-all shadow-xl cursor-pointer" title={t('discover.uploadGPX')}>
+src/pages/Discover.tsx:                  : 'bg-carbon/90 border-inverse/10 text-steel hover:text-chrome'
+src/pages/Discover.tsx:                : 'bg-carbon/90 border-inverse/10 text-steel hover:text-chrome'
+src/pages/Discover.tsx:              className="bg-carbon/90 backdrop-blur-xl border border-inverse/10 px-6 py-3 rounded-full flex items-center gap-2 shadow-2xl hover:border-primary/50 transition-all group"
+src/pages/Discover.tsx:            <div className="flex items-center justify-between p-4 border-b border-inverse/10 bg-carbon/50">
+src/pages/Discover.tsx:                      className="w-8 h-8 rounded-full bg-carbon flex items-center justify-center text-steel hover:text-primary transition-colors"
+src/pages/PartsAndService.tsx:              className="w-full bg-carbon border-2 border-inverse/10 rounded-xl py-3 pl-12 pr-4 text-chrome placeholder:text-steel focus:outline-none focus:border-primary transition-colors"
+src/pages/PartsAndService.tsx:            <div className="text-center py-12 bg-carbon/50 rounded-2xl border border-inverse/5">
+src/pages/PartsAndService.tsx:                className="bg-carbon rounded-2xl border border-inverse/10 overflow-hidden"
+src/pages/ForgotPasswordPage.tsx:        className="w-full max-w-md bg-carbon p-8 rounded-lg shadow-xl"
+src/pages/Messages.tsx:          <div className="bg-carbon border border-inverse/10 rounded-2xl overflow-hidden flex flex-col h-[70vh]">
+src/pages/Messages.tsx:                className="w-full bg-carbon border border-inverse/10 rounded-xl py-3 pl-12 pr-4 text-chrome placeholder:text-steel focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all"
+src/pages/Messages.tsx:                    className="w-full flex items-center gap-4 p-4 bg-carbon border border-inverse/10 rounded-xl hover:border-primary/50 transition-colors text-left group"
+src/pages/Messages.tsx:            <div className="bg-carbon border border-inverse/10 rounded-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh]">
+src/pages/FAQ.tsx:            <div className="w-12 h-12 rounded-full bg-carbon flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+src/pages/FAQ.tsx:            <div className="w-12 h-12 rounded-full bg-carbon flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+src/pages/Onboarding.tsx:        <div className="bg-carbon/80 backdrop-blur-xl border border-inverse/10 rounded-3xl p-6 shadow-2xl">
+src/pages/Onboarding.tsx:                    className="w-full bg-carbon/50 border border-inverse/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+src/pages/Onboarding.tsx:                    className="w-full bg-carbon/50 border border-inverse/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+src/pages/Onboarding.tsx:                    className="w-full bg-carbon/50 border border-inverse/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+src/pages/Onboarding.tsx:                    className="w-full bg-carbon/50 border border-inverse/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+src/pages/Onboarding.tsx:                    className="w-full bg-carbon/50 border border-inverse/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors h-24 resize-none"
+src/pages/Onboarding.tsx:                    className="w-full bg-carbon/50 border border-inverse/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors uppercase"
+src/pages/Onboarding.tsx:                      className="w-full bg-carbon/50 border border-inverse/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+src/pages/Onboarding.tsx:                        className="w-full bg-carbon/50 border border-inverse/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+src/pages/Onboarding.tsx:                        className="w-full bg-carbon/50 border border-inverse/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors appearance-none"
+src/pages/Passport.tsx:                  : 'bg-carbon text-steel border border-inverse/5 hover:border-inverse/10'}
+src/pages/Passport.tsx:              <div className="w-16 h-16 bg-carbon rounded-full flex items-center justify-center mx-auto mb-4">
+src/pages/MotorFeed.tsx:            <button className="p-2 bg-carbon rounded-xl border border-inverse/5 text-steel hover:text-chrome transition-colors" title={t('feed.search')}>
+src/pages/MotorFeed.tsx:            <button className="p-2 bg-carbon rounded-xl border border-inverse/5 text-steel hover:text-chrome transition-colors" title={t('feed.filter')}>
+src/pages/MotorFeed.tsx:                  : 'bg-carbon text-steel hover:text-chrome border border-inverse/5'
+src/pages/MotorFeed.tsx:              <div className="w-10 h-10 rounded-full bg-carbon border border-inverse/10 overflow-hidden shrink-0">
+src/pages/MotorFeed.tsx:              <div className="flex-1 bg-carbon/50 border border-inverse/5 rounded-xl px-4 py-2.5 text-steel text-sm font-light group-hover:text-chrome transition-colors">
+src/pages/MotorFeed.tsx:                      <div className="w-10 h-10 rounded-full bg-carbon border border-inverse/10 overflow-hidden">
+src/pages/MotorFeed.tsx:                      <div className="flex items-center gap-4 p-4 rounded-2xl border border-inverse/10 bg-carbon/30 hover:bg-carbon/60 hover:border-primary/30 transition-all duration-500 overflow-hidden relative group/card">
+src/pages/MotorFeed.tsx:                              <div className="w-8 h-8 rounded-full bg-carbon border border-inverse/10 overflow-hidden shrink-0">
+src/pages/MotorFeed.tsx:                                  className="w-full bg-carbon/50 border border-inverse/5 rounded-xl px-4 py-2 text-sm text-chrome placeholder:text-steel focus:border-primary/50 transition-all outline-none pr-10"
+src/pages/MotorFeed.tsx:                                    <div className="w-8 h-8 rounded-full bg-carbon border border-inverse/10 overflow-hidden">
+src/pages/MotorFeed.tsx:                                    <div className="bg-carbon/50 rounded-2xl px-4 py-2 border border-inverse/5">
+src/pages/MotorFeed.tsx:                  <div className="w-10 h-10 rounded-full bg-carbon border border-inverse/10 overflow-hidden shrink-0">
+src/pages/MotorFeed.tsx:                          <div className="p-2 border-b border-inverse/5 bg-carbon/50">
+src/pages/MotorFeed.tsx:                                <div className="w-8 h-8 rounded-full bg-carbon border border-inverse/10 overflow-hidden shrink-0">
+src/pages/MotorFeed.tsx:                      className="flex items-center gap-2 px-4 py-2 bg-carbon border border-inverse/5 rounded-xl text-[10px] font-mono font-black uppercase tracking-widest text-steel hover:text-chrome hover:border-primary/30 transition-all"
+src/pages/MotorFeed.tsx:                          className="w-full bg-carbon border border-inverse/5 rounded-xl px-4 py-2 text-[10px] font-mono font-black uppercase tracking-widest text-steel hover:text-chrome hover:border-primary/30 transition-all appearance-none outline-none"
+src/pages/MotoClubsHub.tsx:        <div className="w-16 h-16 rounded-2xl overflow-hidden border border-inverse/10 bg-carbon shrink-0">
+src/pages/MotoClubsHub.tsx:                    : 'bg-carbon/50 text-steel hover:text-chrome border border-inverse/5'
+src/pages/MotoClubsHub.tsx:                      : 'bg-carbon/50 text-steel hover:text-chrome border border-inverse/5'
+src/pages/MotoClubsHub.tsx:              className="relative w-full max-w-lg bg-carbon border border-inverse/10 rounded-3xl overflow-hidden shadow-2xl"
+src/pages/MotoClubsHub.tsx:          <div className="bg-carbon border border-inverse/10 rounded-2xl w-full max-w-md h-[500px] flex flex-col">
+src/pages/MotoClubsHub.tsx:          <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-3xl overflow-hidden border border-inverse/10 shadow-2xl shrink-0 bg-carbon">
+src/pages/MotoClubsHub.tsx:                        <div className="w-10 h-10 rounded-full overflow-hidden bg-carbon">
+src/pages/MotoClubsHub.tsx:                  <div className="w-10 h-10 rounded-full overflow-hidden bg-carbon">
+src/pages/MotoClubsHub.tsx:                      <div className="w-10 h-10 rounded-full overflow-hidden bg-carbon">
+src/pages/MotoClubsHub.tsx:                  <div className="w-10 h-10 rounded-full overflow-hidden bg-carbon">
+src/pages/MotoClubsHub.tsx:          <div className="bg-carbon border border-inverse/10 rounded-3xl w-full max-w-md p-6">
+src/pages/MotoClubsHub.tsx:                      <div className="w-8 h-8 rounded-full overflow-hidden bg-carbon">
+src/pages/Admin.tsx:                              className="w-12 h-12 rounded-2xl object-cover bg-carbon border border-inverse/5 grayscale group-hover:grayscale-0 transition-all"
+src/pages/Admin.tsx:                          <div className="flex bg-carbon rounded-xl p-1 border border-inverse/5 w-fit">
+src/pages/Admin.tsx:                <div key={app.id} className="bg-carbon border border-inverse/10 rounded-2xl p-6">
+src/pages/Admin.tsx:                      className={`flex-1 py-3 rounded-xl font-mono text-xs font-bold uppercase tracking-widest transition-all ${newBadge.item_type === 'badge' ? 'bg-primary text-asphalt shadow-lg shadow-primary/20' : 'bg-carbon text-steel hover:bg-inverse/5 border border-inverse/10'}`}
+src/pages/Admin.tsx:                      className={`flex-1 py-3 rounded-xl font-mono text-xs font-bold uppercase tracking-widest transition-all ${newBadge.item_type === 'stamp' ? 'bg-primary text-asphalt shadow-lg shadow-primary/20' : 'bg-carbon text-steel hover:bg-inverse/5 border border-inverse/10'}`}
+src/pages/Admin.tsx:                        <div className="w-12 h-12 rounded-full bg-carbon border border-inverse/10 flex items-center justify-center">
+src/pages/Admin.tsx:                        <div className="absolute top-full left-0 w-full mt-1 bg-carbon border border-inverse/10 rounded-xl shadow-xl z-50 max-h-48 overflow-y-auto">
+src/pages/Admin.tsx:                      <div className="flex bg-carbon rounded-xl p-1 border border-inverse/5">
+src/pages/Admin.tsx:                    <div className="absolute top-full left-0 w-full mt-1 bg-carbon border border-inverse/10 rounded-xl shadow-xl z-50 max-h-48 overflow-y-auto">
+src/pages/Home.tsx:                className="bg-carbon/50 border border-inverse/5 p-8 hover:border-primary/30 transition-colors group"
+src/pages/Home.tsx:      <section className="py-32 relative bg-carbon overflow-hidden border-y border-inverse/5">
+src/pages/Home.tsx:                    <div className="w-12 h-12 shrink-0 bg-carbon border border-inverse/10 flex items-center justify-center">
+src/pages/Home.tsx:      <section className="py-32 relative bg-carbon overflow-hidden border-t border-inverse/5">
+src/pages/EventDetails.tsx:                              className="w-full bg-carbon border border-inverse/5 rounded-xl pl-10 pr-4 py-2 text-xs text-white focus:outline-none focus:border-primary transition-all"
+src/pages/EventDetails.tsx:                            <div className="w-8 h-8 rounded-full bg-carbon flex items-center justify-center border border-inverse/10">
+src/pages/EventDetails.tsx:              <div className="p-4 rounded-3xl border border-inverse/10 bg-carbon/50 overflow-hidden relative mb-4">
+src/pages/Events.tsx:                    <div className="aspect-video w-full rounded-xl overflow-hidden bg-carbon border border-inverse/5 flex items-center justify-center relative group">
+src/pages/Events.tsx:                                className="w-full bg-carbon border border-inverse/5 rounded-xl pl-10 pr-4 py-2 text-xs text-white focus:outline-none focus:border-primary transition-all"
+src/pages/Events.tsx:                              <div className="w-8 h-8 rounded-full bg-carbon flex items-center justify-center border border-inverse/10">
+src/pages/Events.tsx:                ? 'bg-engine text-steel hover:bg-carbon' 
+src/pages/ResetPasswordPage.tsx:        className="w-full max-w-md bg-carbon p-8 rounded-lg shadow-xl"
+src/pages/EditProfile.tsx:              <div className="relative h-48 w-full rounded-3xl overflow-hidden border-4 border-asphalt bg-carbon shadow-2xl group">
+src/pages/EditProfile.tsx:                <div className="w-40 h-40 rounded-3xl overflow-hidden border-4 border-asphalt bg-carbon shadow-2xl shadow-primary/20">
+src/pages/AmbassadorDashboard.tsx:          className="bg-carbon rounded-3xl p-8 text-center border border-inverse/10"
+src/pages/AmbassadorDashboard.tsx:          <section className="bg-carbon rounded-3xl p-6 border border-inverse/10">
+src/pages/AmbassadorDashboard.tsx:          <section className="bg-carbon rounded-3xl p-6 border border-inverse/10">
+src/pages/AmbassadorDashboard.tsx:            <div className="bg-carbon rounded-3xl p-6 border border-inverse/10 text-center">
+src/pages/AmbassadorDashboard.tsx:            <div className="bg-carbon rounded-3xl p-6 border border-inverse/10 text-center">
+src/pages/AmbassadorDashboard.tsx:            <div className="bg-carbon rounded-3xl p-6 border border-inverse/10 text-center">
+src/pages/AmbassadorDashboard.tsx:              className="bg-carbon rounded-3xl p-6 border border-primary/30 text-center"
+src/pages/AmbassadorDashboard.tsx:          <section className="bg-carbon rounded-3xl p-6 border border-inverse/10">
+src/pages/AmbassadorDashboard.tsx:              <div className="bg-carbon border border-inverse/10 rounded-3xl w-full max-w-md p-6">
+src/pages/AmbassadorDashboard.tsx:              className="bg-carbon rounded-3xl p-6 border border-primary/30 text-center mt-8"
+src/pages/AmbassadorDashboard.tsx:            className="relative bg-carbon rounded-3xl p-6 border border-inverse/10 w-full max-w-md max-h-[90vh] overflow-y-auto"
+src/pages/AmbassadorDashboard.tsx:            className="relative bg-carbon rounded-3xl p-6 border border-inverse/10 w-full max-w-md"
+src/pages/AmbassadorDashboard.tsx:            className="relative bg-carbon rounded-3xl p-6 border border-inverse/10 w-full max-w-md"
+src/pages/SubmitPhoto.tsx:                      className="w-full bg-carbon border-2 border-black p-4 text-chrome focus:border-primary outline-none appearance-none transition-colors"
+src/pages/SubmitPhoto.tsx:                    className="w-full bg-carbon border-2 border-black p-4 text-chrome focus:border-primary outline-none min-h-[120px] transition-colors"
+src/pages/SubmitPhoto.tsx:                      className="w-full bg-carbon border-2 border-black p-4 text-chrome focus:border-primary outline-none appearance-none transition-colors"
+src/pages/SubmitPhoto.tsx:              className={`group relative aspect-[4/5] bg-carbon border-4 border-dashed border-black hover:border-primary transition-all cursor-pointer flex flex-col items-center justify-center overflow-hidden ${preview ? 'border-solid' : ''}`}
+src/pages/NotificationsPage.tsx:                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border border-inverse/5 ${n.is_read ? 'bg-asphalt/50' : 'bg-carbon shadow-lg'}`}>
+src/pages/NotificationsPage.tsx:                <div className="w-20 h-20 bg-carbon rounded-full flex items-center justify-center mx-auto mb-6 border border-inverse/5">
+src/pages/Profile.tsx:      <div className="h-64 sm:h-80 w-full bg-carbon relative overflow-hidden">
+src/pages/Profile.tsx:            <div className="w-32 h-32 sm:w-48 sm:h-48 rounded-[2rem] border-4 border-asphalt bg-carbon overflow-hidden shrink-0 shadow-2xl relative group">
+src/pages/Profile.tsx:                                  className="fixed sm:absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-48 p-3 bg-carbon/95 backdrop-blur-xl border border-inverse/10 rounded-2xl shadow-2xl z-[100] pointer-events-none"
+src/pages/Profile.tsx:                                  <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-carbon border-r border-b border-inverse/10 rotate-45" />
+src/pages/Profile.tsx:                <div className="bg-carbon border border-inverse/10 rounded-2xl w-full max-w-md h-[500px] flex flex-col">
+src/pages/Profile.tsx:                      : 'bg-carbon border-inverse/5 text-steel hover:text-chrome hover:bg-inverse/5'
+src/pages/Profile.tsx:                                  className="p-2 bg-carbon/80 backdrop-blur-md rounded-lg border border-inverse/5 text-steel hover:text-primary transition-all"
+src/pages/Profile.tsx:                                  className="p-2 bg-carbon/80 backdrop-blur-md rounded-lg border border-inverse/5 text-steel hover:text-red-500 transition-all"
+src/pages/Profile.tsx:                                  className="p-2 bg-carbon/80 backdrop-blur-md rounded-lg border border-inverse/5 text-steel hover:text-primary transition-all"
+src/pages/Profile.tsx:                                        <div className="text-[9px] font-mono text-steel bg-carbon px-2 py-0.5 rounded uppercase">
+src/pages/Profile.tsx:                    <div className="bg-carbon/50 border border-inverse/5 rounded-2xl p-8 text-center">
+src/pages/Profile.tsx:                      <div className="bg-carbon/50 border border-inverse/5 rounded-2xl p-8 text-center">
+src/pages/Profile.tsx:                      className="bg-carbon/50 border border-primary/20 rounded-3xl p-6 mb-8 overflow-hidden"
+src/pages/Profile.tsx:                      <div className="bg-carbon/50 border border-inverse/5 rounded-2xl p-8 text-center">
+src/pages/Profile.tsx:                                  className="bg-carbon border border-inverse/10 rounded-lg px-3 py-1.5 text-xs text-steel focus:outline-none focus:border-primary/50 appearance-none pr-8"
+src/pages/Profile.tsx:                              className="bg-carbon border border-inverse/10 rounded-lg px-3 py-1.5 text-xs text-steel focus:outline-none focus:border-primary/50"
+src/pages/Profile.tsx:                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-8 p-4 sm:p-6 rounded-[2rem] border border-inverse/10 bg-carbon/30 hover:bg-carbon/60 hover:border-primary/30 transition-all duration-500 overflow-hidden relative group/card">
+src/pages/Profile.tsx:                            className="border-t border-inverse/5 bg-carbon/20 overflow-hidden"
+src/pages/Profile.tsx:              className="relative w-full max-w-md bg-carbon border border-inverse/10 rounded-3xl p-8 shadow-2xl overflow-hidden"
+src/pages/ContestPage.tsx:                className="group relative bg-carbon border-2 border-black hover:border-primary transition-colors cursor-pointer"
+src/pages/ContestPage.tsx:              className="bg-carbon w-full max-w-6xl h-full max-h-[90vh] flex flex-col md:flex-row border-4 border-black overflow-hidden"
+src/pages/ContestPage.tsx:              <div className="w-full md:w-[400px] flex flex-col border-l-4 border-black bg-carbon">
+src/pages/ContestPage.tsx:                        className="flex-1 bg-carbon border-2 border-black p-3 text-sm focus:border-primary outline-none"
+src/pages/ContestPage.tsx:              className="bg-carbon w-full max-w-xl border-4 border-black overflow-hidden"
+src/pages/RoadsDiscovery.tsx:      <div className="w-full md:w-[400px] mt-4 md:mt-0 flex-1 md:flex-none bg-carbon/50 border-r border-inverse/5 flex flex-col overflow-hidden z-20 order-last md:order-first rounded-tl-2xl">
+src/pages/RoadsDiscovery.tsx:            <label className="cursor-pointer bg-carbon hover:bg-engine text-chrome p-2 rounded-xl border border-inverse/10 transition-colors flex items-center gap-2" title={t('roads.import.btn')}>
+src/pages/RoadsDiscovery.tsx:                className="w-full bg-carbon border border-inverse/10 rounded-xl py-2 pl-10 pr-4 text-sm text-white focus:outline-none focus:border-primary transition-colors"
+src/pages/RoadsDiscovery.tsx:                      : 'bg-engine text-steel hover:bg-carbon hover:text-chrome'
+src/pages/RoadsDiscovery.tsx:                  : 'bg-carbon border-inverse/5 hover:border-inverse/20 hover:bg-engine'
+src/pages/RoadsDiscovery.tsx:          <div className="bg-carbon/50 border-t border-inverse/10 p-4">
+src/pages/RoadsDiscovery.tsx:                className="w-6 h-6 flex items-center justify-center rounded-full bg-carbon text-steel hover:text-chrome hover:bg-engine transition-colors"
+src/pages/RoadsDiscovery.tsx:                <div key={metric.label} className="bg-carbon rounded-lg p-1.5 text-center border border-inverse/5">
+src/pages/RoadsDiscovery.tsx:                  className="flex-1 bg-carbon hover:bg-engine text-chrome font-mono uppercase tracking-widest text-[10px] py-2 rounded-lg border border-inverse/10 transition-colors flex items-center justify-center gap-1"
+src/pages/RoadsDiscovery.tsx:                  className="flex-1 bg-carbon hover:bg-engine text-chrome font-mono uppercase tracking-widest text-[10px] py-2 rounded-lg border border-inverse/10 transition-colors disabled:opacity-50"
+src/pages/RoadsDiscovery.tsx:                  className="flex-1 bg-carbon hover:bg-engine text-chrome font-mono uppercase tracking-widest text-[10px] py-2 rounded-lg border border-inverse/10 transition-colors flex items-center justify-center gap-1"
+src/pages/RoadsDiscovery.tsx:                  className="flex-1 bg-carbon hover:bg-engine text-chrome font-mono uppercase tracking-widest text-[10px] py-2 rounded-lg border border-inverse/10 transition-colors flex items-center justify-center gap-1"
+src/index.css:    @apply bg-carbon/60 backdrop-blur-[20px] rounded-2xl;
+src/index.css:    @apply px-6 py-3 bg-engine text-chrome font-display font-bold rounded-xl hover:bg-carbon transition-all active:scale-95;
+src/index.css:    @apply w-full px-4 py-3 bg-carbon rounded-xl focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all text-chrome placeholder:text-steel;

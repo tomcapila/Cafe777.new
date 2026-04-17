@@ -21,33 +21,39 @@ interface SideMenuProps {
 export default function SideMenu({ isOpen, onClose, user, onLogout }: SideMenuProps) {
   const { t } = useLanguage();
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
+  const [isAmbassador, setIsAmbassador] = useState(false);
 
   useEffect(() => {
     let interval: any;
     if (user && isOpen) {
-      const fetchUnreadMessagesCount = async () => {
+      const fetchData = async () => {
         try {
-          const res = await fetchWithAuth('/api/chats');
-          if (res.ok) {
-            const contentType = res.headers.get('content-type');
+          // Fetch unread messages
+          const chatsRes = await fetchWithAuth('/api/chats');
+          if (chatsRes.ok) {
+            const contentType = chatsRes.headers.get('content-type');
             if (contentType && contentType.includes('application/json')) {
-              const data = await res.json();
+              const data = await chatsRes.json();
               const totalUnread = data.reduce((sum: number, chat: any) => sum + (chat.unread_count || 0), 0);
               setUnreadMessagesCount(totalUnread);
-            } else {
-              const text = await res.text();
-              console.warn('Received non-JSON response for unread messages count:', text.substring(0, 100));
             }
+          }
+
+          // Fetch ambassador status
+          const ambRes = await fetchWithAuth(`/api/ambassadors/${user.id}`);
+          if (ambRes.ok) {
+            const ambData = await ambRes.json();
+            setIsAmbassador(!!ambData);
           }
         } catch (err: any) {
           if (err.name !== 'AbortError' && !err.message?.includes('NetworkError') && !err.message?.includes('Failed to fetch')) {
-            console.error('Failed to fetch unread messages count:', err);
+            console.error('Failed to fetch side menu data:', err);
           }
         }
       };
       
-      fetchUnreadMessagesCount();
-      interval = setInterval(fetchUnreadMessagesCount, 5000);
+      fetchData();
+      interval = setInterval(fetchData, 10000);
     }
     
     return () => {
@@ -68,7 +74,7 @@ export default function SideMenu({ isOpen, onClose, user, onLogout }: SideMenuPr
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm" 
+            className="fixed inset-0 bg-engine/60 backdrop-blur-sm" 
             onClick={onClose} 
           />
           
@@ -77,13 +83,13 @@ export default function SideMenu({ isOpen, onClose, user, onLogout }: SideMenuPr
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="relative w-80 sm:w-96 bg-asphalt border-l border-white/10 flex flex-col shadow-2xl h-full overflow-y-auto"
+            className="relative w-80 sm:w-96 bg-engine border-l border-inverse/10 flex flex-col shadow-2xl h-full overflow-y-auto"
           >
             {/* Header */}
-            <div className="sticky top-0 z-10 bg-asphalt/90 backdrop-blur-md p-6 border-b border-white/5 flex items-center justify-between">
+            <div className="sticky top-0 z-10 bg-engine/90 backdrop-blur-md p-6 border-b border-inverse/5 flex items-center justify-between">
               <Link to="/" onClick={handleInteraction} className="flex items-center gap-3 group">
                 <div className="bg-primary p-2 rounded-xl group-hover:bg-accent transition-all shadow-lg shadow-primary/20">
-                  <Bike className="w-5 h-5 text-asphalt fill-asphalt" />
+                  <Bike className="w-5 h-5 text-inverse fill-inverse" />
                 </div>
                 <span className="font-display font-black text-xl tracking-tighter uppercase italic text-chrome group-hover:text-primary transition-colors">Café777</span>
               </Link>
@@ -92,7 +98,7 @@ export default function SideMenu({ isOpen, onClose, user, onLogout }: SideMenuPr
                   if (navigator.vibrate) navigator.vibrate(50);
                   onClose();
                 }} 
-                className="text-steel hover:text-chrome transition-colors bg-white/5 hover:bg-white/10 p-2 rounded-xl"
+                className="text-steel hover:text-chrome transition-colors bg-inverse/5 hover:bg-inverse/10 p-2 rounded-xl"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -104,7 +110,7 @@ export default function SideMenu({ isOpen, onClose, user, onLogout }: SideMenuPr
               <div className="space-y-2">
                 <h3 className="text-[10px] font-mono font-bold uppercase tracking-widest text-steel mb-4 px-3">{t('menu.rider')}</h3>
                 {user ? (
-                  <Link to={`/profile/${user.username}`} onClick={handleInteraction} className="flex items-center justify-between p-3 rounded-xl hover:bg-white/5 transition-colors group">
+                  <Link to={`/profile/${user.username}`} onClick={handleInteraction} className="flex items-center justify-between p-3 rounded-xl hover:bg-inverse/5 transition-colors group">
                     <div className="flex items-center gap-4">
                       <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
                         <User className="w-5 h-5 text-primary" />
@@ -120,7 +126,7 @@ export default function SideMenu({ isOpen, onClose, user, onLogout }: SideMenuPr
                     <ChevronRight className="w-4 h-4 text-steel group-hover:text-primary transition-colors" />
                   </Link>
                 ) : (
-                  <Link to="/login" onClick={handleInteraction} className="flex items-center justify-between p-3 rounded-xl hover:bg-white/5 transition-colors group">
+                  <Link to="/login" onClick={handleInteraction} className="flex items-center justify-between p-3 rounded-xl hover:bg-inverse/5 transition-colors group">
                     <div className="flex items-center gap-4">
                       <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
                         <User className="w-5 h-5 text-primary" />
@@ -130,18 +136,18 @@ export default function SideMenu({ isOpen, onClose, user, onLogout }: SideMenuPr
                     <ChevronRight className="w-4 h-4 text-steel group-hover:text-primary transition-colors" />
                   </Link>
                 )}
-                <Link to="/motorfeed" onClick={handleInteraction} className="flex items-center gap-4 text-chrome hover:text-primary transition-colors p-3 rounded-xl hover:bg-white/5 group">
+                <Link to="/motorfeed" onClick={handleInteraction} className="flex items-center gap-4 text-chrome hover:text-primary transition-colors p-3 rounded-xl hover:bg-inverse/5 group">
                   <Gauge className="w-5 h-5 text-steel group-hover:text-primary transition-colors" /> 
                   <span className="font-bold">{t('menu.motorfeed')}</span>
                 </Link>
                 {user && (
-                  <Link to="/messages" onClick={handleInteraction} className="flex items-center justify-between text-chrome hover:text-primary transition-colors p-3 rounded-xl hover:bg-white/5 group">
+                  <Link to="/messages" onClick={handleInteraction} className="flex items-center justify-between text-chrome hover:text-primary transition-colors p-3 rounded-xl hover:bg-inverse/5 group">
                     <div className="flex items-center gap-4">
                       <MessageSquare className="w-5 h-5 text-steel group-hover:text-primary transition-colors" /> 
                       <span className="font-bold">{t('menu.messages')}</span>
                     </div>
                     {unreadMessagesCount > 0 && (
-                      <span className="bg-primary text-asphalt text-[10px] font-bold px-2 py-0.5 rounded-full">
+                      <span className="bg-primary text-inverse text-[10px] font-bold px-2 py-0.5 rounded-full">
                         {unreadMessagesCount}
                       </span>
                     )}
@@ -152,15 +158,15 @@ export default function SideMenu({ isOpen, onClose, user, onLogout }: SideMenuPr
               {/* DISCOVER SECTION */}
               <div className="space-y-2">
                 <h3 className="text-[10px] font-mono font-bold uppercase tracking-widest text-steel mb-4 px-3">{t('menu.discover')}</h3>
-                <Link to="/discover" onClick={handleInteraction} className="flex items-center gap-4 text-chrome hover:text-primary transition-colors p-3 rounded-xl hover:bg-white/5 group">
+                <Link to="/discover" onClick={handleInteraction} className="flex items-center gap-4 text-chrome hover:text-primary transition-colors p-3 rounded-xl hover:bg-inverse/5 group">
                   <MapPin className="w-5 h-5 text-steel group-hover:text-primary transition-colors" /> 
                   <span className="font-bold">{t('menu.mapExplorer')}</span>
                 </Link>
-                <Link to="/roads" onClick={handleInteraction} className="flex items-center gap-4 text-chrome hover:text-primary transition-colors p-3 rounded-xl hover:bg-white/5 group">
+                <Link to="/roads" onClick={handleInteraction} className="flex items-center gap-4 text-chrome hover:text-primary transition-colors p-3 rounded-xl hover:bg-inverse/5 group">
                   <Bike className="w-5 h-5 text-steel group-hover:text-primary transition-colors" /> 
                   <span className="font-bold">{t('menu.legendaryRoads')}</span>
                 </Link>
-                <Link to="/contest" onClick={handleInteraction} className="flex items-center gap-4 text-chrome hover:text-primary transition-colors p-3 rounded-xl hover:bg-white/5 group">
+                <Link to="/contest" onClick={handleInteraction} className="flex items-center gap-4 text-chrome hover:text-primary transition-colors p-3 rounded-xl hover:bg-inverse/5 group">
                   <Camera className="w-5 h-5 text-steel group-hover:text-primary transition-colors" /> 
                   <span className="font-bold">{t('menu.photoContest')}</span>
                 </Link>
@@ -169,39 +175,50 @@ export default function SideMenu({ isOpen, onClose, user, onLogout }: SideMenuPr
               {/* COMMUNITY SECTION */}
               <div className="space-y-2">
                 <h3 className="text-[10px] font-mono font-bold uppercase tracking-widest text-steel mb-4 px-3">{t('menu.community')}</h3>
-                <Link to="/" onClick={handleInteraction} className="flex items-center gap-4 text-chrome hover:text-primary transition-colors p-3 rounded-xl hover:bg-white/5 group">
+                <Link to="/" onClick={handleInteraction} className="flex items-center gap-4 text-chrome hover:text-primary transition-colors p-3 rounded-xl hover:bg-inverse/5 group">
                   <Users className="w-5 h-5 text-steel group-hover:text-primary transition-colors" /> 
                   <span className="font-bold">{t('menu.riders')}</span>
                 </Link>
-                <Link to="/events" onClick={handleInteraction} className="flex items-center gap-4 text-chrome hover:text-primary transition-colors p-3 rounded-xl hover:bg-white/5 group">
+                <Link to="/events" onClick={handleInteraction} className="flex items-center gap-4 text-chrome hover:text-primary transition-colors p-3 rounded-xl hover:bg-inverse/5 group">
                   <Calendar className="w-5 h-5 text-steel group-hover:text-primary transition-colors" /> 
                   <span className="font-bold">{t('menu.events')}</span>
                 </Link>
-                <Link to="/clubs" onClick={handleInteraction} className="flex items-center gap-4 text-chrome hover:text-primary transition-colors p-3 rounded-xl hover:bg-white/5 group">
+                <Link to="/clubs" onClick={handleInteraction} className="flex items-center gap-4 text-chrome hover:text-primary transition-colors p-3 rounded-xl hover:bg-inverse/5 group">
                   <Shield className="w-5 h-5 text-steel group-hover:text-primary transition-colors" /> 
                   <span className="font-bold">{t('menu.clubs')}</span>
                 </Link>
+                {isAmbassador ? (
+                  <Link to="/ambassador" onClick={handleInteraction} className="flex items-center gap-4 text-chrome hover:text-primary transition-colors p-3 rounded-xl hover:bg-inverse/5 group">
+                    <Crown className="w-5 h-5 text-primary group-hover:scale-110 transition-all" /> 
+                    <span className="font-bold">{t('menu.ambassadorDashboard')}</span>
+                  </Link>
+                ) : (
+                  <Link to="/ambassador" onClick={handleInteraction} className="flex items-center gap-4 text-chrome hover:text-primary transition-colors p-3 rounded-xl hover:bg-inverse/5 group">
+                    <Crown className="w-5 h-5 text-steel group-hover:text-primary transition-colors" /> 
+                    <span className="font-bold">{t('menu.applyAmbassador')}</span>
+                  </Link>
+                )}
               </div>
 
               {/* SETTINGS SECTION */}
               <div className="space-y-2">
                 <h3 className="text-[10px] font-mono font-bold uppercase tracking-widest text-steel mb-4 px-3">{t('menu.settings')}</h3>
-                <Link to="/notifications" onClick={handleInteraction} className="flex items-center gap-4 text-chrome hover:text-primary transition-colors p-3 rounded-xl hover:bg-white/5 group">
+                <Link to="/notifications" onClick={handleInteraction} className="flex items-center gap-4 text-chrome hover:text-primary transition-colors p-3 rounded-xl hover:bg-inverse/5 group">
                   <Bell className="w-5 h-5 text-steel group-hover:text-primary transition-colors" /> 
                   <span className="font-bold">{t('menu.notifications')}</span>
                 </Link>
-                <Link to="/" onClick={handleInteraction} className="flex items-center gap-4 text-chrome hover:text-primary transition-colors p-3 rounded-xl hover:bg-white/5 group">
+                <Link to="/" onClick={handleInteraction} className="flex items-center gap-4 text-chrome hover:text-primary transition-colors p-3 rounded-xl hover:bg-inverse/5 group">
                   <Settings className="w-5 h-5 text-steel group-hover:text-primary transition-colors" /> 
                   <span className="font-bold">{t('menu.appSettings')}</span>
                 </Link>
-                <Link to="/faq" onClick={handleInteraction} className="flex items-center gap-4 text-chrome hover:text-primary transition-colors p-3 rounded-xl hover:bg-white/5 group">
+                <Link to="/faq" onClick={handleInteraction} className="flex items-center gap-4 text-chrome hover:text-primary transition-colors p-3 rounded-xl hover:bg-inverse/5 group">
                   <HelpCircle className="w-5 h-5 text-steel group-hover:text-primary transition-colors" /> 
                   <span className="font-bold">{t('menu.helpSupport')}</span>
                 </Link>
               </div>
 
               {user && (
-                <div className="pt-4 mt-4 border-t border-white/5">
+                <div className="pt-4 mt-4 border-t border-inverse/5">
                   <button 
                     onClick={() => { 
                       if (navigator.vibrate) navigator.vibrate(50);

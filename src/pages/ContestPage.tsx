@@ -188,7 +188,7 @@ export default function ContestPage() {
   };
 
   if (contests.length === 0) return (
-    <div className="min-h-[calc(100dvh-5rem)] flex items-center justify-center bg-asphalt">
+    <div className="min-h-[calc(100dvh-5rem)] flex items-center justify-center bg-engine">
       <div className="text-center">
         <Camera className="w-16 h-16 text-steel mx-auto mb-4 opacity-20" />
         <p className="text-steel font-mono uppercase tracking-widest">{t('contest.noActive')}</p>
@@ -199,7 +199,7 @@ export default function ContestPage() {
   const timeLeft = contest ? formatDistanceToNow(new Date(contest.end_date), { addSuffix: true }) : '';
 
   return (
-    <div className="min-h-[calc(100dvh-5rem)] bg-asphalt text-white font-sans pb-28">
+    <div className="min-h-[calc(100dvh-5rem)] bg-engine text-chrome font-sans pb-28">
       {/* Contest Selector */}
       {contests.length > 1 && (
         <div className="max-w-7xl mx-auto px-8 py-6 flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
@@ -209,8 +209,8 @@ export default function ContestPage() {
               onClick={() => setSelectedContestId(c.id)}
               className={`px-6 py-3 rounded-full font-mono text-xs uppercase tracking-widest transition-all border-2 whitespace-nowrap ${
                 selectedContestId === c.id
-                  ? 'bg-primary text-black border-primary font-black'
-                  : 'bg-transparent text-steel border-steel/20 hover:border-primary hover:text-white'
+                  ? 'bg-primary text-inverse border-primary font-black'
+                  : 'bg-transparent text-steel border-steel/20 hover:border-primary hover:text-chrome'
               }`}
             >
               {c.title}
@@ -226,7 +226,7 @@ export default function ContestPage() {
       ) : (
         <>
           {/* Hero Section */}
-          <section className="relative h-[60vh] flex items-end p-8 border-b-4 border-black overflow-hidden">
+          <section className="relative h-[60vh] flex items-end p-8 border-b-4 border-inverse overflow-hidden">
         <div className="absolute inset-0 z-0">
           <img 
             src="https://images.unsplash.com/photo-1558981403-c5f91cbba527?q=80&w=2070&auto=format&fit=crop" 
@@ -239,7 +239,7 @@ export default function ContestPage() {
         <div className="relative z-10 w-full max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-end gap-8">
           <div className="flex-1">
             <div className="flex items-center gap-4 mb-4">
-              <span className="bg-primary text-black font-mono font-black px-3 py-1 text-xs uppercase tracking-tighter">
+              <span className="bg-primary text-inverse font-mono font-black px-3 py-1 text-xs uppercase tracking-tighter">
                 {t('contest.active')}
               </span>
               <span className="flex items-center gap-2 text-steel font-mono text-xs uppercase tracking-widest">
@@ -254,13 +254,13 @@ export default function ContestPage() {
             </p>
             
             {(contest.prize_description || contest.prize_badge_name) && (
-              <div className="flex items-center gap-4 p-4 bg-white/5 border border-white/10 backdrop-blur-md rounded-2xl max-w-md">
+              <div className="flex items-center gap-4 p-4 bg-inverse/5 border border-inverse/10 backdrop-blur-md rounded-2xl max-w-md">
                 {contest.prize_badge_icon ? (
                   <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center border border-primary/30 shrink-0">
                     <Star className="w-6 h-6 text-primary fill-current" />
                   </div>
                 ) : (
-                  <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
+                  <div className="w-12 h-12 rounded-xl bg-inverse/10 flex items-center justify-center shrink-0">
                     <Trophy className="w-6 h-6 text-primary" />
                   </div>
                 )}
@@ -268,7 +268,7 @@ export default function ContestPage() {
                   <p className="text-[10px] font-mono font-black text-primary uppercase tracking-widest mb-0.5">
                     {t('admin.contests.prize')}
                   </p>
-                  <p className="text-sm font-bold text-white leading-tight">
+                  <p className="text-sm font-bold text-chrome leading-tight">
                     {contest.prize_description || contest.prize_badge_name}
                   </p>
                   {contest.prize_badge_name && contest.prize_description && (
@@ -285,7 +285,7 @@ export default function ContestPage() {
             {currentUser && (currentUser.role === 'admin' || currentUser.role === 'moderator') && (
               <Link 
                 to="/admin?tab=contests"
-                className="group relative bg-white text-black font-black uppercase tracking-widest py-4 px-8 text-sm hover:bg-primary transition-all duration-300 text-center"
+                className="group relative bg-inverse text-inverse font-black uppercase tracking-widest py-4 px-8 text-sm hover:bg-primary transition-all duration-300 text-center"
               >
                 <span className="relative z-10 flex items-center justify-center gap-2">
                   <Settings className="w-4 h-4" /> {t('admin.tab.contests')}
@@ -294,7 +294,7 @@ export default function ContestPage() {
             )}
             <button 
               onClick={() => setIsUploadModalOpen(true)}
-              className="group relative bg-primary text-black font-black uppercase tracking-widest py-6 px-12 text-xl hover:bg-white transition-all duration-300"
+              className="group relative bg-primary text-inverse font-black uppercase tracking-widest py-6 px-12 text-xl hover:bg-inverse hover:text-inverse transition-all duration-300"
             >
               <span className="relative z-10 flex items-center gap-3">
                 {t('contest.submit')} <ChevronRight className="w-6 h-6 group-hover:translate-x-2 transition-transform" />
@@ -307,7 +307,7 @@ export default function ContestPage() {
 
       {/* Submissions Grid */}
       <main className="max-w-7xl mx-auto p-8">
-        <div className="flex items-center justify-between mb-12 border-b-2 border-white/10 pb-4">
+        <div className="flex items-center justify-between mb-12 border-b-2 border-inverse/10 pb-4">
           <h2 className="text-2xl font-black uppercase tracking-widest flex items-center gap-4">
             <Trophy className="text-primary w-8 h-8" /> {t('contest.leaderboard')}
           </h2>
@@ -325,7 +325,7 @@ export default function ContestPage() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.1 }}
-                className="group relative bg-carbon border-2 border-black hover:border-primary transition-colors cursor-pointer"
+                className="group relative bg-oil border-2 border-inverse hover:border-primary transition-colors cursor-pointer"
                 onClick={() => setSelectedSubmission(sub)}
               >
                 <div className="aspect-[4/5] overflow-hidden relative">
@@ -334,23 +334,23 @@ export default function ContestPage() {
                     alt={t('contest.submissionAlt')} 
                     className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500 scale-105 group-hover:scale-100"
                   />
-                  <div className="absolute top-4 left-4 bg-black text-white font-mono font-black px-3 py-1 text-xl">
+                  <div className="absolute top-4 left-4 bg-inverse text-inverse font-mono font-black px-3 py-1 text-xl">
                     #{index + 1}
                   </div>
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-6 flex flex-col justify-end">
+                  <div className="absolute inset-0 bg-gradient-to-t from-oil/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-6 flex flex-col justify-end">
                     <p className="text-primary font-black uppercase tracking-widest text-sm mb-1">{t('common.viewDetails')}</p>
                     <h3 className="text-2xl font-black uppercase tracking-tighter">{sub.username}</h3>
                   </div>
                 </div>
 
-                <div className="p-6 flex items-center justify-between border-t-2 border-black">
+                <div className="p-6 flex items-center justify-between border-t-2 border-inverse">
                   <div>
                     <p className="text-steel text-xs uppercase font-mono tracking-widest mb-1">{t('contest.votes')}</p>
                     <p className="text-3xl font-black text-primary">{sub.vote_count}</p>
                   </div>
                   <button 
                     onClick={(e) => { e.stopPropagation(); handleVote(sub.id); }}
-                    className="bg-white text-black p-4 hover:bg-primary transition-colors"
+                    className="bg-inverse text-inverse p-4 hover:bg-primary transition-colors"
                   >
                     <ThumbsUp className="w-6 h-6" />
                   </button>
@@ -368,16 +368,16 @@ export default function ContestPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8 bg-black/95"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8 bg-engine/95"
           >
             <motion.div 
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
-              className="bg-carbon w-full max-w-6xl h-full max-h-[90vh] flex flex-col md:flex-row border-4 border-black overflow-hidden"
+              className="bg-oil w-full max-w-6xl h-full max-h-[90vh] flex flex-col md:flex-row border-4 border-inverse overflow-hidden"
             >
               {/* Image Side */}
-              <div className="flex-1 bg-black relative overflow-hidden group">
+              <div className="flex-1 bg-engine relative overflow-hidden group">
                 <img 
                   src={selectedSubmission.photo_url} 
                   alt={t('contest.submissionDetailAlt')} 
@@ -385,17 +385,17 @@ export default function ContestPage() {
                 />
                 <button 
                   onClick={() => setSelectedSubmission(null)}
-                  className="absolute top-6 left-6 bg-white text-black p-3 hover:bg-primary transition-colors z-10"
+                  className="absolute top-6 left-6 bg-inverse text-inverse p-3 hover:bg-primary transition-colors z-10"
                 >
                   <X className="w-6 h-6" />
                 </button>
               </div>
 
               {/* Info Side */}
-              <div className="w-full md:w-[400px] flex flex-col border-l-4 border-black bg-carbon">
-                <div className="p-8 border-b-2 border-black">
+              <div className="w-full md:w-[400px] flex flex-col border-l-4 border-inverse bg-oil">
+                <div className="p-8 border-b-2 border-inverse">
                   <div className="flex items-center gap-4 mb-6">
-                    <div className="w-12 h-12 bg-engine rounded-full flex items-center justify-center border-2 border-black">
+                    <div className="w-12 h-12 bg-engine rounded-full flex items-center justify-center border-2 border-inverse">
                       <User className="w-6 h-6 text-steel" />
                     </div>
                     <div>
@@ -409,7 +409,7 @@ export default function ContestPage() {
                   </p>
 
                   {selectedSubmission.moto_make && (
-                    <div className="flex items-center gap-3 mb-8 p-4 bg-engine border-2 border-black">
+                    <div className="flex items-center gap-3 mb-8 p-4 bg-engine border-2 border-inverse">
                       <Bike className="w-6 h-6 text-primary" />
                       <div>
                         <p className="text-steel font-mono text-[10px] uppercase tracking-widest">{t('contest.taggedRide')}</p>
@@ -419,13 +419,13 @@ export default function ContestPage() {
                   )}
 
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-engine p-4 border-2 border-black">
+                    <div className="bg-engine p-4 border-2 border-inverse">
                       <p className="text-steel font-mono text-[10px] uppercase tracking-widest mb-1">{t('contest.votes')}</p>
                       <p className="text-2xl font-black text-primary">{selectedSubmission.vote_count}</p>
                     </div>
                     <button 
                       onClick={() => handleVote(selectedSubmission.id)}
-                      className="bg-primary text-black font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-white transition-colors border-2 border-black"
+                      className="bg-primary text-inverse font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-inverse hover:text-inverse transition-colors border-2 border-inverse"
                     >
                       <ThumbsUp className="w-5 h-5" /> {t('contest.vote')}
                     </button>
@@ -453,18 +453,18 @@ export default function ContestPage() {
                     )}
                   </div>
 
-                  <div className="p-8 border-t-4 border-black bg-engine">
+                  <div className="p-8 border-t-4 border-inverse bg-engine">
                     <div className="flex gap-2">
                       <input 
                         type="text" 
                         value={newComment || ''}
                         onChange={(e) => setNewComment(e.target.value)}
                         placeholder={t('contest.addComment')}
-                        className="flex-1 bg-carbon border-2 border-black p-3 text-sm focus:border-primary outline-none"
+                        className="flex-1 bg-oil border-2 border-inverse p-3 text-sm focus:border-primary outline-none"
                       />
                       <button 
                         onClick={() => handleAddComment(selectedSubmission.id)}
-                        className="bg-primary text-black font-black uppercase px-6 hover:bg-white transition-colors border-2 border-black"
+                        className="bg-primary text-inverse font-black uppercase px-6 hover:bg-inverse hover:text-inverse transition-colors border-2 border-inverse"
                       >
                         {t('common.post')}
                       </button>
@@ -484,17 +484,17 @@ export default function ContestPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-engine/90"
           >
             <motion.div 
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
-              className="bg-carbon w-full max-w-xl border-4 border-black overflow-hidden"
+              className="bg-oil w-full max-w-xl border-4 border-inverse overflow-hidden"
             >
-              <div className="p-8 border-b-4 border-black flex justify-between items-center">
+              <div className="p-8 border-b-4 border-inverse flex justify-between items-center">
                 <h2 className="text-3xl font-black uppercase tracking-tighter">{t('contest.submit')}</h2>
-                <button onClick={() => setIsUploadModalOpen(false)} className="text-steel hover:text-white">
+                <button onClick={() => setIsUploadModalOpen(false)} className="text-steel hover:text-chrome">
                   <X className="w-8 h-8" />
                 </button>
               </div>
@@ -503,14 +503,14 @@ export default function ContestPage() {
                 {/* Photo Upload Area */}
                 <div 
                   onClick={() => document.getElementById('photo-input')?.click()}
-                  className="group relative aspect-video bg-engine border-4 border-dashed border-black hover:border-primary transition-colors cursor-pointer flex flex-col items-center justify-center overflow-hidden"
+                  className="group relative aspect-video bg-engine border-4 border-dashed border-inverse hover:border-primary transition-colors cursor-pointer flex flex-col items-center justify-center overflow-hidden"
                 >
                   {uploadPreview ? (
                     <img src={uploadPreview} alt={t('contest.previewAlt')} className="w-full h-full object-cover" />
                   ) : (
                     <div className="text-center p-8">
                       <Upload className="w-12 h-12 text-steel mx-auto mb-4 group-hover:text-primary transition-colors" />
-                      <p className="font-mono text-xs uppercase tracking-widest text-steel group-hover:text-white transition-colors">
+                      <p className="font-mono text-xs uppercase tracking-widest text-steel group-hover:text-chrome transition-colors">
                         {t('contest.clickToUpload')}
                       </p>
                     </div>
@@ -531,7 +531,7 @@ export default function ContestPage() {
                       value={uploadDescription || ''}
                       onChange={(e) => setUploadDescription(e.target.value)}
                       placeholder={t('contest.tellUs')}
-                      className="w-full bg-engine border-2 border-black p-4 text-white focus:border-primary outline-none min-h-[100px]"
+                      className="w-full bg-engine border-2 border-inverse p-4 text-chrome focus:border-primary outline-none min-h-[100px]"
                     />
                   </div>
 
@@ -540,7 +540,7 @@ export default function ContestPage() {
                     <select 
                       value={selectedMotorcycleId || ''}
                       onChange={(e) => setSelectedMotorcycleId(e.target.value)}
-                      className="w-full bg-engine border-2 border-black p-4 text-white focus:border-primary outline-none appearance-none"
+                      className="w-full bg-engine border-2 border-inverse p-4 text-chrome focus:border-primary outline-none appearance-none"
                     >
                       <option value="">{t('common.none')}</option>
                       {motorcycles.map(moto => (
@@ -553,14 +553,14 @@ export default function ContestPage() {
                 <div className="flex gap-4 pt-4">
                   <button 
                     onClick={() => setIsUploadModalOpen(false)}
-                    className="flex-1 bg-engine text-white font-black uppercase tracking-widest py-4 border-2 border-black hover:bg-white hover:text-black transition-colors"
+                    className="flex-1 bg-engine text-chrome font-black uppercase tracking-widest py-4 border-2 border-inverse hover:bg-inverse hover:text-inverse transition-colors"
                   >
                     {t('common.cancel')}
                   </button>
                   <button 
                     onClick={handleUpload}
                     disabled={!uploadFile}
-                    className="flex-1 bg-primary text-black font-black uppercase tracking-widest py-4 border-2 border-black hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex-1 bg-primary text-inverse font-black uppercase tracking-widest py-4 border-2 border-inverse hover:bg-inverse hover:text-inverse transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {t('contest.submit')}
                   </button>

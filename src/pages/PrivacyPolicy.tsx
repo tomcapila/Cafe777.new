@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom';
 
 export default function PrivacyPolicy() {
   return (
-    <div className="min-h-screen bg-asphalt py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-engine py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-3xl mx-auto">
         <Link to="/" className="inline-flex items-center gap-2 text-steel hover:text-primary transition-colors mb-12 font-mono text-xs uppercase tracking-widest">
           <ArrowLeft className="w-4 h-4" />
@@ -21,12 +21,12 @@ export default function PrivacyPolicy() {
             <div className="p-3 bg-primary/10 rounded-2xl">
               <Shield className="w-8 h-8 text-primary" />
             </div>
-            <h1 className="text-4xl font-display font-black uppercase italic tracking-tighter text-white">Privacy Policy</h1>
+            <h1 className="text-4xl font-display font-black uppercase italic tracking-tighter text-chrome">Privacy Policy</h1>
           </div>
 
           <div className="space-y-8 text-steel font-light leading-relaxed">
             <section>
-              <h2 className="text-xl font-display font-bold text-white uppercase italic mb-4 flex items-center gap-2">
+              <h2 className="text-xl font-display font-bold text-chrome uppercase italic mb-4 flex items-center gap-2">
                 <FileText className="w-5 h-5 text-primary" />
                 1. Introduction
               </h2>
@@ -36,7 +36,7 @@ export default function PrivacyPolicy() {
             </section>
 
             <section>
-              <h2 className="text-xl font-display font-bold text-white uppercase italic mb-4 flex items-center gap-2">
+              <h2 className="text-xl font-display font-bold text-chrome uppercase italic mb-4 flex items-center gap-2">
                 <Eye className="w-5 h-5 text-primary" />
                 2. Information We Collect
               </h2>
@@ -49,7 +49,7 @@ export default function PrivacyPolicy() {
             </section>
 
             <section>
-              <h2 className="text-xl font-display font-bold text-white uppercase italic mb-4 flex items-center gap-2">
+              <h2 className="text-xl font-display font-bold text-chrome uppercase italic mb-4 flex items-center gap-2">
                 <Lock className="w-5 h-5 text-primary" />
                 3. How We Use Your Information
               </h2>
@@ -59,7 +59,7 @@ export default function PrivacyPolicy() {
             </section>
 
             <section>
-              <h2 className="text-xl font-display font-bold text-white uppercase italic mb-4 flex items-center gap-2">
+              <h2 className="text-xl font-display font-bold text-chrome uppercase italic mb-4 flex items-center gap-2">
                 <Shield className="w-5 h-5 text-primary" />
                 4. Data Protection (GDPR & LGPD)
               </h2>
@@ -76,7 +76,7 @@ export default function PrivacyPolicy() {
             </section>
 
             <section>
-              <h2 className="text-xl font-display font-bold text-white uppercase italic mb-4 flex items-center gap-2">
+              <h2 className="text-xl font-display font-bold text-chrome uppercase italic mb-4 flex items-center gap-2">
                 <Lock className="w-5 h-5 text-primary" />
                 5. Security
               </h2>
@@ -86,7 +86,7 @@ export default function PrivacyPolicy() {
             </section>
 
             <section>
-              <h2 className="text-xl font-display font-bold text-white uppercase italic mb-4 flex items-center gap-2">
+              <h2 className="text-xl font-display font-bold text-chrome uppercase italic mb-4 flex items-center gap-2">
                 <FileText className="w-5 h-5 text-primary" />
                 6. Contact Us
               </h2>
@@ -96,7 +96,7 @@ export default function PrivacyPolicy() {
             </section>
           </div>
 
-          <div className="mt-12 pt-8 border-t border-white/10 text-center">
+          <div className="mt-12 pt-8 border-t border-inverse/10 text-center">
             <p className="text-xs font-mono uppercase tracking-widest text-steel">Last Updated: April 2026</p>
           </div>
         </motion.div>

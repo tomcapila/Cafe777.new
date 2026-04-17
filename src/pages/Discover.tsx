@@ -23,39 +23,46 @@ L.Icon.Default.mergeOptions({
 });
 
 const categoryConfig: Record<string, { color: string, icon: any }> = {
-  dealership: { color: '#3b82f6', icon: <Building2 className="w-4 h-4 text-white" /> },
-  gear_shop: { color: '#10b981', icon: <ShoppingBag className="w-4 h-4 text-white" /> },
-  parts_store: { color: '#eab308', icon: <Settings className="w-4 h-4 text-white" /> },
-  repair: { color: '#f97316', icon: <Wrench className="w-4 h-4 text-white" /> },
-  meeting_spot: { color: '#8b5cf6', icon: <Users className="w-4 h-4 text-white" /> },
-  ride_spot: { color: '#ec4899', icon: <MapPin className="w-4 h-4 text-white" /> },
-  biker_cafe: { color: '#a8a29e', icon: <Coffee className="w-4 h-4 text-white" /> },
-  biker_bar: { color: '#ef4444', icon: <Beer className="w-4 h-4 text-white" /> },
-  ride_stop: { color: '#14b8a6', icon: <Flag className="w-4 h-4 text-white" /> },
-  motoclub: { color: '#52525b', icon: <Shield className="w-4 h-4 text-white" /> },
-  barbershop: { color: '#f43f5e', icon: <Building2 className="w-4 h-4 text-white" /> },
-  band: { color: '#8b5cf6', icon: <Users className="w-4 h-4 text-white" /> },
-  other: { color: '#a8a29e', icon: <MapPin className="w-4 h-4 text-white" /> },
-  ride_route: { color: '#06b6d4', icon: <Route className="w-4 h-4 text-white" /> },
-  passport_stamp: { color: '#f59e0b', icon: <Award className="w-4 h-4 text-white" /> },
-  ambassador: { color: '#8b5cf6', icon: <Star className="w-4 h-4 text-white" /> },
+  dealership: { color: '#3b82f6', icon: <Building2 className="w-4 h-4 text-chrome" /> },
+  gear_shop: { color: '#10b981', icon: <ShoppingBag className="w-4 h-4 text-chrome" /> },
+  parts_store: { color: '#eab308', icon: <Settings className="w-4 h-4 text-chrome" /> },
+  repair: { color: '#f97316', icon: <Wrench className="w-4 h-4 text-chrome" /> },
+  meeting_spot: { color: '#8b5cf6', icon: <Users className="w-4 h-4 text-chrome" /> },
+  ride_spot: { color: '#ec4899', icon: <MapPin className="w-4 h-4 text-chrome" /> },
+  biker_cafe: { color: '#a8a29e', icon: <Coffee className="w-4 h-4 text-chrome" /> },
+  biker_bar: { color: '#ef4444', icon: <Beer className="w-4 h-4 text-chrome" /> },
+  ride_stop: { color: '#14b8a6', icon: <Flag className="w-4 h-4 text-chrome" /> },
+  motoclub: { color: '#52525b', icon: <Shield className="w-4 h-4 text-chrome" /> },
+  barbershop: { color: '#f43f5e', icon: <Building2 className="w-4 h-4 text-chrome" /> },
+  band: { color: '#8b5cf6', icon: <Users className="w-4 h-4 text-chrome" /> },
+  other: { color: '#a8a29e', icon: <MapPin className="w-4 h-4 text-chrome" /> },
+  ride_route: { color: '#06b6d4', icon: <Route className="w-4 h-4 text-chrome" /> },
+  passport_stamp: { color: '#f59e0b', icon: <Award className="w-4 h-4 text-chrome" /> },
+  ambassador: { color: '#8b5cf6', icon: <Star className="w-4 h-4 text-chrome" /> },
 };
 
-const createCustomIcon = (category: string) => {
-  const config = categoryConfig[category] || { color: '#f97316', icon: <MapPin className="w-4 h-4 text-white" /> };
+// Memoized icon creator to prevent constant re-renders and Leaflet internal errors
+const iconCache: Record<string, L.DivIcon> = {};
+const getCustomIcon = (category: string) => {
+  if (iconCache[category]) return iconCache[category];
+
+  const config = categoryConfig[category] || { color: '#f97316', icon: <MapPin className="w-4 h-4 text-chrome" /> };
   const iconHtml = renderToString(
-    <div style={{ backgroundColor: config.color }} className="w-8 h-8 rounded-full flex items-center justify-center shadow-lg border-2 border-white">
+    <div style={{ backgroundColor: config.color }} className="w-8 h-8 rounded-full flex items-center justify-center shadow-lg border-2 border-inverse">
       {config.icon}
     </div>
   );
 
-  return L.divIcon({
+  const icon = L.divIcon({
     html: iconHtml,
     className: 'custom-leaflet-icon bg-transparent border-none',
     iconSize: [32, 32],
     iconAnchor: [16, 32],
     popupAnchor: [0, -32],
   });
+
+  iconCache[category] = icon;
+  return icon;
 };
 
 function MapUpdater({ center, zoom }: { center: [number, number], zoom: number }) {
@@ -66,10 +73,33 @@ function MapUpdater({ center, zoom }: { center: [number, number], zoom: number }
   return null;
 }
 
-function MapEvents({ onMoveEnd }: { onMoveEnd: () => void }) {
+function MapEvents({ onMoveEnd }: { onMoveEnd: (bounds: any) => void }) {
+  const map = useMap();
+  const lastBounds = React.useRef<any>(null);
+  const timeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
   useMapEvents({
     moveend: () => {
-      onMoveEnd();
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      
+      timeoutRef.current = setTimeout(() => {
+        const currentBounds = map.getBounds();
+        
+        // Simple check for significant change (e.g., center moved by more than 10% of viewport)
+        if (lastBounds.current) {
+          const latDiff = Math.abs(currentBounds.getCenter().lat - lastBounds.current.getCenter().lat);
+          const lngDiff = Math.abs(currentBounds.getCenter().lng - lastBounds.current.getCenter().lng);
+          const latSpan = currentBounds.getNorth() - currentBounds.getSouth();
+          const lngSpan = currentBounds.getEast() - currentBounds.getWest();
+          
+          if (latDiff < latSpan * 0.1 && lngDiff < lngSpan * 0.1) {
+            return; // Not a significant change
+          }
+        }
+        
+        lastBounds.current = currentBounds;
+        onMoveEnd(currentBounds);
+      }, 500); // 500ms debounce
     },
   });
   return null;
@@ -78,48 +108,9 @@ function MapEvents({ onMoveEnd }: { onMoveEnd: () => void }) {
 export default function MapView() {
   const { t } = useLanguage();
 
-  const mapData = [
-    { name: "Moto City", category: "dealership", lat: -19.8882, lng: -43.9521, city: "Belo Horizonte", details: t('discover.mock.motoCity') },
-    { name: "Valence Yamaha Barão", category: "dealership", lat: -19.9760, lng: -43.9654, city: "Belo Horizonte", details: t('discover.mock.valence') },
-    { name: "Savassi Moto Point", category: "meeting_spot", lat: -19.9366, lng: -43.9380, city: "Belo Horizonte", details: t('discover.mock.savassi') },
-    { name: "BH Riders Café", category: "biker_cafe", lat: -19.9440, lng: -43.9398, city: "Belo Horizonte", details: t('discover.mock.cafe') },
-    { name: "Iron Riders MC", category: "motoclub", lat: -19.9000, lng: -43.9500, city: "Belo Horizonte", details: t('discover.mock.ironRiders') },
-    { name: "Estrada Real Rider Stop", category: "ride_stop", lat: -20.0200, lng: -43.8500, city: "Minas Gerais", details: t('discover.mock.estradaReal') },
-    { name: "Passport Checkpoint 1", category: "passport_stamp", lat: -19.9500, lng: -43.9200, city: "Belo Horizonte", details: t('discover.mock.passport') },
-    { name: "Ambassador Lounge", category: "ambassador", lat: -19.9300, lng: -43.9400, city: "Belo Horizonte", details: t('discover.mock.ambassador') },
-  ];
+  const mapData = [];
 
-  const mockRoutes = [
-    {
-      id: 'route_1',
-      name: 'Serra do Rola Moça',
-      category: 'ride_route',
-      details: t('discover.mock.rolaMoca'),
-      points: [
-        [-20.045, -44.005],
-        [-20.050, -44.010],
-        [-20.060, -44.015],
-        [-20.070, -44.010],
-        [-20.080, -44.020],
-        [-20.090, -44.025],
-      ] as [number, number][],
-      color: '#f97316' // Orange for curvy
-    },
-    {
-      id: 'route_2',
-      name: 'Estrada Real (Ouro Preto)',
-      category: 'ride_route',
-      details: t('discover.mock.estradaRealRoute'),
-      points: [
-        [-20.385, -43.505],
-        [-20.380, -43.510],
-        [-20.370, -43.520],
-        [-20.360, -43.530],
-        [-20.350, -43.525],
-      ] as [number, number][],
-      color: '#06b6d4' // Cyan for scenic
-    }
-  ];
+  const mockRoutes = [];
 
   const filterGroupsPitStop = {
     'discover.groups.ecosystems': ['dealership', 'gear_shop', 'parts_store', 'repair', 'barbershop', 'other', 'meeting_spot', 'biker_cafe', 'biker_bar', 'band'],
@@ -146,7 +137,7 @@ export default function MapView() {
   const [mapCenter, setMapCenter] = useState<[number, number]>([-19.9167, -43.9345]);
   const [mapZoom, setMapZoom] = useState(12);
   const [mapMode, setMapMode] = useState<'pit_stop' | 'ride'>('pit_stop');
-  const [activeFilters, setActiveFilters] = useState<string[]>(Object.values(filterGroupsPitStop).flat());
+  const [activeFilters, setActiveFilters] = useState<string[]>(['dealership', 'gear_shop', 'parts_store', 'repair', 'meeting_spot', 'biker_cafe', 'motoclub', 'ambassador', 'passport_stamp']);
   const [activeGroup, setActiveGroup] = useState<string | null>(null);
   const [isLocationsWindowOpen, setIsLocationsWindowOpen] = useState(false);
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
@@ -208,7 +199,7 @@ export default function MapView() {
 
   useEffect(() => {
     if (mapMode === 'pit_stop') {
-      setActiveFilters(Object.values(filterGroupsPitStop).flat());
+      setActiveFilters(['dealership', 'gear_shop', 'parts_store', 'repair', 'meeting_spot', 'biker_cafe', 'motoclub', 'ambassador', 'passport_stamp']);
       setActiveGroup(null);
     } else {
       setActiveFilters(Object.values(filterGroupsRide).flat());
@@ -235,8 +226,22 @@ export default function MapView() {
           fetchWithAuth('/api/ambassadors')
         ]);
         
-        const ecoData = await ecoRes.json();
-        const ambData = await ambRes.json();
+        let ecoData = [];
+        let ambData = [];
+
+        if (ecoRes.ok) {
+          const contentType = ecoRes.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            ecoData = await ecoRes.json();
+          }
+        }
+
+        if (ambRes.ok) {
+          const contentType = ambRes.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            ambData = await ambRes.json();
+          }
+        }
         
         const validEcosystems = ecoData.filter((e: any) => e.lat && e.lng);
         setEcosystems(validEcosystems);
@@ -244,6 +249,58 @@ export default function MapView() {
         const validAmbassadors = ambData.filter((a: any) => a.lat && a.lng);
         setAmbassadors(validAmbassadors);
         
+        // Fetch Near Me places
+        const triggerInitialSearch = async (lat: number, lng: number) => {
+          try {
+            const response = await fetch('/api/places/advanced-search', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                mode: 'near_me',
+                lat,
+                lng
+              })
+            });
+            if (response.ok) {
+              const uniquePlaces = await response.json();
+              const mappedPlaces = uniquePlaces.map((p: any) => ({
+                id: `ext_${p.place_id}`,
+                name: p.name,
+                category: p.category || 'other',
+                lat: p.lat,
+                lng: p.lng,
+                city: p.city || '',
+                details: p.source_keyword || '',
+                rating: p.rating,
+                isExternal: true,
+                place_id: p.place_id
+              }));
+              setExternalPlaces(mappedPlaces);
+            } else {
+              const errorData = await response.json().catch(() => ({}));
+              console.error("Near Me search failed:", errorData.error || 'Unknown error');
+            }
+          } catch (err) {
+            console.error("Failed to fetch near me places", err);
+          }
+        };
+
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            async (position) => {
+              const { latitude, longitude } = position.coords;
+              setMapCenter([latitude, longitude]);
+              triggerInitialSearch(latitude, longitude);
+            },
+            (err) => {
+              console.warn("Geolocation denied or failed", err);
+              triggerInitialSearch(mapCenter[0], mapCenter[1]);
+            }
+          );
+        } else {
+          triggerInitialSearch(mapCenter[0], mapCenter[1]);
+        }
+
         if (placeIdFromUrl) {
           const eco = validEcosystems.find((e: any) => e.user_id.toString() === placeIdFromUrl || e.company_name === placeIdFromUrl);
           if (eco) {
@@ -262,14 +319,74 @@ export default function MapView() {
     fetchData();
   }, [placeIdFromUrl]);
 
+  const handleSearchAlongRoute = async (route: any) => {
+    if (!mapInstance) return;
+    setIsSearchingArea(true);
+
+    // Simplify polyline for the request if it's too large to avoid payload issues
+    // The backend samples every 5km anyway, so we don't need high resolution here
+    let simplifiedPoints = route.points;
+    if (simplifiedPoints.length > 500) {
+      const step = Math.ceil(simplifiedPoints.length / 500);
+      simplifiedPoints = simplifiedPoints.filter((_: any, i: number) => i % step === 0);
+      // Ensure last point is included
+      if (simplifiedPoints[simplifiedPoints.length - 1] !== route.points[route.points.length - 1]) {
+        simplifiedPoints.push(route.points[route.points.length - 1]);
+      }
+    }
+
+    try {
+      const response = await fetch('/api/places/advanced-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'route',
+          polyline: simplifiedPoints
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Search failed');
+      }
+      const uniquePlaces = await response.json();
+      
+      const mappedPlaces = uniquePlaces.map((p: any) => ({
+        id: `ext_${p.place_id}`,
+        name: p.name,
+        category: p.category || 'other',
+        lat: p.lat,
+        lng: p.lng,
+        city: p.city || '',
+        details: p.source_keyword || '',
+        rating: p.rating,
+        isExternal: true,
+        place_id: p.place_id
+      }));
+      
+      setExternalPlaces(mappedPlaces);
+      showNotification('success', t('discover.searchSuccess') || `Found ${mappedPlaces.length} places along route`);
+    } catch (error) {
+      console.error("Error fetching external places:", error);
+      showNotification('error', t('discover.searchError') || 'Failed to fetch nearby places');
+    } finally {
+      setIsSearchingArea(false);
+    }
+  };
+
   const handlePlaceSelect = (place: any) => {
     setMapCenter([place.lat, place.lng]);
     setMapZoom(16);
     setIsLocationsWindowOpen(false);
+    
+    // Use the stable ID from the place object
+    const id = place.id || place.user_id?.toString() || place.name;
+    
     setTimeout(() => {
-      const id = place.user_id?.toString() || place.id || place.name;
       const marker = markerRefs.current[id];
-      if (marker) marker.openPopup();
+      if (marker && marker.getElement()) {
+        marker.openPopup();
+      }
     }, 1500);
   };
 
@@ -296,45 +413,40 @@ export default function MapView() {
     if (!mapInstance) return;
     setIsSearchingArea(true);
     try {
-      const center = mapInstance.getCenter();
-      const keywords = ['motorcycle store', 'motorcycle repair', 'motorcycle club'];
+      const bounds = mapInstance.getBounds();
       
-      const promises = keywords.map(keyword => 
-        fetch(`/api/places/nearby?lat=${center.lat}&lng=${center.lng}&radius=25000&keyword=${encodeURIComponent(keyword)}`)
-          .then(res => res.json())
-      );
-      
-      const results = await Promise.all(promises);
-      const allPlaces = results.flat().filter(p => p && p.place_id);
-      
-      const uniquePlaces = Array.from(new Map(allPlaces.map(p => [p.place_id, p])).values());
-      
-      const mappedPlaces = uniquePlaces.map((p: any) => {
-        let category = 'other';
-        const types = p.types || [];
-        const name = p.name.toLowerCase();
-        
-        if (types.includes('car_repair') || name.includes('repair') || name.includes('mecanica') || name.includes('oficina')) {
-          category = 'repair';
-        } else if (types.includes('motorcycle_dealer') || name.includes('motos') || name.includes('motorcycle')) {
-          category = 'dealership';
-        } else if (name.includes('club') || name.includes('mc')) {
-          category = 'motoclub';
-        }
-
-        return {
-          id: `ext_${p.place_id}`,
-          name: p.name,
-          category,
-          lat: p.geometry.location.lat,
-          lng: p.geometry.location.lng,
-          city: p.vicinity,
-          details: p.vicinity,
-          rating: p.rating,
-          isExternal: true,
-          place_id: p.place_id
-        };
+      const response = await fetch('/api/places/advanced-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'viewport',
+          bounds: {
+            north: bounds.getNorth(),
+            south: bounds.getSouth(),
+            east: bounds.getEast(),
+            west: bounds.getWest()
+          }
+        })
       });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Search failed');
+      }
+      const uniquePlaces = await response.json();
+      
+      const mappedPlaces = uniquePlaces.map((p: any) => ({
+        id: `ext_${p.place_id}`,
+        name: p.name,
+        category: p.category || 'other',
+        lat: p.lat,
+        lng: p.lng,
+        city: p.city || '',
+        details: p.source_keyword || '',
+        rating: p.rating,
+        isExternal: true,
+        place_id: p.place_id
+      }));
       
       setExternalPlaces(mappedPlaces);
       setShowSearchArea(false);
@@ -370,28 +482,18 @@ export default function MapView() {
     return cat;
   };
 
-  const filteredPlaces = [
+  const filteredPlaces = React.useMemo(() => [
     ...ecosystems.map(e => ({ ...e, name: e.company_name, category: normalizeCategory(e.service_category), id: e.user_id.toString(), isInternal: true })),
     ...ambassadors.map(a => ({ ...a, name: a.display_name, category: 'ambassador', id: `amb_${a.user_id}`, isInternal: true })),
     ...mapData.map(d => ({ ...d, id: d.name, category: normalizeCategory(d.category), isInternal: true })),
     ...externalPlaces,
     ...(mapMode === 'ride' ? mockRoutes.map(r => ({ ...r, lat: r.points[0][0], lng: r.points[0][1] })) : []),
     ...(mapMode === 'ride' ? uploadedRoutes.map(r => ({ ...r, lat: r.points[0][0], lng: r.points[0][1] })) : [])
-  ].filter(p => activeFilters.includes(p.category)).filter((p, index, self) => {
-    if (!p.isExternal) return true;
-    // Filter out external places if there's an internal place with a similar name nearby
-    const isDuplicate = self.some(internal => 
-      internal.isInternal && 
-      internal.name.toLowerCase() === p.name.toLowerCase() &&
-      Math.abs(internal.lat - p.lat) < 0.01 &&
-      Math.abs(internal.lng - p.lng) < 0.01
-    );
-    return !isDuplicate;
-  });
+  ].filter(p => activeFilters.includes(p.category)), [ecosystems, ambassadors, mapData, externalPlaces, mapMode, mockRoutes, uploadedRoutes, activeFilters]);
 
   if (loading) {
     return (
-      <div className="h-full flex items-center justify-center bg-asphalt">
+      <div className="h-full flex items-center justify-center bg-engine">
         <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
       </div>
     );
@@ -418,8 +520,8 @@ export default function MapView() {
               className={`
                 px-4 py-2 rounded-full font-mono text-[10px] font-black uppercase tracking-widest transition-all shrink-0 border
                 ${activeFilters.length === Object.values(mapMode === 'pit_stop' ? filterGroupsPitStop : filterGroupsRide).flat().length && !activeGroup
-                  ? 'bg-white text-black border-white shadow-lg shadow-white/20' 
-                  : 'bg-carbon/80 backdrop-blur-md text-steel border-white/5 hover:border-white/10'}
+                  ? 'bg-inverse text-inverse border-inverse shadow-lg shadow-inverse/20' 
+                  : 'bg-oil/80 backdrop-blur-md text-steel border-inverse/5 hover:border-inverse/10'}
               `}
             >
               {t('feed.category.all')}
@@ -431,8 +533,8 @@ export default function MapView() {
                 className={`
                   px-4 py-2 rounded-full font-mono text-[10px] font-black uppercase tracking-widest transition-all shrink-0 border
                   ${activeGroup === group 
-                    ? 'bg-white text-black border-white shadow-lg shadow-white/20' 
-                    : 'bg-carbon/80 backdrop-blur-md text-steel border-white/5 hover:border-white/10'}
+                    ? 'bg-inverse text-inverse border-inverse shadow-lg shadow-inverse/20' 
+                    : 'bg-oil/80 backdrop-blur-md text-steel border-inverse/5 hover:border-inverse/10'}
                 `}
               >
                 {t(group)}
@@ -459,8 +561,8 @@ export default function MapView() {
                       className={`
                         flex items-center gap-2 px-4 py-2 rounded-full font-mono text-[10px] font-black uppercase tracking-widest transition-all shrink-0 border
                         ${activeFilters.includes(key) 
-                          ? 'bg-primary text-asphalt border-primary shadow-lg shadow-primary/20' 
-                          : 'bg-carbon/80 backdrop-blur-md text-steel border-white/5 hover:border-white/10'}
+                          ? 'bg-primary text-inverse border-primary shadow-lg shadow-primary/20' 
+                          : 'bg-oil/80 backdrop-blur-md text-steel border-inverse/5 hover:border-inverse/10'}
                       `}
                     >
                       <div className="w-4 h-4 flex items-center justify-center" style={{ color: activeFilters.includes(key) ? 'inherit' : config.color }}>
@@ -483,7 +585,7 @@ export default function MapView() {
             initial={{ opacity: 0, x: 50 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 50 }}
-            className="absolute top-24 right-4 z-[1000] bg-carbon/90 backdrop-blur-xl border border-primary/30 p-3 rounded-2xl shadow-2xl shadow-primary/10 flex items-center gap-3 max-w-[250px] cursor-pointer hover:border-primary/60 transition-colors"
+            className="absolute top-24 right-4 z-[1000] bg-oil/90 backdrop-blur-xl border border-primary/30 p-3 rounded-2xl shadow-2xl shadow-primary/10 flex items-center gap-3 max-w-[250px] cursor-pointer hover:border-primary/60 transition-colors"
             onClick={() => {
               setMapMode('pit_stop');
               setMapCenter([-19.9440, -43.9398]); // BH Riders Café
@@ -496,7 +598,7 @@ export default function MapView() {
             </div>
             <div>
               <div className="text-[10px] font-mono font-black text-primary uppercase tracking-widest mb-0.5">{t('discover.smart.suggested')}</div>
-              <div className="text-xs text-white font-light leading-tight">{t('discover.smart.desc')}</div>
+              <div className="text-xs text-chrome font-light leading-tight">{t('discover.smart.desc')}</div>
             </div>
           </motion.div>
         )}
@@ -506,11 +608,11 @@ export default function MapView() {
       <div className="flex-1 relative z-0">
         {/* Search this area button */}
         {mapMode === 'pit_stop' && showSearchArea && (
-          <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[1000]">
+          <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[1000] flex flex-col items-center gap-3">
             <button
               onClick={searchThisArea}
               disabled={isSearchingArea}
-              className="bg-carbon/90 backdrop-blur-xl border border-white/10 px-4 py-2 rounded-full shadow-xl text-xs font-mono font-bold uppercase tracking-widest text-white hover:bg-primary hover:text-asphalt transition-all disabled:opacity-50 flex items-center gap-2"
+              className="bg-oil/90 backdrop-blur-xl border border-inverse/10 px-6 py-2.5 rounded-full shadow-xl text-xs font-mono font-bold uppercase tracking-widest text-chrome hover:bg-primary hover:text-inverse transition-all disabled:opacity-50 flex items-center gap-2"
             >
               {isSearchingArea ? (
                 <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
@@ -529,7 +631,7 @@ export default function MapView() {
           ref={setMapInstance}
         >
           <MapUpdater center={mapCenter} zoom={mapZoom} />
-          <MapEvents onMoveEnd={() => setShowSearchArea(true)} />
+          <MapEvents onMoveEnd={(bounds) => setShowSearchArea(true)} />
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
@@ -538,26 +640,26 @@ export default function MapView() {
             <Marker 
               key={place.id} 
               position={[place.lat, place.lng]} 
-              icon={createCustomIcon(place.category)}
+              icon={getCustomIcon(place.category)}
               ref={(r) => { markerRefs.current[place.id] = r; }}
             >
               <Popup className="custom-popup">
                 <div className="p-2 min-w-[200px]">
-                  <h3 className="font-display font-black uppercase italic text-asphalt leading-none tracking-tight mb-1">{place.name}</h3>
+                  <h3 className="font-display font-black uppercase italic text-inverse leading-none tracking-tight mb-1">{place.name}</h3>
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-[10px] font-mono font-black text-primary uppercase tracking-widest">
                       {t('category.' + place.category)}
                     </span>
                     {place.isExternal ? (
-                      <span className="text-[8px] font-mono font-bold bg-white/10 text-white px-1.5 py-0.5 rounded uppercase">Google</span>
+                      <span className="text-[8px] font-mono font-bold bg-inverse/10 text-chrome px-1.5 py-0.5 rounded uppercase">Google</span>
                     ) : (
-                      <span className="text-[8px] font-mono font-bold bg-primary/20 text-primary px-1.5 py-0.5 rounded uppercase">Verified</span>
+                      <span className="text-[8px] font-mono font-bold bg-primary/20 text-primary px-1.5 py-0.5 rounded uppercase">{t('common.verified')}</span>
                     )}
                   </div>
                   {place.isExternal ? (
                     <div className="flex items-center gap-1 mb-4">
                       <Star className="w-3 h-3 text-primary fill-primary" />
-                      <span className="text-xs font-bold text-asphalt">{place.rating || 'N/A'}</span>
+                      <span className="text-xs font-bold text-inverse">{place.rating || t('common.na')}</span>
                     </div>
                   ) : (
                     <MapRating 
@@ -575,7 +677,7 @@ export default function MapView() {
                     <div className="flex gap-2">
                       <button 
                         onClick={() => handlePlaceSelect(place)}
-                        className="flex-1 text-center bg-asphalt text-white text-[10px] font-mono font-bold uppercase tracking-widest py-2.5 rounded-xl hover:bg-primary hover:text-asphalt transition-all"
+                        className="flex-1 text-center bg-engine text-chrome text-[10px] font-mono font-bold uppercase tracking-widest py-2.5 rounded-xl hover:bg-primary hover:text-inverse transition-all"
                       >
                         {t('discover.focus')}
                       </button>
@@ -583,7 +685,7 @@ export default function MapView() {
                         href={getDirectionsUrl(place)}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex-1 text-center bg-primary text-asphalt text-[10px] font-mono font-bold uppercase tracking-widest py-2.5 rounded-xl hover:bg-white transition-all"
+                        className="flex-1 text-center bg-primary text-inverse text-[10px] font-mono font-bold uppercase tracking-widest py-2.5 rounded-xl hover:bg-inverse hover:text-inverse transition-all"
                       >
                         {t('discover.directions')}
                       </a>
@@ -591,7 +693,7 @@ export default function MapView() {
                     {place.username && (
                       <Link 
                         to={`/profile/${place.username}`}
-                        className="w-full text-center bg-white/10 text-white text-[10px] font-mono font-bold uppercase tracking-widest py-2.5 rounded-xl hover:bg-white/20 transition-all"
+                        className="w-full text-center bg-inverse/10 text-chrome text-[10px] font-mono font-bold uppercase tracking-widest py-2.5 rounded-xl hover:bg-inverse/20 transition-all"
                       >
                         {t('discover.viewProfile') || 'View Profile'}
                       </Link>
@@ -599,7 +701,7 @@ export default function MapView() {
                     {place.isExternal && (
                       <button 
                         onClick={() => showNotification('info', t('discover.suggestComingSoon'))}
-                        className="w-full text-center bg-white/10 text-white text-[10px] font-mono font-bold uppercase tracking-widest py-2.5 rounded-xl hover:bg-white/20 transition-all"
+                        className="w-full text-center bg-inverse/10 text-chrome text-[10px] font-mono font-bold uppercase tracking-widest py-2.5 rounded-xl hover:bg-inverse/20 transition-all"
                       >
                         {t('discover.suggestEcosystem')}
                       </button>
@@ -621,7 +723,7 @@ export default function MapView() {
             >
               <Popup className="custom-popup">
                 <div className="p-2 min-w-[200px]">
-                  <h3 className="font-display font-black uppercase italic text-asphalt leading-none tracking-tight mb-1">{route.name}</h3>
+                  <h3 className="font-display font-black uppercase italic text-inverse leading-none tracking-tight mb-1">{route.name}</h3>
                   <span className="text-[10px] font-mono font-black text-primary uppercase tracking-widest mb-2 block">
                     {t('category.' + route.category)}
                   </span>
@@ -635,11 +737,19 @@ export default function MapView() {
                     }} 
                   />
                   <p className="text-[11px] text-steel mb-4 line-clamp-2 leading-relaxed font-light">{route.details}</p>
-                  <button 
-                    className="w-full text-center bg-primary text-asphalt text-[10px] font-mono font-bold uppercase tracking-widest py-2.5 rounded-xl hover:bg-white transition-all"
-                  >
-                    {t('discover.startRide')}
-                  </button>
+                  <div className="flex gap-2">
+                    <button 
+                      className="flex-1 text-center bg-primary text-inverse text-[10px] font-mono font-bold uppercase tracking-widest py-2.5 rounded-xl hover:bg-inverse hover:text-inverse transition-all"
+                    >
+                      {t('discover.startRide')}
+                    </button>
+                    <button 
+                      onClick={() => handleSearchAlongRoute(route)}
+                      className="flex-1 text-center bg-inverse/10 text-chrome text-[10px] font-mono font-bold uppercase tracking-widest py-2.5 rounded-xl hover:bg-inverse/20 transition-all"
+                    >
+                      {t('discover.searchAlongRoute')}
+                    </button>
+                  </div>
                 </div>
               </Popup>
             </Polyline>
@@ -654,13 +764,13 @@ export default function MapView() {
           bottom: 'calc(5rem + 80px)' 
         }}
       >
-        <div className="bg-carbon/90 backdrop-blur-xl border border-white/10 p-1.5 rounded-full flex items-center shadow-2xl">
+        <div className="bg-oil/90 backdrop-blur-xl border border-inverse/10 p-1.5 rounded-full flex items-center shadow-2xl">
           <button 
             onClick={() => {
               setMapMode('ride');
               if (navigator.vibrate) navigator.vibrate(50);
             }}
-            className={`px-6 py-3 rounded-full font-display font-black uppercase italic tracking-widest text-xs flex items-center gap-2 transition-all ${mapMode === 'ride' ? 'bg-primary text-asphalt shadow-lg shadow-primary/20' : 'text-steel hover:text-white'}`}
+            className={`px-6 py-3 rounded-full font-display font-black uppercase italic tracking-widest text-xs flex items-center gap-2 transition-all ${mapMode === 'ride' ? 'bg-primary text-inverse shadow-lg shadow-primary/20' : 'text-steel hover:text-chrome'}`}
           >
             <Route className="w-4 h-4" /> {t('discover.ride')}
           </button>
@@ -669,7 +779,7 @@ export default function MapView() {
               setMapMode('pit_stop');
               if (navigator.vibrate) navigator.vibrate(50);
             }}
-            className={`px-6 py-3 rounded-full font-display font-black uppercase italic tracking-widest text-xs flex items-center gap-2 transition-all ${mapMode === 'pit_stop' ? 'bg-primary text-asphalt shadow-lg shadow-primary/20' : 'text-steel hover:text-white'}`}
+            className={`px-6 py-3 rounded-full font-display font-black uppercase italic tracking-widest text-xs flex items-center gap-2 transition-all ${mapMode === 'pit_stop' ? 'bg-primary text-inverse shadow-lg shadow-primary/20' : 'text-steel hover:text-chrome'}`}
           >
             <Coffee className="w-4 h-4" /> {t('discover.pitstop')}
           </button>
@@ -688,14 +798,14 @@ export default function MapView() {
             setMapCenter([-19.9167, -43.9345]);
             setMapZoom(12);
           }}
-          className="w-12 h-12 rounded-full bg-carbon/90 backdrop-blur-xl border border-white/10 flex items-center justify-center text-steel hover:text-white hover:border-white/30 transition-all shadow-xl"
+          className="w-12 h-12 rounded-full bg-oil/90 backdrop-blur-xl border border-inverse/10 flex items-center justify-center text-steel hover:text-chrome hover:border-inverse/30 transition-all shadow-xl"
         >
           <MapPin className="w-5 h-5" />
         </button>
         
         {mapMode === 'ride' ? (
           <>
-            <label className="w-12 h-12 rounded-full bg-carbon/90 backdrop-blur-xl border border-white/10 flex items-center justify-center text-steel hover:text-white hover:border-white/30 transition-all shadow-xl cursor-pointer" title={t('discover.uploadGPX')}>
+            <label className="w-12 h-12 rounded-full bg-oil/90 backdrop-blur-xl border border-inverse/10 flex items-center justify-center text-steel hover:text-chrome hover:border-inverse/30 transition-all shadow-xl cursor-pointer" title={t('discover.uploadGPX')}>
               <Upload className="w-5 h-5" />
               <input type="file" accept=".gpx" multiple className="hidden" onChange={handleFileUpload} />
             </label>
@@ -711,8 +821,8 @@ export default function MapView() {
               }}
               className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-xl ${
                 activeFilters.length > 0 
-                  ? 'bg-primary text-asphalt shadow-primary/20' 
-                  : 'bg-carbon/90 border-white/10 text-steel hover:text-white'
+                  ? 'bg-primary text-inverse shadow-primary/20' 
+                  : 'bg-oil/90 border-inverse/10 text-steel hover:text-chrome'
               }`}
             >
               <Route className="w-5 h-5" />
@@ -731,8 +841,8 @@ export default function MapView() {
             }}
             className={`w-12 h-12 rounded-full backdrop-blur-xl border flex items-center justify-center transition-all shadow-xl ${
               activeFilters.length > 0 
-                ? 'bg-primary border-primary text-asphalt shadow-primary/20' 
-                : 'bg-carbon/90 border-white/10 text-steel hover:text-white'
+                ? 'bg-primary border-primary text-inverse shadow-primary/20' 
+                : 'bg-oil/90 border-inverse/10 text-steel hover:text-chrome'
             }`}
           >
             <Filter className="w-5 h-5" />
@@ -752,10 +862,10 @@ export default function MapView() {
           >
             <button
               onClick={() => setIsLocationsWindowOpen(true)}
-              className="bg-carbon/90 backdrop-blur-xl border border-white/10 px-6 py-3 rounded-full flex items-center gap-2 shadow-2xl hover:border-primary/50 transition-all group"
+              className="bg-oil/90 backdrop-blur-xl border border-inverse/10 px-6 py-3 rounded-full flex items-center gap-2 shadow-2xl hover:border-primary/50 transition-all group"
             >
               <MapPin className="w-5 h-5 text-primary" />
-              <span className="font-display font-black uppercase italic tracking-widest text-xs text-white">
+              <span className="font-display font-black uppercase italic tracking-widest text-xs text-chrome">
                 {filteredPlaces.length} {t('discover.locationsNearby')}
               </span>
             </button>
@@ -771,19 +881,19 @@ export default function MapView() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 50, scale: 0.95 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="absolute bottom-[5rem] left-4 right-4 top-24 z-[1001] bg-asphalt/95 backdrop-blur-3xl border border-white/10 rounded-3xl shadow-2xl flex flex-col overflow-hidden"
+            className="absolute bottom-[5rem] left-4 right-4 top-24 z-[1001] bg-engine/95 backdrop-blur-3xl border border-inverse/10 rounded-3xl shadow-2xl flex flex-col overflow-hidden"
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-white/10 bg-carbon/50">
+            <div className="flex items-center justify-between p-4 border-b border-inverse/10 bg-oil/50">
               <div className="flex items-center gap-2">
                 <MapPin className="w-5 h-5 text-primary" />
-                <h3 className="font-display font-black uppercase italic tracking-widest text-sm text-white">
+                <h3 className="font-display font-black uppercase italic tracking-widest text-sm text-chrome">
                   {filteredPlaces.length} {t('discover.locationsNearby')}
                 </h3>
               </div>
               <button 
                 onClick={() => setIsLocationsWindowOpen(false)}
-                className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-steel hover:text-white hover:bg-white/10 transition-colors"
+                className="w-8 h-8 rounded-full bg-inverse/5 flex items-center justify-center text-steel hover:text-chrome hover:bg-inverse/10 transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -805,7 +915,7 @@ export default function MapView() {
                       className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-lg cursor-pointer"
                       style={{ backgroundColor: categoryConfig[place.category]?.color || '#f97316' }}
                     >
-                      {categoryConfig[place.category]?.icon || <MapPin className="w-6 h-6 text-white" />}
+                      {categoryConfig[place.category]?.icon || <MapPin className="w-6 h-6 text-chrome" />}
                     </div>
                     <div className="flex-1 min-w-0" onClick={() => {
                       handlePlaceSelect(place);
@@ -813,20 +923,20 @@ export default function MapView() {
                     }}>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2 truncate">
-                          <h4 className="font-display font-black uppercase italic tracking-tight text-white group-hover:text-primary transition-colors truncate cursor-pointer">
+                          <h4 className="font-display font-black uppercase italic tracking-tight text-chrome group-hover:text-primary transition-colors truncate cursor-pointer">
                             {place.name}
                           </h4>
                           {place.isExternal ? (
-                            <span className="text-[8px] font-mono font-bold bg-white/10 text-white px-1.5 py-0.5 rounded uppercase shrink-0">Google</span>
+                            <span className="text-[8px] font-mono font-bold bg-inverse/10 text-chrome px-1.5 py-0.5 rounded uppercase shrink-0">Google</span>
                           ) : (
-                            <span className="text-[8px] font-mono font-bold bg-primary/20 text-primary px-1.5 py-0.5 rounded uppercase shrink-0">Verified</span>
+                            <span className="text-[8px] font-mono font-bold bg-primary/20 text-primary px-1.5 py-0.5 rounded uppercase shrink-0">{t('common.verified')}</span>
                           )}
                         </div>
                         {place.username && (
                           <Link 
                             to={`/profile/${place.username}`}
                             onClick={(e) => e.stopPropagation()}
-                            className="p-2 bg-white/5 rounded-lg text-steel hover:text-primary hover:bg-primary/10 transition-all ml-2 shrink-0"
+                            className="p-2 bg-inverse/5 rounded-lg text-steel hover:text-primary hover:bg-primary/10 transition-all ml-2 shrink-0"
                             title={t('discover.viewProfile') || 'View Profile'}
                           >
                             <Users className="w-4 h-4" />
@@ -840,7 +950,7 @@ export default function MapView() {
                         {place.isExternal ? (
                           <div className="flex items-center gap-1 ml-auto shrink-0">
                             <Star className="w-3 h-3 text-primary fill-primary" />
-                            <span className="text-xs font-bold text-asphalt">{place.rating || 'N/A'}</span>
+                            <span className="text-xs font-bold text-inverse">{place.rating || t('common.na')}</span>
                           </div>
                         ) : (
                           <div className="ml-auto shrink-0">
@@ -861,7 +971,7 @@ export default function MapView() {
                       href={getDirectionsUrl(place)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="w-8 h-8 rounded-full bg-carbon flex items-center justify-center text-steel hover:text-primary transition-colors"
+                      className="w-8 h-8 rounded-full bg-oil flex items-center justify-center text-steel hover:text-primary transition-colors"
                     >
                       <Route className="w-4 h-4" />
                     </a>

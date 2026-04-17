@@ -64,7 +64,7 @@ export default function AdminLogin() {
   };
 
   return (
-    <div className="min-h-[calc(100dvh-5rem)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-black relative overflow-hidden grid-pattern">
+    <div className="min-h-[calc(100dvh-5rem)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-engine relative overflow-hidden grid-pattern">
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -74,15 +74,15 @@ export default function AdminLogin() {
           <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-primary/5 border border-primary/20 mb-6 shadow-2xl shadow-primary/10">
             <ShieldCheck className="w-10 h-10 text-primary" />
           </div>
-          <h2 className="text-4xl font-display font-black uppercase italic tracking-tighter mb-2 text-white">{t('admin.login.title')}</h2>
+          <h2 className="text-4xl font-display font-black uppercase italic tracking-tighter mb-2 text-chrome">{t('admin.login.title')}</h2>
           <p className="text-steel font-mono text-[10px] uppercase tracking-[0.3em]">{t('admin.login.subtitle')}</p>
         </div>
 
-        <div className="glass-card p-10 shadow-2xl border-white/5 relative overflow-hidden group">
+        <div className="glass-card p-10 shadow-2xl border-inverse/5 relative overflow-hidden group">
           <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -mr-16 -mt-16 blur-3xl opacity-0 group-hover:opacity-100 transition-opacity" />
           
           {error && (
-            <div className="mb-8 p-5 bg-red-500/5 border border-red-500/20 rounded-2xl text-red-400 text-[10px] font-mono uppercase tracking-widest flex items-start gap-4 shadow-xl">
+            <div className="mb-8 p-5 bg-error/5 border border-error/20 rounded-2xl text-error text-[10px] font-mono uppercase tracking-widest flex items-start gap-4 shadow-xl">
               <Lock className="w-4 h-4 mt-0.5 shrink-0" />
               <span>{error}</span>
             </div>
@@ -127,7 +127,7 @@ export default function AdminLogin() {
             </button>
           </form>
 
-          <div className="mt-10 pt-8 border-t border-white/5 text-center relative z-10">
+          <div className="mt-10 pt-8 border-t border-inverse/5 text-center relative z-10">
             <Link to="/login" className="text-steel hover:text-primary text-[10px] font-mono font-black uppercase tracking-widest transition-all">
               {t('admin.login.standardLogin')}
             </Link>

@@ -106,15 +106,15 @@ export default function QRScanner({ onScanSuccess, onScanError }: QRScannerProps
   }, [onScanSuccess, onScanError]);
 
   return (
-    <div className="w-full max-w-sm mx-auto overflow-hidden rounded-2xl border border-white/10 bg-black relative aspect-square flex items-center justify-center">
+    <div className="w-full max-w-sm mx-auto overflow-hidden rounded-2xl border border-inverse/10 bg-engine relative aspect-square flex items-center justify-center">
       {hasCamera === false && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-steel text-sm p-4 text-center z-10 bg-asphalt">
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-steel text-sm p-4 text-center z-10 bg-engine">
           <Camera className="w-8 h-8 mb-2 opacity-50" />
           <p>{t('scanner.noCamera')}</p>
         </div>
       )}
       {hasCamera === null && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-steel text-sm p-4 text-center z-10 bg-asphalt">
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-steel text-sm p-4 text-center z-10 bg-engine">
           <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mb-2" />
           <p>{t('scanner.requesting')}</p>
         </div>
@@ -122,7 +122,7 @@ export default function QRScanner({ onScanSuccess, onScanError }: QRScannerProps
       <div id="qr-reader" className="w-full h-full [&>video]:object-cover [&>video]:w-full [&>video]:h-full" />
       
       {isScanning && !scanSuccess && (
-        <div className="absolute inset-0 pointer-events-none border-[40px] border-black/50 z-20">
+        <div className="absolute inset-0 pointer-events-none border-[40px] border-inverse/50 z-20">
           <motion.div 
             className="w-full h-full border-2 border-primary/50 relative overflow-hidden"
             animate={{ 
@@ -152,15 +152,15 @@ export default function QRScanner({ onScanSuccess, onScanError }: QRScannerProps
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 z-30 flex items-center justify-center bg-green-500/20 backdrop-blur-sm"
+            className="absolute inset-0 z-30 flex items-center justify-center bg-success/20 backdrop-blur-sm"
           >
             <motion.div 
               initial={{ scale: 0.5, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ type: "spring", stiffness: 300, damping: 20 }}
-              className="w-24 h-24 bg-green-500 rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(34,197,94,0.5)]"
+              className="w-24 h-24 bg-success rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(34,197,94,0.5)]"
             >
-              <CheckCircle2 className="w-12 h-12 text-white" />
+              <CheckCircle2 className="w-12 h-12 text-chrome" />
             </motion.div>
           </motion.div>
         )}

@@ -45,11 +45,11 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ chatId }) => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-asphalt rounded-2xl border border-white/5 shadow-2xl">
+    <div className="flex flex-col h-full bg-engine rounded-2xl border border-inverse/5 shadow-2xl">
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.map((msg) => (
           <div key={msg.id} className={`flex ${msg.sender_id === currentUser?.id ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[70%] p-3 rounded-2xl ${msg.sender_id === currentUser?.id ? 'bg-primary text-asphalt' : 'bg-carbon text-white'}`}>
+            <div className={`max-w-[70%] p-3 rounded-2xl ${msg.sender_id === currentUser?.id ? 'bg-primary text-inverse' : 'bg-oil text-chrome'}`}>
               <p className="text-sm">{msg.text}</p>
               <span className="text-[10px] opacity-50 block mt-1">
                 {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -59,10 +59,11 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ chatId }) => {
         ))}
         <div ref={messagesEndRef} />
       </div>
-      <form onSubmit={handleSend} className="p-4 border-t border-white/5 flex gap-2">
+      <form onSubmit={handleSend} className="p-4 border-t border-inverse/5 flex gap-2">
         <input
           type="text"
           value={newMessage}
+          autoCapitalize="sentences"
           onChange={(e) => setNewMessage(e.target.value)}
           placeholder="Type a message..."
           className="input-field flex-1"

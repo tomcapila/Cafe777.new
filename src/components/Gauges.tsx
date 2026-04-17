@@ -37,10 +37,10 @@ const Gauge = ({ value, max, label, unit, color, id }: GaugeProps) => {
     <div className="flex flex-col items-center group">
       <div className="relative w-48 h-48 flex items-center justify-center">
         {/* Outer Ring */}
-        <div className="absolute inset-0 rounded-full border-4 border-asphalt shadow-[inset_0_0_20px_rgba(0,0,0,0.8),0_0_30px_rgba(0,0,0,0.5)] bg-carbon" />
+        <div className="absolute inset-0 rounded-full border-4 border-asphalt shadow-[inset_0_0_20px_rgba(0,0,0,0.8),0_0_30px_rgba(0,0,0,0.5)] bg-oil" />
         
         {/* Glass Effect Overlay */}
-        <div className="absolute inset-0 rounded-full bg-gradient-to-br from-white/5 to-transparent pointer-events-none z-30" />
+        <div className="absolute inset-0 rounded-full bg-gradient-to-br from-inverse/5 to-transparent pointer-events-none z-30" />
         
         <svg width="180" height="180" viewBox="-90 -90 180 180" className="relative z-10 overflow-visible">
           {/* Background Arc */}
@@ -91,7 +91,8 @@ const Gauge = ({ value, max, label, unit, color, id }: GaugeProps) => {
               <g key={i}>
                 <line
                   x1={x1} y1={y1} x2={x2} y2={y2}
-                  stroke="white"
+                  stroke="currentColor"
+                  className="text-chrome"
                   strokeWidth={tick >= max * 0.85 ? "2" : "1"}
                   opacity={tick >= max * 0.85 ? "0.6" : "0.3"}
                 />
@@ -99,7 +100,8 @@ const Gauge = ({ value, max, label, unit, color, id }: GaugeProps) => {
                   <text
                     x={Math.sin(angle) * (innerRadius - 22)}
                     y={-Math.cos(angle) * (innerRadius - 22)}
-                    fill="white"
+                    fill="currentColor"
+                    className="text-chrome"
                     fontSize="8"
                     textAnchor="middle"
                     alignmentBaseline="middle"
@@ -118,11 +120,10 @@ const Gauge = ({ value, max, label, unit, color, id }: GaugeProps) => {
             initial={{ rotate: -135 }}
             animate={{ rotate: rotationDegrees }}
             transition={{ type: "spring", stiffness: 50, damping: 15 }}
-            style={{ 
-              transformOrigin: "50% 50%",
-              transformBox: "view-box"
-            }}
+            style={{ originX: 0.5, originY: 0.5 }}
           >
+            {/* Invisible circle to force the bounding box to be perfectly centered at 0,0 */}
+            <circle cx="0" cy="0" r={radius} fill="transparent" className="opacity-0 pointer-events-none" />
             <line
               x1="0" y1="0" x2="0" y2={-radius + 15}
               stroke={color}
@@ -132,13 +133,13 @@ const Gauge = ({ value, max, label, unit, color, id }: GaugeProps) => {
             />
             <circle cx="0" cy="0" r="8" fill="#1a1a1a" stroke={color} strokeWidth="1" />
             <circle cx="0" cy="0" r="3" fill={color} />
-            <circle cx="0" cy="0" r="1" fill="white" />
+            <circle cx="0" cy="0" r="1" fill="currentColor" className="text-chrome" />
           </motion.g>
         </svg>
 
         {/* Digital Display */}
         <div className="absolute bottom-12 left-0 right-0 flex flex-col items-center z-20">
-          <span className="text-2xl font-mono font-bold text-white tracking-tighter">
+          <span className="text-2xl font-mono font-bold text-chrome tracking-tighter">
             {value.toLocaleString()}
           </span>
           <span className="text-[9px] font-mono font-black uppercase tracking-[0.2em] text-steel">
@@ -198,7 +199,7 @@ export default function Gauges() {
     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
       <div className="relative group w-full">
         <div className="absolute -inset-1 bg-gradient-to-r from-primary/20 to-primary/0 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
-        <div className="relative bg-carbon/40 backdrop-blur-sm border border-white/5 p-8 rounded-2xl flex flex-col items-center">
+        <div className="relative bg-oil/40 backdrop-blur-sm border border-inverse/5 p-8 rounded-2xl flex flex-col items-center">
           <Gauge 
             id="riders"
             value={stats.riders} 
@@ -212,7 +213,7 @@ export default function Gauges() {
       
       <div className="relative group w-full">
         <div className="absolute -inset-1 bg-gradient-to-r from-accent/20 to-accent/0 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
-        <div className="relative bg-carbon/40 backdrop-blur-sm border border-white/5 p-8 rounded-2xl flex flex-col items-center">
+        <div className="relative bg-oil/40 backdrop-blur-sm border border-inverse/5 p-8 rounded-2xl flex flex-col items-center">
           <Gauge 
             id="ecosystems"
             value={stats.ecosystems} 

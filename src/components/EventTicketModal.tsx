@@ -34,20 +34,20 @@ export default function EventTicketModal({ eventId, eventName, userId, participa
   }, [eventId, userId]);
 
   return (
-    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-engine/80 z-50 flex items-center justify-center p-4">
       <div className="glass-card p-8 max-w-sm w-full relative flex flex-col items-center text-center">
-        <button onClick={onClose} className="absolute top-4 right-4 text-steel hover:text-white">
+        <button onClick={onClose} className="absolute top-4 right-4 text-steel hover:text-chrome">
           <X className="w-6 h-6" />
         </button>
         
         <h2 className="text-2xl font-display font-black uppercase italic tracking-tighter mb-2 text-primary">Your Ticket</h2>
         <p className="text-sm text-steel mb-8 font-mono uppercase tracking-widest">{eventName}</p>
         
-        <div className="bg-white p-4 rounded-2xl mb-8 shadow-2xl">
+        <div className="bg-chrome p-4 rounded-2xl mb-8 shadow-2xl">
           {qrCodeUrl ? (
             <img src={qrCodeUrl} alt="Event Ticket QR Code" className="w-64 h-64" />
           ) : (
-            <div className="w-64 h-64 flex items-center justify-center bg-gray-100 rounded-xl">
+            <div className="w-64 h-64 flex items-center justify-center bg-engine rounded-xl">
               <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
             </div>
           )}

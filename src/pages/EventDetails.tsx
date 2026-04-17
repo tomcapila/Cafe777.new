@@ -9,6 +9,7 @@ import EventAttendanceModal from '../components/EventAttendanceModal';
 import EventTicketModal from '../components/EventTicketModal';
 import PremiumBadge from '../components/PremiumBadge';
 import { useFeatureAccess } from '../hooks/useFeatureAccess';
+import LocationAutocomplete from '../components/LocationAutocomplete';
 import { QrCode, ClipboardList } from 'lucide-react';
 
 export default function EventDetails() {
@@ -406,7 +407,7 @@ export default function EventDetails() {
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="glass-card overflow-hidden shadow-2xl border-white/5"
+        className="glass-card overflow-hidden shadow-2xl border-inverse/5"
       >
         <div className="aspect-[21/9] w-full relative">
           <img 
@@ -436,13 +437,13 @@ export default function EventDetails() {
                   {t('event.details.posted')} {new Date(event.created_at).toLocaleDateString(locale)}
                 </span>
               </div>
-              <h1 className="text-5xl sm:text-7xl font-display font-black uppercase italic tracking-tighter mb-10 leading-[0.85] text-white">
+              <h1 className="text-5xl sm:text-7xl font-display font-black uppercase italic tracking-tighter mb-10 leading-[0.85] text-chrome">
                 {event.title}
               </h1>
               
               <div className="grid sm:grid-cols-2 gap-8">
                 <div className="flex items-center gap-5 group">
-                  <div className="w-14 h-14 rounded-2xl bg-asphalt border border-white/5 flex items-center justify-center text-primary group-hover:border-primary/30 transition-all shadow-xl">
+                  <div className="w-14 h-14 rounded-2xl bg-engine border border-inverse/5 flex items-center justify-center text-primary group-hover:border-primary/30 transition-all shadow-xl">
                     <Calendar className="w-7 h-7" />
                   </div>
                   <div>
@@ -451,7 +452,7 @@ export default function EventDetails() {
                   </div>
                 </div>
                 <div className="flex items-center gap-5 group">
-                  <div className="w-14 h-14 rounded-2xl bg-asphalt border border-white/5 flex items-center justify-center text-primary group-hover:border-primary/30 transition-all shadow-xl">
+                  <div className="w-14 h-14 rounded-2xl bg-engine border border-inverse/5 flex items-center justify-center text-primary group-hover:border-primary/30 transition-all shadow-xl">
                     <Star className="w-7 h-7" />
                   </div>
                   <div>
@@ -460,7 +461,7 @@ export default function EventDetails() {
                   </div>
                 </div>
                 <div className="flex items-center gap-5 group">
-                  <div className="w-14 h-14 rounded-2xl bg-asphalt border border-white/5 flex items-center justify-center text-primary group-hover:border-primary/30 transition-all shadow-xl">
+                  <div className="w-14 h-14 rounded-2xl bg-engine border border-inverse/5 flex items-center justify-center text-primary group-hover:border-primary/30 transition-all shadow-xl">
                     <Clock className="w-7 h-7" />
                   </div>
                   <div>
@@ -469,7 +470,7 @@ export default function EventDetails() {
                   </div>
                 </div>
                 <div className="flex items-center gap-5 group">
-                  <div className="w-14 h-14 rounded-2xl bg-asphalt border border-white/5 flex items-center justify-center text-primary group-hover:border-primary/30 transition-all shadow-xl">
+                  <div className="w-14 h-14 rounded-2xl bg-engine border border-inverse/5 flex items-center justify-center text-primary group-hover:border-primary/30 transition-all shadow-xl">
                     <MapPin className="w-7 h-7" />
                   </div>
                   <div>
@@ -479,18 +480,18 @@ export default function EventDetails() {
                 </div>
                 {event.rsvp_count > 0 && (
                   <div className="flex items-center gap-5 group">
-                    <div className="w-14 h-14 rounded-2xl bg-asphalt border border-white/5 flex items-center justify-center text-primary group-hover:border-primary/30 transition-all shadow-xl shadow-primary/5">
+                    <div className="w-14 h-14 rounded-2xl bg-engine border border-inverse/5 flex items-center justify-center text-primary group-hover:border-primary/30 transition-all shadow-xl shadow-primary/5">
                       <Users className="w-7 h-7" />
                     </div>
                     <div>
                       <div className="text-[10px] font-mono font-black text-steel uppercase tracking-widest mb-1">{t('eventDetails.attendance')}</div>
-                      <div className="font-display font-black uppercase italic text-lg tracking-tight text-white group-hover:text-primary transition-colors">{event.rsvp_count} {t('eventDetails.riders')}</div>
+                      <div className="font-display font-black uppercase italic text-lg tracking-tight text-chrome group-hover:text-primary transition-colors">{event.rsvp_count} {t('eventDetails.riders')}</div>
                     </div>
                   </div>
                 )}
                 {event.participation_badge_name && (
                   <div className="flex items-center gap-5 group">
-                    <div className="w-14 h-14 rounded-2xl bg-asphalt border border-white/5 flex items-center justify-center text-primary group-hover:border-primary/30 transition-all shadow-xl">
+                    <div className="w-14 h-14 rounded-2xl bg-engine border border-inverse/5 flex items-center justify-center text-primary group-hover:border-primary/30 transition-all shadow-xl">
                       <ShieldCheck className="w-7 h-7" />
                     </div>
                     <div>
@@ -501,7 +502,7 @@ export default function EventDetails() {
                 )}
                 {event.stamp_name && (
                   <div className="flex items-center gap-5 group">
-                    <div className="w-14 h-14 rounded-2xl bg-asphalt border border-white/5 flex items-center justify-center text-primary group-hover:border-primary/30 transition-all shadow-xl">
+                    <div className="w-14 h-14 rounded-2xl bg-engine border border-inverse/5 flex items-center justify-center text-primary group-hover:border-primary/30 transition-all shadow-xl">
                       <ShieldCheck className="w-7 h-7" />
                     </div>
                     <div>
@@ -514,15 +515,15 @@ export default function EventDetails() {
             </div>
 
             <div className="lg:w-80 shrink-0">
-              <div className="glass-card p-8 shadow-2xl border-white/5 relative overflow-hidden group">
+              <div className="glass-card p-8 shadow-2xl border-inverse/5 relative overflow-hidden group">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -mr-16 -mt-16 blur-3xl opacity-0 group-hover:opacity-100 transition-opacity" />
                 
                 <button 
                   onClick={handleRSVP}
                   className={`w-full py-5 rounded-2xl font-display font-black uppercase italic text-xl tracking-widest transition-all mb-4 relative z-10 ${
                     event.has_rsvpd 
-                      ? 'bg-primary text-asphalt hover:bg-oil shadow-xl shadow-primary/20' 
-                      : 'bg-white/5 text-white border border-white/10 hover:bg-white/10'
+                      ? 'bg-primary text-inverse hover:bg-oil shadow-xl shadow-primary/20' 
+                      : 'bg-inverse/5 text-chrome border border-inverse/10 hover:bg-inverse/10'
                   }`}
                 >
                   {event.has_rsvpd ? t('events.attending') : t('events.rsvp')}
@@ -531,7 +532,7 @@ export default function EventDetails() {
                 {event.has_rsvpd && (
                   <button 
                     onClick={() => setIsTicketModalOpen(true)}
-                    className="w-full py-4 rounded-2xl font-mono font-black text-[10px] uppercase tracking-[0.2em] text-white bg-white/5 hover:bg-white/10 border border-white/10 transition-all flex items-center justify-center gap-3 relative z-10 mb-6"
+                    className="w-full py-4 rounded-2xl font-mono font-black text-[10px] uppercase tracking-[0.2em] text-chrome bg-inverse/5 hover:bg-inverse/10 border border-inverse/10 transition-all flex items-center justify-center gap-3 relative z-10 mb-6"
                   >
                     <QrCode className="w-4 h-4" />
                     {t('event.details.showTicket')}
@@ -571,7 +572,7 @@ export default function EventDetails() {
             </div>
           </div>
 
-          <div className="grid lg:grid-cols-3 gap-20 pt-16 border-t border-white/5">
+          <div className="grid lg:grid-cols-3 gap-20 pt-16 border-t border-inverse/5">
             <div className="lg:col-span-2">
               <h2 className="text-3xl font-display font-black uppercase italic tracking-tighter mb-8 text-primary">{t('eventDetails.about')}</h2>
               <div className="prose prose-invert max-w-none text-steel leading-relaxed whitespace-pre-wrap font-light text-lg">
@@ -583,7 +584,7 @@ export default function EventDetails() {
               <h2 className="text-3xl font-display font-black uppercase italic tracking-tighter mb-8 text-primary">{t('eventDetails.hostedBy')}</h2>
               <Link 
                 to={`/profile/${event.username}`}
-                className="group flex items-center gap-6 glass-card p-6 border-white/5 hover:border-primary/30 transition-all shadow-xl relative overflow-hidden"
+                className="group flex items-center gap-6 glass-card p-6 border-inverse/5 hover:border-primary/30 transition-all shadow-xl relative overflow-hidden"
               >
                 <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                 <img 
@@ -593,7 +594,7 @@ export default function EventDetails() {
                   referrerPolicy="no-referrer"
                 />
                 <div className="relative z-10">
-                  <div className="text-xl font-display font-black uppercase italic tracking-tight text-white group-hover:text-primary transition-colors leading-none mb-2 flex items-center gap-1.5">
+                  <div className="text-xl font-display font-black uppercase italic tracking-tight text-chrome group-hover:text-primary transition-colors leading-none mb-2 flex items-center gap-1.5">
                     {event.company_name || event.username}
                     {event.plan === 'premium' && <PremiumBadge size={12} />}
                   </div>
@@ -605,22 +606,22 @@ export default function EventDetails() {
           </div>
 
           {/* Gallery Section */}
-          <div className="pt-16 border-t border-white/5">
+          <div className="pt-16 border-t border-inverse/5">
             <h2 className="text-3xl font-display font-black uppercase italic tracking-tighter mb-8 text-primary">{t('event.details.gallery')}</h2>
             
             {currentUser && (event.has_rsvpd || currentUser.role === 'admin' || currentUser.id === event.user_id) && (
               <div 
-                className={`mb-8 border-2 border-dashed rounded-2xl p-8 text-center transition-all ${isDragging ? 'border-primary bg-primary/10' : 'border-white/20 hover:border-primary/50'}`}
+                className={`mb-8 border-2 border-dashed rounded-2xl p-8 text-center transition-all ${isDragging ? 'border-primary bg-primary/10' : 'border-inverse/20 hover:border-primary/50'}`}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
               >
                 <Upload className={`w-12 h-12 mx-auto mb-4 ${isDragging ? 'text-primary' : 'text-steel'}`} />
-                <h3 className="text-xl font-display font-black uppercase italic tracking-tight text-white mb-2">
+                <h3 className="text-xl font-display font-black uppercase italic tracking-tight text-chrome mb-2">
                   {isUploading ? t('event.details.uploading') : t('event.details.dropPhotos')}
                 </h3>
                 <p className="text-sm font-mono text-steel mb-6">{t('event.details.orClickToBrowse')}</p>
-                <label className={`inline-flex items-center gap-2 px-6 py-3 bg-primary text-asphalt rounded-2xl font-display font-black uppercase italic tracking-widest cursor-pointer hover:bg-oil transition-all ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                <label className={`inline-flex items-center gap-2 px-6 py-3 bg-primary text-inverse rounded-2xl font-display font-black uppercase italic tracking-widest cursor-pointer hover:bg-oil transition-all ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}>
                   <Upload className="w-5 h-5" />
                   {t('event.details.uploadPhoto')}
                   <input type="file" className="hidden" accept="image/*" multiple onChange={handleUploadPhoto} disabled={isUploading} />
@@ -631,12 +632,12 @@ export default function EventDetails() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
               {photos.map((photo: any) => (
                 <div key={photo.id} className="relative group cursor-zoom-in" onClick={() => setSelectedPhoto(photo.image_url)}>
-                  <img src={photo.image_url} alt="Event" className="w-full aspect-square object-cover rounded-2xl border border-white/5 transition-all group-hover:scale-[1.02]" referrerPolicy="no-referrer" />
+                  <img src={photo.image_url} alt="Event" className="w-full aspect-square object-cover rounded-2xl border border-inverse/5 transition-all group-hover:scale-[1.02]" referrerPolicy="no-referrer" />
                   <div className="absolute top-2 right-2 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                     {contestSettings.enabled && (
                       <button 
                         onClick={() => handlePromotePhoto(photo.id)}
-                        className="p-2 bg-primary text-asphalt rounded-full hover:bg-white transition-colors"
+                        className="p-2 bg-primary text-inverse rounded-full hover:bg-inverse hover:text-inverse transition-colors"
                         title={t('event.details.promoteToContest')}
                       >
                         <Trophy className="w-4 h-4" />
@@ -645,7 +646,7 @@ export default function EventDetails() {
                     {(currentUser?.role === 'admin' || Number(currentUser?.id) === Number(photo.user_id) || Number(currentUser?.id) === Number(event.user_id)) && (
                       <button 
                         onClick={() => handleDeletePhoto(photo.id)}
-                        className="p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+                        className="p-2 bg-error text-chrome rounded-full hover:bg-error transition-colors"
                         title={t('common.delete')}
                       >
                         <Trash2 className="w-4 h-4" />
@@ -664,14 +665,14 @@ export default function EventDetails() {
                     <div className="flex items-center gap-3">
                       <button 
                         onClick={handleApproveAll}
-                        className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-400 rounded-xl font-mono text-[10px] font-black uppercase tracking-widest border border-emerald-500/20 hover:bg-emerald-500 hover:text-white transition-all"
+                        className="flex items-center gap-2 px-4 py-2 bg-success/10 text-success rounded-xl font-mono text-[10px] font-black uppercase tracking-widest border border-success/20 hover:bg-success hover:text-chrome transition-all"
                       >
                         <Check className="w-4 h-4" />
                         {t('event.details.approveAll')}
                       </button>
                       <button 
                         onClick={handleRejectAll}
-                        className="flex items-center gap-2 px-4 py-2 bg-red-500/10 text-red-400 rounded-xl font-mono text-[10px] font-black uppercase tracking-widest border border-red-500/20 hover:bg-red-500 hover:text-white transition-all"
+                        className="flex items-center gap-2 px-4 py-2 bg-error/10 text-error rounded-xl font-mono text-[10px] font-black uppercase tracking-widest border border-error/20 hover:bg-error hover:text-chrome transition-all"
                       >
                         <X className="w-4 h-4" />
                         {t('event.details.rejectAll')}
@@ -681,36 +682,36 @@ export default function EventDetails() {
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                   {pendingPhotos.map((photo: any) => (
-                    <div key={photo.id} className="relative group overflow-hidden rounded-2xl border border-white/5 bg-asphalt/50">
+                    <div key={photo.id} className="relative group overflow-hidden rounded-2xl border border-inverse/5 bg-engine/50">
                       <img src={photo.image_url} alt="Pending" className="w-full aspect-square object-cover opacity-50 grayscale" referrerPolicy="no-referrer" />
                       
                       {/* Pending Badge */}
                       <div className="absolute top-3 left-3 z-10">
-                        <span className="bg-asphalt/90 backdrop-blur-md px-2.5 py-1 rounded-lg text-[7px] font-mono font-black uppercase tracking-[0.2em] text-primary border border-primary/20 shadow-xl">
+                        <span className="bg-engine/90 backdrop-blur-md px-2.5 py-1 rounded-lg text-[7px] font-mono font-black uppercase tracking-[0.2em] text-primary border border-primary/20 shadow-xl">
                           {t('event.details.pending')}
                         </span>
                       </div>
 
                       {/* Moderation Actions */}
                       {(currentUser?.role === 'admin' || Number(currentUser?.id) === Number(event.user_id)) && (
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col items-center justify-center gap-3 z-20">
+                        <div className="absolute inset-0 bg-engine/40 opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col items-center justify-center gap-3 z-20">
                           <div className="flex items-center gap-3">
                             <button 
                               onClick={() => handlePhotoStatus(photo.id, 'approved')} 
-                              className="p-3 bg-emerald-500 text-white rounded-full hover:scale-110 hover:bg-emerald-400 transition-all shadow-lg group/btn"
+                              className="p-3 bg-success text-chrome rounded-full hover:scale-110 hover:bg-success transition-all shadow-lg group/btn"
                               title={t('event.details.approve')}
                             >
                               <Check className="w-5 h-5" />
                             </button>
                             <button 
                               onClick={() => handlePhotoStatus(photo.id, 'rejected')} 
-                              className="p-3 bg-red-500 text-white rounded-full hover:scale-110 hover:bg-red-400 transition-all shadow-lg group/btn"
+                              className="p-3 bg-error text-chrome rounded-full hover:scale-110 hover:bg-error transition-all shadow-lg group/btn"
                               title={t('event.details.reject')}
                             >
                               <X className="w-5 h-5" />
                             </button>
                           </div>
-                          <span className="text-[8px] font-mono font-black uppercase tracking-widest text-white/70">{t('admin.table.actions')}</span>
+                          <span className="text-[8px] font-mono font-black uppercase tracking-widest text-chrome/70">{t('admin.table.actions')}</span>
                         </div>
                       )}
 
@@ -718,7 +719,7 @@ export default function EventDetails() {
                       {(Number(currentUser?.id) === Number(photo.user_id)) && (
                         <button 
                           onClick={() => handleDeletePhoto(photo.id)}
-                          className="absolute top-3 right-3 p-2 bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white rounded-lg backdrop-blur-md border border-red-500/20 transition-all z-30 opacity-0 group-hover:opacity-100"
+                          className="absolute top-3 right-3 p-2 bg-error/20 text-error hover:bg-error hover:text-chrome rounded-lg backdrop-blur-md border border-error/20 transition-all z-30 opacity-0 group-hover:opacity-100"
                           title={t('common.delete')}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -734,11 +735,11 @@ export default function EventDetails() {
       </motion.div>
 
       {isEditing && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-engine/80 z-50 flex items-center justify-center p-4">
           <div className="glass-card p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <h2 className="text-3xl font-display font-black uppercase italic tracking-tighter mb-8 text-primary">{t('event.details.editEvent')}</h2>
             <form onSubmit={handleUpdateEvent} className="space-y-6">
-              <input type="text" value={editEventData.title || ''} onChange={e => setEditEventData({...editEventData, title: e.target.value})} className="input-field" placeholder={t('event.field.title')} required />
+              <input type="text" autoCapitalize="sentences" value={editEventData.title || ''} onChange={e => setEditEventData({...editEventData, title: e.target.value})} className="input-field" placeholder={t('event.field.title')} required />
               <select
                 required
                 value={editEventData.category || 'road_trip'}
@@ -752,21 +753,25 @@ export default function EventDetails() {
                 <option value="other">{t('events.category.other')}</option>
               </select>
               <input type="date" value={editEventData.date || ''} onChange={e => setEditEventData({...editEventData, date: e.target.value})} className="input-field" required />
-              <input type="text" value={editEventData.time || ''} onChange={e => setEditEventData({...editEventData, time: e.target.value})} className="input-field" placeholder={t('event.field.time')} />
-              <input type="text" value={editEventData.location || ''} onChange={e => setEditEventData({...editEventData, location: e.target.value})} className="input-field" placeholder={t('event.field.location')} />
+              <input type="text" autoCapitalize="sentences" value={editEventData.time || ''} onChange={e => setEditEventData({...editEventData, time: e.target.value})} className="input-field" placeholder={t('event.field.time')} />
+              <LocationAutocomplete
+                value={editEventData.location}
+                onChange={(value) => setEditEventData({...editEventData, location: value})}
+                placeholder={t('event.field.location')}
+              />
               
               <div className="space-y-4">
                 <label className="text-[10px] font-mono font-bold text-steel uppercase tracking-widest ml-1">{t('event.field.coverImage')}</label>
                 <div className="flex items-center gap-6">
                   <div 
                     onClick={() => editFileInputRef.current?.click()}
-                    className="w-28 h-28 rounded-3xl bg-asphalt border border-white/10 flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 transition-all overflow-hidden relative group shadow-xl"
+                    className="w-28 h-28 rounded-3xl bg-engine border border-inverse/10 flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 transition-all overflow-hidden relative group shadow-xl"
                   >
                     {editEventData.image_url ? (
                       <>
                         <img src={editEventData.image_url} alt="Event" className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all" />
-                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                          <Plus className="w-8 h-8 text-white" />
+                        <div className="absolute inset-0 bg-engine/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                          <Plus className="w-8 h-8 text-chrome" />
                         </div>
                       </>
                     ) : (
@@ -776,7 +781,7 @@ export default function EventDetails() {
                       </>
                     )}
                     {isUploadingEdit && (
-                      <div className="absolute inset-0 bg-asphalt/90 flex items-center justify-center">
+                      <div className="absolute inset-0 bg-engine/90 flex items-center justify-center">
                         <Clock className="w-6 h-6 text-primary animate-spin" />
                       </div>
                     )}
@@ -794,7 +799,7 @@ export default function EventDetails() {
                       <button 
                         type="button"
                         onClick={() => setEditEventData(prev => ({ ...prev, image_url: '' }))}
-                        className="text-[10px] font-mono font-black text-accent uppercase tracking-widest hover:text-red-400 transition-colors"
+                        className="text-[10px] font-mono font-black text-accent uppercase tracking-widest hover:text-error transition-colors"
                       >
                         {t('event.field.remove')}
                       </button>
@@ -819,7 +824,7 @@ export default function EventDetails() {
                           <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
                             <ShieldCheck className="w-4 h-4 text-primary" />
                           </div>
-                          <span className="text-white">
+                          <span className="text-chrome">
                             {stamps.find(s => s.id === editEventData.participation_stamp_id)?.name}
                           </span>
                         </>
@@ -836,9 +841,9 @@ export default function EventDetails() {
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 10 }}
-                        className="absolute z-50 w-full mt-2 bg-asphalt border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
+                        className="absolute z-50 w-full mt-2 bg-engine border border-inverse/10 rounded-2xl shadow-2xl overflow-hidden"
                       >
-                        <div className="p-4 border-bottom border-white/5">
+                        <div className="p-4 border-bottom border-inverse/5">
                           <div className="relative">
                             <Search className="w-4 h-4 text-steel absolute left-3 top-1/2 -translate-y-1/2" />
                             <input
@@ -846,7 +851,7 @@ export default function EventDetails() {
                               placeholder="Search stamps..."
                               value={stampSearchTerm}
                               onChange={(e) => setStampSearchTerm(e.target.value)}
-                              className="w-full bg-carbon border border-white/5 rounded-xl pl-10 pr-4 py-2 text-xs text-white focus:outline-none focus:border-primary transition-all"
+                              className="w-full bg-oil border border-inverse/5 rounded-xl pl-10 pr-4 py-2 text-xs text-chrome focus:outline-none focus:border-primary transition-all"
                             />
                           </div>
                         </div>
@@ -857,9 +862,9 @@ export default function EventDetails() {
                               setEditEventData({ ...editEventData, participation_stamp_id: null });
                               setIsStampSelectorOpen(false);
                             }}
-                            className="w-full px-4 py-3 text-left hover:bg-white/5 transition-colors flex items-center gap-3 border-b border-white/5"
+                            className="w-full px-4 py-3 text-left hover:bg-inverse/5 transition-colors flex items-center gap-3 border-b border-inverse/5"
                           >
-                            <div className="w-8 h-8 rounded-full bg-carbon flex items-center justify-center border border-white/10">
+                            <div className="w-8 h-8 rounded-full bg-oil flex items-center justify-center border border-inverse/10">
                               <X className="w-4 h-4 text-steel" />
                             </div>
                             <span className="text-[10px] font-mono font-black uppercase tracking-widest text-steel">
@@ -876,13 +881,13 @@ export default function EventDetails() {
                                   setEditEventData({ ...editEventData, participation_stamp_id: stamp.id });
                                   setIsStampSelectorOpen(false);
                                 }}
-                                className="w-full px-4 py-3 text-left hover:bg-white/5 transition-colors flex items-center gap-3 border-b border-white/5 last:border-0"
+                                className="w-full px-4 py-3 text-left hover:bg-inverse/5 transition-colors flex items-center gap-3 border-b border-inverse/5 last:border-0"
                               >
                                 <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20">
                                   <ShieldCheck className="w-4 h-4 text-primary" />
                                 </div>
                                 <div className="flex flex-col">
-                                  <span className="text-[10px] font-mono font-black uppercase tracking-widest text-white">
+                                  <span className="text-[10px] font-mono font-black uppercase tracking-widest text-chrome">
                                     {stamp.name}
                                   </span>
                                   <span className="text-[8px] font-mono text-steel uppercase tracking-widest">
@@ -897,7 +902,7 @@ export default function EventDetails() {
                   </AnimatePresence>
                 </div>
               </div>
-              <textarea value={editEventData.description || ''} onChange={e => setEditEventData({...editEventData, description: e.target.value})} className="input-field" placeholder={t('event.field.description')} rows={4} />
+              <textarea autoCapitalize="sentences" value={editEventData.description || ''} onChange={e => setEditEventData({...editEventData, description: e.target.value})} className="input-field" placeholder={t('event.field.description')} rows={4} />
               <div className="flex gap-4">
                 <button type="submit" className="btn-primary flex-1">{t('common.save')}</button>
                 <button type="button" onClick={() => setIsEditing(false)} className="btn-secondary flex-1">{t('common.cancel')}</button>
@@ -908,9 +913,9 @@ export default function EventDetails() {
       )}
 
       {isShareModalOpen && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-engine/80 z-50 flex items-center justify-center p-4">
           <div className="glass-card p-8 max-w-md w-full relative">
-            <button onClick={() => setIsShareModalOpen(false)} className="absolute top-4 right-4 text-steel hover:text-white">
+            <button onClick={() => setIsShareModalOpen(false)} className="absolute top-4 right-4 text-steel hover:text-chrome">
               <X className="w-6 h-6" />
             </button>
             <h2 className="text-2xl font-display font-black uppercase italic tracking-tighter mb-6 text-primary">{t('event.share.title')}</h2>
@@ -922,27 +927,27 @@ export default function EventDetails() {
                   showNotification('success', t('event.share.copySuccess'));
                   setIsShareModalOpen(false);
                 }}
-                className="w-full py-4 rounded-2xl font-mono font-black text-[10px] uppercase tracking-[0.2em] text-white bg-white/5 hover:bg-white/10 transition-all flex items-center justify-center gap-3 border border-white/10"
+                className="w-full py-4 rounded-2xl font-mono font-black text-[10px] uppercase tracking-[0.2em] text-chrome bg-inverse/5 hover:bg-inverse/10 transition-all flex items-center justify-center gap-3 border border-inverse/10"
               >
                 <ArrowLeft className="w-4 h-4" />
                 {t('event.share.copyLink')}
               </button>
 
               <div className="relative flex items-center py-4">
-                <div className="flex-grow border-t border-white/10"></div>
+                <div className="flex-grow border-t border-inverse/10"></div>
                 <span className="flex-shrink-0 mx-4 text-steel text-xs font-mono uppercase">{t('event.share.orShareToFeed')}</span>
-                <div className="flex-grow border-t border-white/10"></div>
+                <div className="flex-grow border-t border-inverse/10"></div>
               </div>
 
               {/* Event Preview Card */}
-              <div className="p-4 rounded-3xl border border-white/10 bg-carbon/50 overflow-hidden relative mb-4">
+              <div className="p-4 rounded-3xl border border-inverse/10 bg-oil/50 overflow-hidden relative mb-4">
                 <div className="flex items-center gap-4">
                   <div className="w-16 h-16 shrink-0 rounded-xl overflow-hidden">
                     <img src={event.image_url} alt={event.title} className="w-full h-full object-cover grayscale" referrerPolicy="no-referrer" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="text-[8px] font-mono font-black text-primary uppercase tracking-[0.2em] mb-1">{t('event.share.preview')}</div>
-                    <h4 className="text-sm font-display font-black uppercase italic tracking-tight text-white truncate">{event.title}</h4>
+                    <h4 className="text-sm font-display font-black uppercase italic tracking-tight text-chrome truncate">{event.title}</h4>
                     <div className="text-[10px] text-steel font-mono uppercase truncate">{event.location}</div>
                   </div>
                 </div>
@@ -952,7 +957,7 @@ export default function EventDetails() {
                 value={shareContent || ''}
                 onChange={(e) => setShareContent(e.target.value)}
                 placeholder={t('event.share.placeholder')}
-                className="w-full bg-asphalt/50 border border-white/10 rounded-2xl p-4 text-white placeholder:text-steel focus:outline-none focus:border-primary/50 transition-colors resize-none h-24 mb-6"
+                className="w-full bg-engine/50 border border-inverse/10 rounded-2xl p-4 text-chrome placeholder:text-steel focus:outline-none focus:border-primary/50 transition-colors resize-none h-24 mb-6"
               />
               
               <button 
@@ -985,7 +990,7 @@ export default function EventDetails() {
                     showNotification('error', t('event.share.failed'));
                   }
                 }}
-                className="w-full py-4 rounded-2xl font-mono font-black text-[10px] uppercase tracking-[0.2em] text-asphalt bg-primary hover:bg-oil transition-all flex items-center justify-center gap-3 shadow-xl shadow-primary/20"
+                className="w-full py-4 rounded-2xl font-mono font-black text-[10px] uppercase tracking-[0.2em] text-inverse bg-primary hover:bg-oil transition-all flex items-center justify-center gap-3 shadow-xl shadow-primary/20"
               >
                 <Send className="w-4 h-4" />
                 {t('event.share.toMotorFeed')}
@@ -1023,7 +1028,7 @@ export default function EventDetails() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setSelectedPhoto(null)}
-            className="fixed inset-0 bg-black/95 z-[100] flex items-center justify-center p-4 cursor-zoom-out"
+            className="fixed inset-0 bg-engine/95 z-[100] flex items-center justify-center p-4 cursor-zoom-out"
           >
             <motion.div 
               initial={{ scale: 0.9, opacity: 0 }}
@@ -1035,12 +1040,12 @@ export default function EventDetails() {
               <img 
                 src={selectedPhoto} 
                 alt="Expanded view" 
-                className="max-w-full max-h-[90vh] object-contain rounded-xl shadow-2xl border border-white/10"
+                className="max-w-full max-h-[90vh] object-contain rounded-xl shadow-2xl border border-inverse/10"
                 referrerPolicy="no-referrer"
               />
               <button 
                 onClick={() => setSelectedPhoto(null)}
-                className="absolute top-4 right-4 p-2 bg-black/50 hover:bg-primary text-white rounded-full backdrop-blur-md border border-white/10 transition-all shadow-2xl group"
+                className="absolute top-4 right-4 p-2 bg-engine/50 hover:bg-primary text-inverse rounded-full backdrop-blur-md border border-inverse/10 transition-all shadow-2xl group"
                 title={t('common.close')}
               >
                 <X className="w-6 h-6 group-hover:rotate-90 transition-transform duration-300" />

@@ -153,7 +153,7 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-[calc(100dvh-5rem)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-asphalt overflow-hidden">
+    <div className="min-h-[calc(100dvh-5rem)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-engine overflow-hidden">
       <AnimatePresence mode="wait">
         {showVideo ? (
           <motion.div
@@ -162,7 +162,8 @@ export default function Login() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0, scale: 1.1 }}
             transition={{ duration: 0.8 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black"
+            onClick={() => setShowVideo(false)}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-engine cursor-pointer"
           >
             <video
               ref={videoRef}
@@ -180,10 +181,10 @@ export default function Login() {
               <motion.button
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
-                onClick={startVideo}
-                className="group relative z-10 flex flex-col items-center gap-4 text-white hover:text-primary transition-all"
+                onClick={(e) => { e.stopPropagation(); startVideo(); }}
+                className="group relative z-10 flex flex-col items-center gap-4 text-chrome hover:text-primary transition-all"
               >
-                <div className="w-20 h-20 rounded-full border-2 border-white/20 flex items-center justify-center group-hover:border-primary/50 group-hover:bg-primary/10 transition-all">
+                <div className="w-20 h-20 rounded-full border-2 border-inverse/20 flex items-center justify-center group-hover:border-primary/50 group-hover:bg-primary/10 transition-all">
                   <Play className="w-8 h-8 fill-current" />
                 </div>
                 <span className="font-bold tracking-widest text-sm uppercase">{t('login.enter')}</span>
@@ -192,7 +193,7 @@ export default function Login() {
             
             <button 
               onClick={() => setShowVideo(false)}
-              className="absolute bottom-8 right-8 text-white/50 hover:text-white text-sm font-medium transition-colors z-[60]"
+              className="absolute bottom-8 right-8 text-chrome/50 hover:text-chrome text-sm font-medium transition-colors z-[60]"
             >
               {t('login.skip') || 'Skip to Login'}
             </button>
@@ -211,7 +212,7 @@ export default function Login() {
 
             <div className="glass-card p-8 shadow-2xl shadow-primary/5">
               {message && (
-                <div className="mb-6 p-4 bg-green-500/10 border border-green-500/20 rounded-xl text-green-500 text-sm font-medium">
+                <div className="mb-6 p-4 bg-success/10 border border-success/20 rounded-xl text-success text-sm font-medium">
                   {message}
                 </div>
               )}
@@ -227,6 +228,7 @@ export default function Login() {
                   <input 
                     type="email" 
                     name="email" 
+                    autoCapitalize="sentences"
                     required
                     className="input-field"
                     placeholder="you@example.com"
@@ -266,10 +268,10 @@ export default function Login() {
               <div className="mt-6">
                 <div className="relative">
                   <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-white/5"></div>
+                    <div className="w-full border-t border-inverse/5"></div>
                   </div>
                   <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-asphalt px-2 text-steel font-mono tracking-widest">{t('login.orContinueWith')}</span>
+                    <span className="bg-engine px-2 text-steel font-mono tracking-widest">{t('login.orContinueWith')}</span>
                   </div>
                 </div>
 
@@ -278,7 +280,7 @@ export default function Login() {
                 </div>
               </div>
 
-              <div className="mt-8 pt-6 border-t border-white/5 text-center space-y-4">
+              <div className="mt-8 pt-6 border-t border-inverse/5 text-center space-y-4">
                 <p className="text-steel text-sm">
                   {t('login.noAccount')}{' '}
                   <Link to="/onboarding" className="text-primary hover:text-accent font-medium">

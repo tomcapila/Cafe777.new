@@ -28,11 +28,11 @@ const createRouteIcon = (color: string, isSelected: boolean = false) => {
   const iconHtml = renderToString(
     <div 
       style={{ backgroundColor: color }} 
-      className={`w-8 h-8 rounded-full flex items-center justify-center shadow-lg border-2 border-white transition-all duration-300 ${
-        isSelected ? 'scale-125 ring-4 ring-white/30 animate-pulse' : ''
+      className={`w-8 h-8 rounded-full flex items-center justify-center shadow-lg border-2 border-inverse transition-all duration-300 ${
+        isSelected ? 'scale-125 ring-4 ring-inverse/30 animate-pulse' : ''
       }`}
     >
-      <Route className="w-4 h-4 text-white" />
+      <Route className="w-4 h-4 text-chrome" />
     </div>
   );
 
@@ -128,8 +128,16 @@ export default function RoadsDiscovery() {
   useEffect(() => {
     // Fetch ecosystems and combine with static map data
     fetchWithAuth('/api/ecosystems')
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) return [];
+        const contentType = res.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          return res.json();
+        }
+        return [];
+      })
       .then(data => {
+        if (!Array.isArray(data)) return;
         const ecosystemPOIs: POI[] = data.map((e: any) => ({
           id: e.user_id,
           name: e.company_name,
@@ -187,25 +195,25 @@ export default function RoadsDiscovery() {
 
   const getPOIIcon = (category: string, source: string) => {
     const config: Record<string, { color: string, icon: any }> = {
-      'dealership': { color: '#3b82f6', icon: <Building2 className="w-4 h-4 text-white" /> },
-      'gear_shop': { color: '#10b981', icon: <ShoppingBag className="w-4 h-4 text-white" /> },
-      'parts_store': { color: '#eab308', icon: <Settings className="w-4 h-4 text-white" /> },
-      'workshop': { color: '#f97316', icon: <Wrench className="w-4 h-4 text-white" /> },
-      'biker_cafe': { color: '#a8a29e', icon: <Coffee className="w-4 h-4 text-white" /> },
-      'biker_bar': { color: '#ef4444', icon: <Beer className="w-4 h-4 text-white" /> },
-      'gas_station': { color: '#f59e0b', icon: <Fuel className="w-4 h-4 text-white" /> },
-      'parking': { color: '#64748b', icon: <MapPin className="w-4 h-4 text-white" /> },
-      'viewpoint': { color: '#ec4899', icon: <Camera className="w-4 h-4 text-white" /> },
-      'mountain_pass': { color: '#8b5cf6', icon: <Mountain className="w-4 h-4 text-white" /> },
-      'rest_stop': { color: '#14b8a6', icon: <Info className="w-4 h-4 text-white" /> },
-      'other': { color: '#94a3b8', icon: <MapPin className="w-4 h-4 text-white" /> }
+      'dealership': { color: '#3b82f6', icon: <Building2 className="w-4 h-4 text-chrome" /> },
+      'gear_shop': { color: '#10b981', icon: <ShoppingBag className="w-4 h-4 text-chrome" /> },
+      'parts_store': { color: '#eab308', icon: <Settings className="w-4 h-4 text-chrome" /> },
+      'workshop': { color: '#f97316', icon: <Wrench className="w-4 h-4 text-chrome" /> },
+      'biker_cafe': { color: '#a8a29e', icon: <Coffee className="w-4 h-4 text-chrome" /> },
+      'biker_bar': { color: '#ef4444', icon: <Beer className="w-4 h-4 text-chrome" /> },
+      'gas_station': { color: '#f59e0b', icon: <Fuel className="w-4 h-4 text-chrome" /> },
+      'parking': { color: '#64748b', icon: <MapPin className="w-4 h-4 text-chrome" /> },
+      'viewpoint': { color: '#ec4899', icon: <Camera className="w-4 h-4 text-chrome" /> },
+      'mountain_pass': { color: '#8b5cf6', icon: <Mountain className="w-4 h-4 text-chrome" /> },
+      'rest_stop': { color: '#14b8a6', icon: <Info className="w-4 h-4 text-chrome" /> },
+      'other': { color: '#94a3b8', icon: <MapPin className="w-4 h-4 text-chrome" /> }
     };
 
     const c = config[category] || config['other'];
     const iconHtml = renderToString(
       <div 
         style={{ backgroundColor: c.color }} 
-        className={`w-8 h-8 rounded-full flex items-center justify-center shadow-lg border-2 ${source === 'ecosystem' ? 'border-primary' : 'border-white'} transition-all hover:scale-110`}
+        className={`w-8 h-8 rounded-full flex items-center justify-center shadow-lg border-2 ${source === 'ecosystem' ? 'border-primary' : 'border-inverse'} transition-all hover:scale-110`}
       >
         {c.icon}
       </div>
@@ -222,9 +230,18 @@ export default function RoadsDiscovery() {
 
   useEffect(() => {
     fetchWithAuth('/api/roads')
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) return [];
+        const contentType = res.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          return res.json();
+        }
+        return [];
+      })
       .then(data => {
-        setRoutes(data);
+        if (Array.isArray(data)) {
+          setRoutes(data);
+        }
         setLoading(false);
         
         if (routeIdFromUrl) {
@@ -375,10 +392,10 @@ export default function RoadsDiscovery() {
   };
 
   return (
-    <div className="h-[calc(100dvh-5rem)] sm:h-[calc(100dvh-5rem)] pt-4 flex flex-col md:flex-row bg-asphalt relative z-0">
+    <div className="h-[calc(100dvh-5rem)] sm:h-[calc(100dvh-5rem)] pt-4 flex flex-col md:flex-row bg-engine relative z-0">
       {/* Sidebar */}
-      <div className="w-full md:w-[400px] mt-4 md:mt-0 flex-1 md:flex-none bg-carbon/50 border-r border-white/5 flex flex-col overflow-hidden z-20 order-last md:order-first rounded-tl-2xl">
-        <div className="p-6 border-b border-white/5 bg-asphalt/50">
+      <div className="w-full md:w-[400px] mt-4 md:mt-0 flex-1 md:flex-none bg-oil/50 border-r border-inverse/5 flex flex-col overflow-hidden z-20 order-last md:order-first rounded-tl-2xl">
+        <div className="p-6 border-b border-inverse/5 bg-engine/50">
           <div className="flex items-center justify-between gap-3 mb-2">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-primary/10 rounded-xl">
@@ -387,7 +404,7 @@ export default function RoadsDiscovery() {
               <h1 className="text-xl font-display font-black uppercase italic tracking-tight">{t('roads.title')}</h1>
             </div>
             
-            <label className="cursor-pointer bg-carbon hover:bg-engine text-white p-2 rounded-xl border border-white/10 transition-colors flex items-center gap-2" title={t('roads.import.btn')}>
+            <label className="cursor-pointer bg-oil hover:bg-engine text-chrome p-2 rounded-xl border border-inverse/10 transition-colors flex items-center gap-2" title={t('roads.import.btn')}>
               <Upload className="w-4 h-4" />
               <span className="hidden sm:inline text-[10px] font-mono uppercase tracking-widest">{t('roads.import.btn')}</span>
               <input 
@@ -407,10 +424,11 @@ export default function RoadsDiscovery() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-steel" />
               <input 
                 type="text" 
+                autoCapitalize="sentences"
                 value={searchQuery || ''}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={t('roads.search')}
-                className="w-full bg-carbon border border-white/10 rounded-xl py-2 pl-10 pr-4 text-sm text-white focus:outline-none focus:border-primary transition-colors"
+                className="w-full bg-oil border border-inverse/10 rounded-xl py-2 pl-10 pr-4 text-sm text-chrome focus:outline-none focus:border-primary transition-colors"
               />
             </div>
             
@@ -427,8 +445,8 @@ export default function RoadsDiscovery() {
                   onClick={() => setActiveFilter(filter.id)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-mono uppercase tracking-widest transition-all ${
                     activeFilter === filter.id 
-                      ? 'bg-primary text-asphalt font-bold' 
-                      : 'bg-engine text-steel hover:bg-carbon hover:text-white'
+                      ? 'bg-primary text-inverse font-bold' 
+                      : 'bg-engine text-steel hover:bg-oil hover:text-chrome'
                   }`}
                 >
                   <filter.icon className="w-3 h-3" />
@@ -452,11 +470,11 @@ export default function RoadsDiscovery() {
               className={`p-4 rounded-2xl border cursor-pointer transition-all ${
                 selectedRoute?.route_id === route.route_id || hoveredRouteId === route.route_id
                   ? 'bg-primary/10 border-primary shadow-lg shadow-primary/5'
-                  : 'bg-carbon border-white/5 hover:border-white/20 hover:bg-engine'
+                  : 'bg-oil border-inverse/5 hover:border-inverse/20 hover:bg-engine'
               }`}
             >
               <div className="flex justify-between items-start mb-3">
-                <h3 className="font-bold text-sm text-white leading-tight pr-4">{route.name}</h3>
+                <h3 className="font-bold text-sm text-chrome leading-tight pr-4">{route.name}</h3>
                 <div 
                   className="flex items-center justify-center w-8 h-8 rounded-full font-mono font-bold text-xs shrink-0"
                   style={{ backgroundColor: `${getScoreColor(route.road_score)}20`, color: getScoreColor(route.road_score) }}
@@ -468,7 +486,7 @@ export default function RoadsDiscovery() {
               <div className="flex items-center justify-between mt-3">
                 <div className="flex items-center gap-4 text-xs text-steel font-mono">
                   <span className="flex items-center gap-1"><Navigation className="w-3 h-3" /> {route.distance_km} km</span>
-                  <span className="uppercase tracking-widest text-[10px] bg-asphalt px-2 py-0.5 rounded-md border border-white/5">{t('roads.filter.' + route.difficulty.toLowerCase()) || route.difficulty}</span>
+                  <span className="uppercase tracking-widest text-[10px] bg-engine px-2 py-0.5 rounded-md border border-inverse/5">{t('roads.filter.' + route.difficulty.toLowerCase()) || route.difficulty}</span>
                 </div>
                 <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
                   <MapRating 
@@ -492,7 +510,7 @@ export default function RoadsDiscovery() {
 
               <div className="flex flex-wrap gap-1.5 mt-3">
                 {route.tags.map(tag => (
-                  <span key={tag} className="text-[9px] uppercase tracking-widest font-bold text-steel bg-asphalt px-1.5 py-0.5 rounded">
+                  <span key={tag} className="text-[9px] uppercase tracking-widest font-bold text-steel bg-engine px-1.5 py-0.5 rounded">
                     #{tag}
                   </span>
                 ))}
@@ -503,12 +521,12 @@ export default function RoadsDiscovery() {
 
         {/* Route Details Box (Moved to Sidebar) */}
         {selectedRoute && (
-          <div className="bg-carbon/50 border-t border-white/10 p-4">
+          <div className="bg-oil/50 border-t border-inverse/10 p-4">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm font-bold truncate">{selectedRoute.name}</h2>
               <button 
                 onClick={() => setSelectedRoute(null)}
-                className="w-6 h-6 flex items-center justify-center rounded-full bg-carbon text-steel hover:text-white hover:bg-engine transition-colors"
+                className="w-6 h-6 flex items-center justify-center rounded-full bg-oil text-steel hover:text-chrome hover:bg-engine transition-colors"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
               </button>
@@ -549,9 +567,9 @@ export default function RoadsDiscovery() {
                 { label: t('roads.metrics.stops'), value: selectedRoute.metrics.stops, icon: Coffee },
                 { label: t('roads.metrics.popular'), value: selectedRoute.metrics.popularity, icon: TrendingUp },
               ].map(metric => (
-                <div key={metric.label} className="bg-carbon rounded-lg p-1.5 text-center border border-white/5">
+                <div key={metric.label} className="bg-oil rounded-lg p-1.5 text-center border border-inverse/5">
                   <metric.icon className="w-3 h-3 mx-auto mb-0.5 text-steel" />
-                  <div className="text-xs font-bold text-white mb-0">{metric.value}</div>
+                  <div className="text-xs font-bold text-chrome mb-0">{metric.value}</div>
                   <div className="text-[7px] font-mono uppercase tracking-widest text-steel">{metric.label}</div>
                 </div>
               ))}
@@ -561,7 +579,7 @@ export default function RoadsDiscovery() {
               <div className="flex gap-2">
                 <button 
                   onClick={handleExportGPX}
-                  className="flex-1 bg-carbon hover:bg-engine text-white font-mono uppercase tracking-widest text-[10px] py-2 rounded-lg border border-white/10 transition-colors flex items-center justify-center gap-1"
+                  className="flex-1 bg-oil hover:bg-engine text-chrome font-mono uppercase tracking-widest text-[10px] py-2 rounded-lg border border-inverse/10 transition-colors flex items-center justify-center gap-1"
                 >
                   <Download className="w-3 h-3" />
                   GPX
@@ -569,7 +587,7 @@ export default function RoadsDiscovery() {
                 <button 
                   onClick={handlePredictScore}
                   disabled={predicting || !!predictedScore}
-                  className="flex-1 bg-carbon hover:bg-engine text-white font-mono uppercase tracking-widest text-[10px] py-2 rounded-lg border border-white/10 transition-colors disabled:opacity-50"
+                  className="flex-1 bg-oil hover:bg-engine text-chrome font-mono uppercase tracking-widest text-[10px] py-2 rounded-lg border border-inverse/10 transition-colors disabled:opacity-50"
                 >
                   {predicting ? '...' : predictedScore ? t('roads.analyzed') : t('roads.aiScore')}
                 </button>
@@ -584,14 +602,14 @@ export default function RoadsDiscovery() {
               <div className="flex gap-2">
                 <button 
                   onClick={handleSendToGoogleMaps}
-                  className="flex-1 bg-carbon hover:bg-engine text-white font-mono uppercase tracking-widest text-[10px] py-2 rounded-lg border border-white/10 transition-colors flex items-center justify-center gap-1"
+                  className="flex-1 bg-oil hover:bg-engine text-chrome font-mono uppercase tracking-widest text-[10px] py-2 rounded-lg border border-inverse/10 transition-colors flex items-center justify-center gap-1"
                 >
                   <MapPin className="w-3 h-3" />
                   Google Maps
                 </button>
                 <button 
                   onClick={handleSendToWaze}
-                  className="flex-1 bg-carbon hover:bg-engine text-white font-mono uppercase tracking-widest text-[10px] py-2 rounded-lg border border-white/10 transition-colors flex items-center justify-center gap-1"
+                  className="flex-1 bg-oil hover:bg-engine text-chrome font-mono uppercase tracking-widest text-[10px] py-2 rounded-lg border border-inverse/10 transition-colors flex items-center justify-center gap-1"
                 >
                   <Navigation className="w-3 h-3" />
                   Waze
@@ -639,7 +657,7 @@ export default function RoadsDiscovery() {
                       </span>
                     )}
                   </div>
-                  <h4 className="font-display font-black uppercase italic text-asphalt text-lg leading-tight mb-1">{poi.name}</h4>
+                  <h4 className="font-display font-black uppercase italic text-inverse text-lg leading-tight mb-1">{poi.name}</h4>
                   <p className="text-[10px] font-mono text-steel mb-3">
                     {poi.distanceFromRoute?.toFixed(1)} {t('roads.poi.distance')}
                   </p>
@@ -648,14 +666,14 @@ export default function RoadsDiscovery() {
                     {poi.profileUrl ? (
                       <Link 
                         to={poi.profileUrl}
-                        className="flex-1 bg-primary text-asphalt text-[10px] font-mono font-bold uppercase tracking-widest py-2 rounded-lg text-center hover:bg-oil transition-all"
+                        className="flex-1 bg-primary text-inverse text-[10px] font-mono font-bold uppercase tracking-widest py-2 rounded-lg text-center hover:bg-oil transition-all"
                       >
                         {t('roads.poi.profile')}
                       </Link>
                     ) : (
                       <button 
                         onClick={() => window.open(getPOIDirectionsUrl(poi), '_blank')}
-                        className="flex-1 bg-asphalt text-white text-[10px] font-mono font-bold uppercase tracking-widest py-2 rounded-lg hover:bg-primary hover:text-asphalt transition-all"
+                        className="flex-1 bg-engine text-chrome text-[10px] font-mono font-bold uppercase tracking-widest py-2 rounded-lg hover:bg-primary hover:text-inverse transition-all"
                       >
                         {t('roads.poi.navigate')}
                       </button>
@@ -693,7 +711,7 @@ export default function RoadsDiscovery() {
               >
                 <Popup className="custom-popup">
                   <div className="p-2 min-w-[180px]">
-                    <h4 className="font-display font-black uppercase italic text-asphalt leading-none tracking-tight mb-2">{route.name}</h4>
+                    <h4 className="font-display font-black uppercase italic text-inverse leading-none tracking-tight mb-2">{route.name}</h4>
                     <div className="flex items-center gap-2 mb-3">
                       <div 
                         className="flex items-center justify-center w-6 h-6 rounded-full font-mono font-bold text-[10px] shrink-0"
@@ -718,7 +736,7 @@ export default function RoadsDiscovery() {
                         handleRouteClick(route);
                         setShowDetails(true);
                       }}
-                      className="w-full bg-asphalt text-white text-[10px] font-mono font-bold uppercase tracking-widest py-2 rounded-lg hover:bg-primary hover:text-asphalt transition-all shadow-lg"
+                      className="w-full bg-engine text-chrome text-[10px] font-mono font-bold uppercase tracking-widest py-2 rounded-lg hover:bg-primary hover:text-inverse transition-all shadow-lg"
                     >
                       {t('roads.btn.details')}
                     </button>

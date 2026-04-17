@@ -1,7 +1,7 @@
 import { fetchWithAuth } from '../utils/api';
 import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ShieldAlert, Trash2, Ban, CheckCircle, Search, UserX, Settings, Users, Calendar, Star, ShieldCheck, XCircle, Camera, MapPin, Activity, Heart, Wrench, Mountain, ToggleLeft, ToggleRight, Trophy, Plus, Edit2, Shield, Image } from 'lucide-react';
+import { ShieldAlert, Trash2, Ban, CheckCircle, Search, UserX, Settings, Users, Calendar, Star, ShieldCheck, XCircle, Camera, MapPin, Activity, Heart, Wrench, Mountain, ToggleLeft, ToggleRight, Trophy, Plus, Edit2, Shield, Image, Upload } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useFeatureFlags } from '../contexts/FeatureFlagContext';
 import { useNotification } from '../contexts/NotificationContext';
@@ -20,7 +20,7 @@ export default function Admin() {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [searchParams, setSearchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState<'users' | 'events' | 'submissions' | 'event_photos' | 'settings' | 'badges' | 'contests' | 'ambassadors'>(
+  const [activeTab, setActiveTab] = useState<'users' | 'events' | 'submissions' | 'event_photos' | 'settings' | 'badges' | 'contests' | 'ambassadors' | 'places'>(
     (searchParams.get('tab') as any) || 'users'
   );
   const [settings, setSettings] = useState<any>({});
@@ -28,6 +28,11 @@ export default function Admin() {
   const [contestSettings, setContestSettings] = useState({ enabled: false, allowedTypes: ['premium'] });
   const [badges, setBadges] = useState<any[]>([]);
   const [stamps, setStamps] = useState<any[]>([]);
+  const [keywordsConfig, setKeywordsConfig] = useState<any[]>([]);
+  const [placesControl, setPlacesControl] = useState<any[]>([]);
+  const [isCreatingKeyword, setIsCreatingKeyword] = useState(false);
+  const [editingKeyword, setEditingKeyword] = useState<any | null>(null);
+  const [newKeyword, setNewKeyword] = useState({ category_name: '', keywords: '', radius: 5000, icon: 'MapPin' });
   const [editingBadge, setEditingBadge] = useState<any | null>(null);
   const [contests, setContests] = useState<any[]>([]);
   const [isCreatingContest, setIsCreatingContest] = useState(false);
@@ -43,6 +48,10 @@ export default function Admin() {
   const [awardMessage, setAwardMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const [badgeSearchTerm, setBadgeSearchTerm] = useState('');
   const [isBadgeSelectorOpen, setIsBadgeSelectorOpen] = useState(false);
+  const [placesSearchTerm, setPlacesSearchTerm] = useState('');
+  const [placesCategoryFilter, setPlacesCategoryFilter] = useState('all');
+  const [selectedPlaces, setSelectedPlaces] = useState<string[]>([]);
+  const [isMassActionLoading, setIsMassActionLoading] = useState(false);
 
   const handleAwardBadge = async () => {
     if (!awardingBadgeId || !selectedUserIdToAward) return;
@@ -59,7 +68,14 @@ export default function Admin() {
           awarded_by: currentUser.id
         }),
       });
-      const data = await res.json();
+      
+      let data;
+      try {
+        data = await res.json();
+      } catch (e) {
+        data = { error: 'Invalid response from server' };
+      }
+
       if (res.ok) {
         setAwardMessage({ type: 'success', text: t('admin.notification.badgeAwarded') });
         setTimeout(() => {
@@ -90,9 +106,13 @@ export default function Admin() {
         method: 'POST',
         body: formData,
       });
-      const data = await res.json();
+      
       if (res.ok) {
+        const data = await res.json();
         setNewBadge({ ...newBadge, icon: data.url });
+      } else {
+        const errorData = await res.json().catch(() => ({ error: 'Upload failed' }));
+        console.error('Upload failed:', errorData.error);
       }
     } catch (err) {
       console.error('Upload failed', err);
@@ -110,7 +130,7 @@ export default function Admin() {
 
   useEffect(() => {
     const tab = searchParams.get('tab');
-    if (tab && ['users', 'events', 'submissions', 'event_photos', 'settings', 'badges', 'contests', 'ambassadors'].includes(tab)) {
+    if (tab && ['users', 'events', 'submissions', 'event_photos', 'settings', 'badges', 'contests', 'ambassadors', 'places'].includes(tab)) {
       setActiveTab(tab as any);
     }
   }, [searchParams]);
@@ -122,13 +142,19 @@ export default function Admin() {
 
   const fetchSettings = async () => {
     try {
-      const res = await fetchWithAuth('/api/settings');
+      const res = await fetchWithAuth('/api/admin/settings');
       if (res.ok) {
-        const data = await res.json();
-        setSettings(data);
+        const text = await res.text();
+        try {
+          const data = JSON.parse(text);
+          setSettings(data);
+        } catch (parseErr) {
+          console.error('Failed to parse settings JSON:', text.substring(0, 100));
+          throw parseErr;
+        }
       }
     } catch (err) {
-      console.error(err);
+      console.error('Failed to fetch settings', err);
     }
   };
 
@@ -136,8 +162,14 @@ export default function Admin() {
     try {
       const res = await fetchWithAuth('/api/admin/photo-contest-settings');
       if (res.ok) {
-        const data = await res.json();
-        setContestSettings(data);
+        const text = await res.text();
+        try {
+          const data = JSON.parse(text);
+          setContestSettings(data);
+        } catch (parseErr) {
+          console.error('Failed to parse contest settings JSON:', text.substring(0, 100));
+          throw parseErr;
+        }
       }
     } catch (err) {
       console.error('Failed to fetch contest promotion settings', err);
@@ -324,6 +356,32 @@ export default function Admin() {
     }
   };
 
+  const fetchKeywords = async () => {
+    if (!currentUser) return;
+    try {
+      const res = await fetchWithAuth('/api/admin/keywords');
+      if (res.ok) {
+        const data = await res.json();
+        setKeywordsConfig(data);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const fetchPlacesControl = async () => {
+    if (!currentUser) return;
+    try {
+      const res = await fetchWithAuth('/api/admin/places');
+      if (res.ok) {
+        const data = await res.json();
+        setPlacesControl(data);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
     const loadData = async () => {
       if (currentUser) {
@@ -339,13 +397,21 @@ export default function Admin() {
           fetchContests(), 
           fetchContestPromotionSettings(),
           fetchFeatureAccess(),
-          fetchAmbassadorApps()
+          fetchAmbassadorApps(),
+          fetchKeywords(),
+          fetchPlacesControl()
         ]);
         setLoading(false);
       }
     };
     loadData();
   }, [currentUser]);
+
+  const filteredPlacesControl = placesControl.filter(place => {
+    const matchesSearch = place.name.toLowerCase().includes(placesSearchTerm.toLowerCase());
+    const matchesCategory = placesCategoryFilter === 'all' || place.category === placesCategoryFilter;
+    return matchesSearch && matchesCategory;
+  });
 
   const handleCreateContest = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -715,11 +781,11 @@ export default function Admin() {
         <p className="text-steel font-light">{t('admin.subtitle')}</p>
       </div>
       
-      <div className="flex items-center gap-2 bg-asphalt p-1.5 rounded-2xl border border-white/5 shadow-2xl overflow-x-auto no-scrollbar mb-12">
+      <div className="flex items-center gap-2 bg-engine p-1.5 rounded-2xl border border-inverse/5 shadow-2xl overflow-x-auto no-scrollbar mb-12">
           <button
             onClick={() => handleTabChange('users')}
             className={`flex items-center gap-2 px-6 py-3 rounded-xl text-[10px] font-mono font-black uppercase tracking-widest transition-all whitespace-nowrap shrink-0 ${
-              activeTab === 'users' ? 'bg-primary text-asphalt shadow-xl shadow-primary/20' : 'text-steel hover:text-white'
+              activeTab === 'users' ? 'bg-primary text-inverse shadow-xl shadow-primary/20' : 'text-steel hover:text-chrome'
             }`}
           >
             <Users className="w-4 h-4" />
@@ -728,7 +794,7 @@ export default function Admin() {
           <button
             onClick={() => handleTabChange('events')}
             className={`flex items-center gap-2 px-6 py-3 rounded-xl text-[10px] font-mono font-black uppercase tracking-widest transition-all whitespace-nowrap shrink-0 ${
-              activeTab === 'events' ? 'bg-primary text-asphalt shadow-xl shadow-primary/20' : 'text-steel hover:text-white'
+              activeTab === 'events' ? 'bg-primary text-inverse shadow-xl shadow-primary/20' : 'text-steel hover:text-chrome'
             }`}
           >
             <Calendar className="w-4 h-4" />
@@ -737,7 +803,7 @@ export default function Admin() {
           <button
             onClick={() => handleTabChange('submissions')}
             className={`flex items-center gap-2 px-6 py-3 rounded-xl text-[10px] font-mono font-black uppercase tracking-widest transition-all whitespace-nowrap shrink-0 ${
-              activeTab === 'submissions' ? 'bg-primary text-asphalt shadow-xl shadow-primary/20' : 'text-steel hover:text-white'
+              activeTab === 'submissions' ? 'bg-primary text-inverse shadow-xl shadow-primary/20' : 'text-steel hover:text-chrome'
             }`}
           >
             <Camera className="w-4 h-4" />
@@ -746,7 +812,7 @@ export default function Admin() {
           <button
             onClick={() => handleTabChange('event_photos')}
             className={`flex items-center gap-2 px-6 py-3 rounded-xl text-[10px] font-mono font-black uppercase tracking-widest transition-all whitespace-nowrap shrink-0 ${
-              activeTab === 'event_photos' ? 'bg-primary text-asphalt shadow-xl shadow-primary/20' : 'text-steel hover:text-white'
+              activeTab === 'event_photos' ? 'bg-primary text-inverse shadow-xl shadow-primary/20' : 'text-steel hover:text-chrome'
             }`}
           >
             <Image className="w-4 h-4" />
@@ -755,7 +821,7 @@ export default function Admin() {
           <button
             onClick={() => handleTabChange('settings')}
             className={`flex items-center gap-2 px-6 py-3 rounded-xl text-[10px] font-mono font-black uppercase tracking-widest transition-all whitespace-nowrap shrink-0 ${
-              activeTab === 'settings' ? 'bg-primary text-asphalt shadow-xl shadow-primary/20' : 'text-steel hover:text-white'
+              activeTab === 'settings' ? 'bg-primary text-inverse shadow-xl shadow-primary/20' : 'text-steel hover:text-chrome'
             }`}
           >
             <Settings className="w-4 h-4" />
@@ -764,7 +830,7 @@ export default function Admin() {
           <button
             onClick={() => handleTabChange('badges')}
             className={`flex items-center gap-2 px-6 py-3 rounded-xl text-[10px] font-mono font-black uppercase tracking-widest transition-all whitespace-nowrap shrink-0 ${
-              activeTab === 'badges' ? 'bg-primary text-asphalt shadow-xl shadow-primary/20' : 'text-steel hover:text-white'
+              activeTab === 'badges' ? 'bg-primary text-inverse shadow-xl shadow-primary/20' : 'text-steel hover:text-chrome'
             }`}
           >
             <ShieldCheck className="w-4 h-4" />
@@ -773,7 +839,7 @@ export default function Admin() {
           <button
             onClick={() => handleTabChange('contests')}
             className={`flex items-center gap-2 px-6 py-3 rounded-xl text-[10px] font-mono font-black uppercase tracking-widest transition-all whitespace-nowrap shrink-0 ${
-              activeTab === 'contests' ? 'bg-primary text-asphalt shadow-xl shadow-primary/20' : 'text-steel hover:text-white'
+              activeTab === 'contests' ? 'bg-primary text-inverse shadow-xl shadow-primary/20' : 'text-steel hover:text-chrome'
             }`}
           >
             <Trophy className="w-4 h-4" />
@@ -782,11 +848,20 @@ export default function Admin() {
           <button
             onClick={() => handleTabChange('ambassadors')}
             className={`flex items-center gap-2 px-6 py-3 rounded-xl text-[10px] font-mono font-black uppercase tracking-widest transition-all whitespace-nowrap shrink-0 ${
-              activeTab === 'ambassadors' ? 'bg-primary text-asphalt shadow-xl shadow-primary/20' : 'text-steel hover:text-white'
+              activeTab === 'ambassadors' ? 'bg-primary text-inverse shadow-xl shadow-primary/20' : 'text-steel hover:text-chrome'
             }`}
           >
             <Shield className="w-4 h-4" />
             Ambassadors
+          </button>
+          <button
+            onClick={() => handleTabChange('places')}
+            className={`flex items-center gap-2 px-6 py-3 rounded-xl text-[10px] font-mono font-black uppercase tracking-widest transition-all whitespace-nowrap shrink-0 ${
+              activeTab === 'places' ? 'bg-primary text-inverse shadow-xl shadow-primary/20' : 'text-steel hover:text-chrome'
+            }`}
+          >
+            <MapPin className="w-4 h-4" />
+            Places
           </button>
         </div>
 
@@ -803,11 +878,11 @@ export default function Admin() {
             />
           </div>
 
-          <div className="glass-card overflow-hidden border-white/5 shadow-2xl">
+          <div className="glass-card overflow-hidden border-inverse/5 shadow-2xl">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-white/5 bg-asphalt">
+                  <tr className="border-b border-inverse/5 bg-engine">
                     <th className="p-6 font-mono font-black text-[10px] uppercase tracking-widest text-steel">{t('admin.table.user')}</th>
                     <th className="p-6 font-mono font-black text-[10px] uppercase tracking-widest text-steel">{t('admin.table.type')}</th>
                     <th className="p-6 font-mono font-black text-[10px] uppercase tracking-widest text-steel">{t('admin.table.plan')}</th>
@@ -817,7 +892,7 @@ export default function Admin() {
                     <th className="p-6 font-mono font-black text-[10px] uppercase tracking-widest text-steel text-right">{t('admin.table.actions')}</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/5">
+                <tbody className="divide-y divide-inverse/5">
                   {filteredUsers.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="p-16 text-center">
@@ -827,17 +902,17 @@ export default function Admin() {
                     </tr>
                   ) : (
                     filteredUsers.map((user) => (
-                      <tr key={user.id} className="hover:bg-white/[0.02] transition-colors group">
+                      <tr key={user.id} className="hover:bg-inverse hover:text-inverse/[0.02] transition-colors group">
                         <td className="p-6">
                           <div className="flex items-center gap-4">
                             <img 
                               src={user.profile_picture_url} 
                               alt="" 
-                              className="w-12 h-12 rounded-2xl object-cover bg-carbon border border-white/5 grayscale group-hover:grayscale-0 transition-all"
+                              className="w-12 h-12 rounded-2xl object-cover bg-oil border border-inverse/5 grayscale group-hover:grayscale-0 transition-all"
                               referrerPolicy="no-referrer"
                             />
                             <div>
-                              <div className="font-display font-black uppercase italic text-lg tracking-tight text-white group-hover:text-primary transition-colors">
+                              <div className="font-display font-black uppercase italic text-lg tracking-tight text-chrome group-hover:text-primary transition-colors">
                                 {user.type === 'rider' ? user.rider_name : user.company_name}
                               </div>
                               <div className="text-[10px] font-mono font-black text-steel uppercase tracking-widest flex items-center gap-2">
@@ -850,17 +925,17 @@ export default function Admin() {
                           </div>
                         </td>
                         <td className="p-6">
-                          <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-mono font-black uppercase tracking-widest bg-asphalt text-steel border border-white/5">
+                          <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-mono font-black uppercase tracking-widest bg-engine text-steel border border-inverse/5">
                             {user.type === 'rider' ? t('register.type.rider') : t('register.type.ecosystem')}
                           </span>
                         </td>
                         <td className="p-6">
-                          <div className="flex bg-carbon rounded-xl p-1 border border-white/5 w-fit">
+                          <div className="flex bg-oil rounded-xl p-1 border border-inverse/5 w-fit">
                             <button
                               onClick={() => handlePlanChange(user.id, 'freemium')}
                               className={`text-[9px] font-mono font-black uppercase tracking-widest px-3 py-1.5 rounded-lg transition-all ${
                                 user.plan === 'freemium' || !user.plan
-                                  ? 'bg-asphalt text-white shadow-lg'
+                                  ? 'bg-engine text-chrome shadow-lg'
                                   : 'text-steel hover:text-chrome'
                               }`}
                             >
@@ -870,7 +945,7 @@ export default function Admin() {
                               onClick={() => handlePlanChange(user.id, 'premium')}
                               className={`text-[9px] font-mono font-black uppercase tracking-widest px-3 py-1.5 rounded-lg transition-all ${
                                 user.plan === 'premium'
-                                  ? 'bg-primary text-white shadow-lg shadow-primary/20'
+                                  ? 'bg-primary text-inverse shadow-lg shadow-primary/20'
                                   : 'text-steel hover:text-chrome'
                               }`}
                             >
@@ -882,7 +957,7 @@ export default function Admin() {
                           <select
                             value={user.role || ''}
                             onChange={(e) => handleRoleChange(user.id, e.target.value)}
-                            className="bg-asphalt text-steel text-[10px] font-mono font-black uppercase tracking-widest rounded-xl border border-white/5 px-4 py-2 focus:outline-none focus:border-primary focus:text-primary transition-all cursor-pointer"
+                            className="bg-engine text-steel text-[10px] font-mono font-black uppercase tracking-widest rounded-xl border border-inverse/5 px-4 py-2 focus:outline-none focus:border-primary focus:text-primary transition-all cursor-pointer"
                           >
                             <option value="user">{t('admin.role.user')}</option>
                             <option value="moderator">{t('admin.role.moderator')}</option>
@@ -895,10 +970,10 @@ export default function Admin() {
                         <td className="p-6">
                           <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-mono font-black uppercase tracking-widest border ${
                             user.status === 'active' 
-                              ? 'bg-emerald-500/5 text-emerald-400 border-emerald-500/20' 
+                              ? 'bg-success/5 text-success border-success/20' 
                               : user.status === 'pending'
                               ? 'bg-accent/5 text-accent border-accent/20'
-                              : 'bg-red-500/5 text-red-400 border-red-500/20'
+                              : 'bg-error/5 text-error border-error/20'
                           }`}>
                             {user.status === 'active' ? (
                               <CheckCircle className="w-3.5 h-3.5" />
@@ -915,7 +990,7 @@ export default function Admin() {
                             {user.status === 'pending' && (
                               <button
                                 onClick={() => handleStatusChange(user.id, user.status, 'active')}
-                                className="p-3 text-emerald-400 hover:bg-emerald-500/10 rounded-xl border border-transparent hover:border-emerald-500/20 transition-all"
+                                className="p-3 text-success hover:bg-success/10 rounded-xl border border-transparent hover:border-success/20 transition-all"
                                 title={t('admin.action.approve')}
                               >
                                 <CheckCircle className="w-5 h-5" />
@@ -925,8 +1000,8 @@ export default function Admin() {
                               onClick={() => handleStatusChange(user.id, user.status)}
                               className={`p-3 rounded-xl border border-transparent transition-all ${
                                 user.status === 'active' 
-                                  ? 'text-steel hover:text-red-400 hover:bg-red-500/10 hover:border-red-500/20' 
-                                  : 'text-steel hover:text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/20'
+                                  ? 'text-steel hover:text-error hover:bg-error/10 hover:border-error/20' 
+                                  : 'text-steel hover:text-success hover:bg-success/10 hover:border-success/20'
                               }`}
                               title={user.status === 'active' ? t('admin.action.ban') : t('admin.action.approve')}
                             >
@@ -941,7 +1016,7 @@ export default function Admin() {
                             </Link>
                             <button
                               onClick={() => handleDelete(user.id)}
-                              className="p-3 text-steel hover:text-red-400 hover:bg-red-500/10 rounded-xl border border-transparent hover:border-red-500/20 transition-all"
+                              className="p-3 text-steel hover:text-error hover:bg-error/10 rounded-xl border border-transparent hover:border-error/20 transition-all"
                               title={t('admin.action.delete')}
                             >
                               <Trash2 className="w-5 h-5" />
@@ -969,11 +1044,11 @@ export default function Admin() {
             />
           </div>
 
-          <div className="glass-card overflow-hidden border-white/5 shadow-2xl">
+          <div className="glass-card overflow-hidden border-inverse/5 shadow-2xl">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-white/5 bg-asphalt">
+                  <tr className="border-b border-inverse/5 bg-engine">
                     <th className="p-6 font-mono font-black text-[10px] uppercase tracking-widest text-steel">{t('admin.table.event')}</th>
                     <th className="p-6 font-mono font-black text-[10px] uppercase tracking-widest text-steel">{t('admin.table.host')}</th>
                     <th className="p-6 font-mono font-black text-[10px] uppercase tracking-widest text-steel">{t('admin.table.date')}</th>
@@ -982,7 +1057,7 @@ export default function Admin() {
                     <th className="p-6 font-mono font-black text-[10px] uppercase tracking-widest text-steel text-right">{t('admin.table.actions')}</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/5">
+                <tbody className="divide-y divide-inverse/5">
                   {filteredEvents.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="p-16 text-center">
@@ -992,10 +1067,10 @@ export default function Admin() {
                     </tr>
                   ) : (
                     filteredEvents.map((event) => (
-                      <tr key={event.id} className="hover:bg-white/[0.02] transition-colors group">
+                      <tr key={event.id} className="hover:bg-inverse hover:text-inverse/[0.02] transition-colors group">
                         <td className="p-6">
                           <div>
-                            <div className="font-display font-black uppercase italic text-lg tracking-tight text-white group-hover:text-primary transition-colors leading-none mb-1">{event.title}</div>
+                            <div className="font-display font-black uppercase italic text-lg tracking-tight text-chrome group-hover:text-primary transition-colors leading-none mb-1">{event.title}</div>
                             <div className="text-[10px] font-mono font-black text-steel uppercase tracking-widest">{event.location}</div>
                           </div>
                         </td>
@@ -1004,7 +1079,7 @@ export default function Admin() {
                             <img 
                               src={event.profile_picture_url} 
                               alt="" 
-                              className="w-8 h-8 rounded-xl object-cover border border-white/5 grayscale group-hover:grayscale-0 transition-all"
+                              className="w-8 h-8 rounded-xl object-cover border border-inverse/5 grayscale group-hover:grayscale-0 transition-all"
                               referrerPolicy="no-referrer"
                             />
                             <span className="text-[10px] font-mono font-black text-steel uppercase tracking-widest">@{event.username}</span>
@@ -1016,7 +1091,7 @@ export default function Admin() {
                         <td className="p-6">
                           <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-mono font-black uppercase tracking-widest border ${
                             event.is_approved 
-                              ? 'bg-emerald-500/5 text-emerald-400 border-emerald-500/20' 
+                              ? 'bg-success/5 text-success border-success/20' 
                               : 'bg-accent/5 text-accent border-accent/20'
                           }`}>
                             {event.is_approved ? <CheckCircle className="w-3.5 h-3.5" /> : <ShieldAlert className="w-3.5 h-3.5" />}
@@ -1027,7 +1102,7 @@ export default function Admin() {
                           <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-mono font-black uppercase tracking-widest border ${
                             event.is_promoted 
                               ? 'bg-primary/5 text-primary border-primary/20' 
-                              : 'bg-asphalt text-steel border-white/5'
+                              : 'bg-engine text-steel border-inverse/5'
                           }`}>
                             <Star className={`w-3.5 h-3.5 ${event.is_promoted ? 'fill-current' : ''}`} />
                             {event.is_promoted ? t('admin.status.promoted') : t('admin.status.standard')}
@@ -1040,7 +1115,7 @@ export default function Admin() {
                               className={`p-3 rounded-xl border border-transparent transition-all ${
                                 event.is_approved 
                                   ? 'text-steel hover:text-accent hover:bg-accent/10 hover:border-accent/20' 
-                                  : 'text-steel hover:text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/20'
+                                  : 'text-steel hover:text-success hover:bg-success/10 hover:border-success/20'
                               }`}
                               title={event.is_approved ? t('admin.action.unapprove') : t('admin.action.approve')}
                             >
@@ -1079,7 +1154,7 @@ export default function Admin() {
               <select 
                 value={selectedContestFilter || ''}
                 onChange={(e) => setSelectedContestFilter(e.target.value)}
-                className="bg-asphalt text-steel text-[10px] font-mono font-black uppercase tracking-widest rounded-xl border border-white/5 px-4 py-2 focus:outline-none focus:border-primary transition-all"
+                className="bg-engine text-steel text-[10px] font-mono font-black uppercase tracking-widest rounded-xl border border-inverse/5 px-4 py-2 focus:outline-none focus:border-primary transition-all"
               >
                 <option value="all">{t('admin.submissions.allContests')}</option>
                 {contests.map(c => (
@@ -1088,11 +1163,11 @@ export default function Admin() {
               </select>
             </div>
           </div>
-          <div className="glass-card overflow-hidden border-white/5 shadow-2xl">
+          <div className="glass-card overflow-hidden border-inverse/5 shadow-2xl">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-white/5 bg-asphalt">
+                <tr className="border-b border-inverse/5 bg-engine">
       <th className="p-6 font-mono font-black text-[10px] uppercase tracking-widest text-steel">{t('admin.table.photo')}</th>
       <th className="p-6 font-mono font-black text-[10px] uppercase tracking-widest text-steel">{t('admin.table.user')}</th>
       <th className="p-6 font-mono font-black text-[10px] uppercase tracking-widest text-steel">{t('admin.table.contest')}</th>
@@ -1101,11 +1176,11 @@ export default function Admin() {
       <th className="p-6 font-mono font-black text-[10px] uppercase tracking-widest text-steel text-right">{t('admin.table.actions')}</th>
     </tr>
   </thead>
-  <tbody className="divide-y divide-white/5">
+  <tbody className="divide-y divide-inverse/5">
     {submissions
       .filter(sub => selectedContestFilter === 'all' || sub.contest_id?.toString() === selectedContestFilter)
       .map((sub) => (
-      <tr key={sub.id} className="hover:bg-white/[0.02] transition-colors">
+      <tr key={sub.id} className="hover:bg-inverse hover:text-inverse/[0.02] transition-colors">
         <td className="p-6">
           <img src={sub.photo_url} alt="" className="w-16 h-16 rounded-xl object-cover" />
         </td>
@@ -1113,14 +1188,14 @@ export default function Admin() {
         <td className="p-6 text-steel font-mono text-sm uppercase">{sub.contest_title || sub.contest_type}</td>
         <td className="p-6 text-primary font-mono font-bold">{sub.vote_count || 0}</td>
         <td className="p-6">
-                      <span className={`px-2 py-1 rounded text-[10px] font-bold ${sub.approved ? 'bg-emerald-500/20 text-emerald-400' : 'bg-accent/20 text-accent'}`}>
+                      <span className={`px-2 py-1 rounded text-[10px] font-bold ${sub.approved ? 'bg-success/20 text-success' : 'bg-accent/20 text-accent'}`}>
                         {sub.approved ? t('admin.status.approved') : t('admin.status.pending')}
                       </span>
                     </td>
                     <td className="p-6 text-right">
                       <button
                         onClick={() => handleApproveSubmission(sub.id, sub.approved)}
-                        className={`p-2 rounded-xl ${sub.approved ? 'text-red-400' : 'text-emerald-400'}`}
+                        className={`p-2 rounded-xl ${sub.approved ? 'text-error' : 'text-success'}`}
                       >
                         {sub.approved ? <XCircle className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
                       </button>
@@ -1164,7 +1239,7 @@ export default function Admin() {
                       showNotification('error', t('common.error'));
                     }
                   }}
-                  className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-400 rounded-xl font-mono text-[10px] font-black uppercase tracking-widest border border-emerald-500/20 hover:bg-emerald-500 hover:text-white transition-all"
+                  className="flex items-center gap-2 px-4 py-2 bg-success/10 text-success rounded-xl font-mono text-[10px] font-black uppercase tracking-widest border border-success/20 hover:bg-success hover:text-chrome transition-all"
                 >
                   <CheckCircle className="w-4 h-4" />
                   {t('event.details.approveAll')}
@@ -1192,7 +1267,7 @@ export default function Admin() {
                       showNotification('error', t('common.error'));
                     }
                   }}
-                  className="flex items-center gap-2 px-4 py-2 bg-red-500/10 text-red-400 rounded-xl font-mono text-[10px] font-black uppercase tracking-widest border border-red-500/20 hover:bg-red-500 hover:text-white transition-all"
+                  className="flex items-center gap-2 px-4 py-2 bg-error/10 text-error rounded-xl font-mono text-[10px] font-black uppercase tracking-widest border border-error/20 hover:bg-error hover:text-chrome transition-all"
                 >
                   <XCircle className="w-4 h-4" />
                   {t('event.details.rejectAll')}
@@ -1200,18 +1275,18 @@ export default function Admin() {
               </div>
             )}
           </div>
-          <div className="glass-card overflow-hidden border-white/5 shadow-2xl">
+          <div className="glass-card overflow-hidden border-inverse/5 shadow-2xl">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-white/5 bg-asphalt">
+                  <tr className="border-b border-inverse/5 bg-engine">
                     <th className="p-6 font-mono font-black text-[10px] uppercase tracking-widest text-steel">{t('admin.table.photo')}</th>
                     <th className="p-6 font-mono font-black text-[10px] uppercase tracking-widest text-steel">{t('admin.table.user')}</th>
                     <th className="p-6 font-mono font-black text-[10px] uppercase tracking-widest text-steel">{t('admin.table.event')}</th>
                     <th className="p-6 font-mono font-black text-[10px] uppercase tracking-widest text-steel text-right">{t('admin.table.actions')}</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/5">
+                <tbody className="divide-y divide-inverse/5">
                   {eventPhotos.length === 0 ? (
                     <tr>
                       <td colSpan={4} className="p-12 text-center text-steel font-mono text-sm uppercase tracking-widest">
@@ -1220,7 +1295,7 @@ export default function Admin() {
                     </tr>
                   ) : (
                     eventPhotos.map((photo) => (
-                      <tr key={photo.id} className="hover:bg-white/[0.02] transition-colors">
+                      <tr key={photo.id} className="hover:bg-inverse hover:text-inverse/[0.02] transition-colors">
                         <td className="p-6">
                           <img src={photo.image_url} alt="" className="w-24 h-24 rounded-xl object-cover" referrerPolicy="no-referrer" />
                         </td>
@@ -1230,14 +1305,14 @@ export default function Admin() {
                           <div className="flex justify-end gap-2">
                             <button
                               onClick={() => handleApproveEventPhoto(photo.id, 'approved')}
-                              className="p-3 bg-emerald-500/10 text-emerald-400 rounded-xl hover:bg-emerald-500 hover:text-white transition-all"
+                              className="p-3 bg-success/10 text-success rounded-xl hover:bg-success hover:text-chrome transition-all"
                               title={t('common.approve')}
                             >
                               <CheckCircle className="w-5 h-5" />
                             </button>
                             <button
                               onClick={() => handleApproveEventPhoto(photo.id, 'rejected')}
-                              className="p-3 bg-red-500/10 text-red-400 rounded-xl hover:bg-red-500 hover:text-white transition-all"
+                              className="p-3 bg-error/10 text-error rounded-xl hover:bg-error hover:text-chrome transition-all"
                               title={t('common.reject')}
                             >
                               <XCircle className="w-5 h-5" />
@@ -1390,7 +1465,7 @@ export default function Admin() {
                                 else setNewContest({...newContest, prize_badge_id: null});
                                 setIsBadgeSelectorOpen(false);
                               }}
-                              className="w-full text-left p-2 rounded hover:bg-white/5 text-xs text-steel font-mono uppercase"
+                              className="w-full text-left p-2 rounded hover:bg-inverse/5 text-xs text-steel font-mono uppercase"
                             >
                               {t('admin.contests.none')}
                             </button>
@@ -1405,13 +1480,13 @@ export default function Admin() {
                                     else setNewContest({...newContest, prize_badge_id: badge.badge_id});
                                     setIsBadgeSelectorOpen(false);
                                   }}
-                                  className="w-full text-left p-2 rounded hover:bg-white/5 flex items-center gap-3"
+                                  className="w-full text-left p-2 rounded hover:bg-inverse/5 flex items-center gap-3"
                                 >
                                   <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
                                     <Star className="w-4 h-4 text-primary" />
                                   </div>
                                   <div>
-                                    <div className="text-sm font-bold text-white">{badge.name}</div>
+                                    <div className="text-sm font-bold text-chrome">{badge.name}</div>
                                     <div className="text-[10px] text-steel uppercase font-mono">{badge.category}</div>
                                   </div>
                                 </button>
@@ -1442,11 +1517,11 @@ export default function Admin() {
             </div>
           )}
 
-          <div className="glass-card overflow-hidden border-white/5 shadow-2xl">
+          <div className="glass-card overflow-hidden border-inverse/5 shadow-2xl">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-white/5 bg-asphalt">
+                  <tr className="border-b border-inverse/5 bg-engine">
                     <th className="p-6 font-mono font-black text-[10px] uppercase tracking-widest text-steel">{t('admin.table.contest')}</th>
                     <th className="p-6 font-mono font-black text-[10px] uppercase tracking-widest text-steel">{t('admin.contests.dates')}</th>
                     <th className="p-6 font-mono font-black text-[10px] uppercase tracking-widest text-steel">{t('admin.table.status')}</th>
@@ -1454,7 +1529,7 @@ export default function Admin() {
                     <th className="p-6 font-mono font-black text-[10px] uppercase tracking-widest text-steel text-right">{t('admin.table.actions')}</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/5">
+                <tbody className="divide-y divide-inverse/5">
                   {contests.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="p-16 text-center">
@@ -1464,7 +1539,7 @@ export default function Admin() {
                     </tr>
                   ) : (
                     contests.map((contest) => (
-                      <tr key={contest.id} className="hover:bg-white/[0.02] transition-colors group">
+                      <tr key={contest.id} className="hover:bg-inverse hover:text-inverse/[0.02] transition-colors group">
                         <td className="p-6">
                           <div className="flex items-start gap-4">
                             {contest.prize_badge_icon && (
@@ -1473,7 +1548,7 @@ export default function Admin() {
                               </div>
                             )}
                             <div>
-                              <div className="font-display font-black uppercase italic text-lg tracking-tight text-white group-hover:text-primary transition-colors leading-none mb-1">{contest.title}</div>
+                              <div className="font-display font-black uppercase italic text-lg tracking-tight text-chrome group-hover:text-primary transition-colors leading-none mb-1">{contest.title}</div>
                               <div className="text-[10px] font-mono font-black text-steel uppercase tracking-widest line-clamp-1 max-w-xs">{contest.description}</div>
                               {contest.prize_badge_name && (
                                 <div className="mt-2 flex items-center gap-1.5">
@@ -1493,10 +1568,10 @@ export default function Admin() {
                         <td className="p-6">
                           <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-mono font-black uppercase tracking-widest border ${
                             contest.status === 'active' 
-                              ? 'bg-emerald-500/5 text-emerald-400 border-emerald-500/20' 
+                              ? 'bg-success/5 text-success border-success/20' 
                               : contest.status === 'completed'
                               ? 'bg-primary/5 text-primary border-primary/20'
-                              : 'bg-asphalt text-steel border-white/5'
+                              : 'bg-engine text-steel border-inverse/5'
                           }`}>
                             {contest.status === 'active' ? <Activity className="w-3.5 h-3.5" /> : contest.status === 'completed' ? <CheckCircle className="w-3.5 h-3.5" /> : <Wrench className="w-3.5 h-3.5" />}
                             {contest.status === 'active' ? t('admin.contests.status.active') : contest.status === 'completed' ? t('admin.contests.status.completed') : t('admin.contests.status.draft')}
@@ -1537,7 +1612,7 @@ export default function Admin() {
                             </button>
                             <button
                               onClick={() => handleDeleteContest(contest.id)}
-                              className="p-3 text-steel hover:text-red-400 hover:bg-red-500/10 rounded-xl border border-transparent hover:border-red-500/20 transition-all"
+                              className="p-3 text-steel hover:text-error hover:bg-error/10 rounded-xl border border-transparent hover:border-error/20 transition-all"
                               title={t('admin.action.delete')}
                             >
                               <Trash2 className="w-5 h-5" />
@@ -1554,23 +1629,23 @@ export default function Admin() {
         </div>
     ) : activeTab === 'ambassadors' ? (
         <div className="space-y-6">
-          <h2 className="text-2xl font-display font-black uppercase italic text-white mb-6">Ambassador Applications</h2>
+          <h2 className="text-2xl font-display font-black uppercase italic text-chrome mb-6">Ambassador Applications</h2>
           {ambassadorApps.length === 0 ? (
             <p className="text-steel">No ambassador applications found.</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {ambassadorApps.map(app => (
-                <div key={app.id} className="bg-carbon border border-white/10 rounded-2xl p-6">
+                <div key={app.id} className="bg-oil border border-inverse/10 rounded-2xl p-6">
                   <div className="flex justify-between items-start mb-4">
                     <div>
-                      <h3 className="text-xl font-bold text-white">{app.name}</h3>
+                      <h3 className="text-xl font-bold text-chrome">{app.name}</h3>
                       <p className="text-steel">@{app.username} • {app.email}</p>
                       <p className="text-primary font-bold capitalize mt-1">{app.category} Ambassador</p>
                     </div>
                     <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
-                      app.status === 'pending' ? 'bg-yellow-500/20 text-yellow-500' :
-                      app.status === 'approved' ? 'bg-green-500/20 text-green-500' :
-                      'bg-red-500/20 text-red-500'
+                      app.status === 'pending' ? 'bg-warning/20 text-warning' :
+                      app.status === 'approved' ? 'bg-success/20 text-success' :
+                      'bg-error/20 text-error'
                     }`}>
                       {app.status}
                     </span>
@@ -1579,11 +1654,11 @@ export default function Admin() {
                   <div className="space-y-4 mb-6">
                     <div>
                       <p className="text-[10px] font-mono uppercase tracking-widest text-steel mb-1">Location</p>
-                      <p className="text-white">{app.location}</p>
+                      <p className="text-chrome">{app.location}</p>
                     </div>
                     <div>
                       <p className="text-[10px] font-mono uppercase tracking-widest text-steel mb-1">Description</p>
-                      <p className="text-white text-sm">{app.description}</p>
+                      <p className="text-chrome text-sm">{app.description}</p>
                     </div>
                     <div>
                       <p className="text-[10px] font-mono uppercase tracking-widest text-steel mb-1">Proof of Legitimacy</p>
@@ -1597,13 +1672,13 @@ export default function Admin() {
                     <div className="flex gap-4">
                       <button
                         onClick={() => handleApproveAmbassador(app.id)}
-                        className="flex-1 bg-green-500/20 text-green-500 hover:bg-green-500/30 py-2 rounded-xl font-bold transition-colors"
+                        className="flex-1 bg-success/20 text-success hover:bg-success/30 py-2 rounded-xl font-bold transition-colors"
                       >
                         Approve
                       </button>
                       <button
                         onClick={() => handleRejectAmbassador(app.id)}
-                        className="flex-1 bg-red-500/20 text-red-500 hover:bg-red-500/30 py-2 rounded-xl font-bold transition-colors"
+                        className="flex-1 bg-error/20 text-error hover:bg-error/30 py-2 rounded-xl font-bold transition-colors"
                       >
                         Reject
                       </button>
@@ -1613,6 +1688,498 @@ export default function Admin() {
               ))}
             </div>
           )}
+        </div>
+    ) : activeTab === 'places' ? (
+        <div className="space-y-8">
+          <div className="flex justify-between items-center">
+            <h2 className="text-2xl font-display font-black uppercase italic text-chrome">Places Control</h2>
+          </div>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Keywords Config */}
+            <div className="bg-oil border border-inverse/10 rounded-2xl p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-lg font-bold text-chrome">Keywords Configuration</h3>
+                <button
+                  onClick={() => setIsCreatingKeyword(true)}
+                  className="bg-primary text-inverse px-4 py-2 rounded-xl text-sm font-bold hover:bg-primary/90 transition-colors"
+                >
+                  Add Category
+                </button>
+              </div>
+
+              {isCreatingKeyword && (
+                <div className="bg-inverse/5 rounded-xl p-4 mb-6 space-y-4">
+                  <input
+                    type="text"
+                    placeholder="Category Name (e.g., Food Stops)"
+                    value={newKeyword.category_name}
+                    onChange={e => setNewKeyword({ ...newKeyword, category_name: e.target.value })}
+                    className="w-full bg-oil border border-inverse/10 rounded-xl px-4 py-2 text-chrome"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Keywords (comma separated)"
+                    value={newKeyword.keywords}
+                    onChange={e => setNewKeyword({ ...newKeyword, keywords: e.target.value })}
+                    className="w-full bg-oil border border-inverse/10 rounded-xl px-4 py-2 text-chrome"
+                  />
+                  <div className="flex gap-4">
+                    <input
+                      type="number"
+                      placeholder="Radius (m)"
+                      value={newKeyword.radius}
+                      onChange={e => setNewKeyword({ ...newKeyword, radius: parseInt(e.target.value) })}
+                      className="w-1/2 bg-oil border border-inverse/10 rounded-xl px-4 py-2 text-chrome"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Icon Name (Lucide)"
+                      value={newKeyword.icon}
+                      onChange={e => setNewKeyword({ ...newKeyword, icon: e.target.value })}
+                      className="w-1/2 bg-oil border border-inverse/10 rounded-xl px-4 py-2 text-chrome"
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => setIsCreatingKeyword(false)}
+                      className="text-steel hover:text-chrome px-4 py-2"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const res = await fetchWithAuth('/api/admin/keywords', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              ...newKeyword,
+                              keywords: newKeyword.keywords.split(',').map(k => k.trim())
+                            })
+                          });
+                          if (res.ok) {
+                            fetchKeywords();
+                            setIsCreatingKeyword(false);
+                            setNewKeyword({ category_name: '', keywords: '', radius: 5000, icon: 'MapPin' });
+                          }
+                        } catch (err) {
+                          console.error(err);
+                        }
+                      }}
+                      className="bg-primary text-inverse px-4 py-2 rounded-xl font-bold"
+                    >
+                      Save
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-4">
+                {keywordsConfig.map(kw => (
+                  <div key={kw.id} className="flex items-center justify-between bg-inverse/5 rounded-xl p-4">
+                    <div>
+                      <h4 className="font-bold text-chrome">{kw.category_name}</h4>
+                      <p className="text-sm text-steel">{kw.keywords.join(', ')}</p>
+                      <p className="text-xs text-steel mt-1">Radius: {kw.radius}m | Icon: {kw.icon}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setEditingKeyword({
+                            ...kw,
+                            keywords: kw.keywords.join(', ')
+                          });
+                        }}
+                        className="text-primary hover:text-primary/80"
+                      >
+                        <Edit2 className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (confirm('Delete this category?')) {
+                            try {
+                              const res = await fetchWithAuth(`/api/admin/keywords/${kw.id}`, { method: 'DELETE' });
+                              if (res.ok) fetchKeywords();
+                            } catch (err) {
+                              console.error(err);
+                            }
+                          }
+                        }}
+                        className="text-error hover:text-error/80"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {editingKeyword && (
+              <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[2000] flex items-center justify-center p-4">
+                <div className="bg-oil border border-inverse/10 rounded-2xl p-6 w-full max-w-md space-y-4">
+                  <h3 className="text-xl font-display font-black uppercase italic text-chrome">Edit Category</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-[10px] uppercase tracking-widest text-steel block mb-1">Category Name</label>
+                      <input
+                        type="text"
+                        value={editingKeyword.category_name}
+                        onChange={e => setEditingKeyword({ ...editingKeyword, category_name: e.target.value })}
+                        className="w-full bg-oil border border-inverse/10 rounded-xl px-4 py-2 text-chrome"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] uppercase tracking-widest text-steel block mb-1">Keywords (comma separated)</label>
+                      <input
+                        type="text"
+                        value={editingKeyword.keywords}
+                        onChange={e => setEditingKeyword({ ...editingKeyword, keywords: e.target.value })}
+                        className="w-full bg-oil border border-inverse/10 rounded-xl px-4 py-2 text-chrome"
+                      />
+                    </div>
+                    <div className="flex gap-4">
+                      <div className="flex-1">
+                        <label className="text-[10px] uppercase tracking-widest text-steel block mb-1">Radius (m)</label>
+                        <input
+                          type="number"
+                          value={editingKeyword.radius}
+                          onChange={e => setEditingKeyword({ ...editingKeyword, radius: parseInt(e.target.value) })}
+                          className="w-full bg-oil border border-inverse/10 rounded-xl px-4 py-2 text-chrome"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <label className="text-[10px] uppercase tracking-widest text-steel block mb-1">Icon Name</label>
+                        <input
+                          type="text"
+                          value={editingKeyword.icon}
+                          onChange={e => setEditingKeyword({ ...editingKeyword, icon: e.target.value })}
+                          className="w-full bg-oil border border-inverse/10 rounded-xl px-4 py-2 text-chrome"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2 pt-4">
+                    <button
+                      onClick={() => setEditingKeyword(null)}
+                      className="text-steel hover:text-chrome px-4 py-2"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const res = await fetchWithAuth(`/api/admin/keywords/${editingKeyword.id}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              ...editingKeyword,
+                              keywords: editingKeyword.keywords.split(',').map((k: string) => k.trim())
+                            })
+                          });
+                          if (res.ok) {
+                            fetchKeywords();
+                            setEditingKeyword(null);
+                          }
+                        } catch (err) {
+                          console.error(err);
+                        }
+                      }}
+                      className="bg-primary text-inverse px-6 py-2 rounded-xl font-bold"
+                    >
+                      Update
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Places Control */}
+            <div className="bg-oil border border-inverse/10 rounded-2xl p-6">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+                <h3 className="text-lg font-bold text-chrome">Places Control</h3>
+                <div className="flex flex-wrap gap-3 w-full md:w-auto">
+                  <div className="relative flex-1 md:w-64">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-steel" />
+                    <input
+                      type="text"
+                      placeholder="Search places..."
+                      value={placesSearchTerm}
+                      onChange={(e) => setPlacesSearchTerm(e.target.value)}
+                      className="w-full bg-inverse/5 border border-inverse/10 rounded-xl pl-10 pr-4 py-2 text-sm text-chrome focus:border-primary/50 outline-none transition-all"
+                    />
+                  </div>
+                  <select
+                    value={placesCategoryFilter}
+                    onChange={(e) => setPlacesCategoryFilter(e.target.value)}
+                    className="bg-inverse/5 border border-inverse/10 rounded-xl px-4 py-2 text-sm text-chrome focus:border-primary/50 outline-none transition-all"
+                  >
+                    <option value="all">All Categories</option>
+                    {Array.from(new Set(placesControl.map(p => p.category))).filter(Boolean).map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                  <label className="bg-primary/10 text-primary hover:bg-primary/20 px-4 py-2 rounded-xl text-sm font-bold cursor-pointer transition-all flex items-center gap-2">
+                    <Upload className="w-4 h-4" />
+                    Bulk Import
+                    <input 
+                      type="file" 
+                      accept=".json" 
+                      className="hidden" 
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        
+                        try {
+                          const text = await file.text();
+                          const places = JSON.parse(text);
+                          
+                          const res = await fetchWithAuth('/api/admin/places/bulk-import', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ places })
+                          });
+                          
+                          if (res.ok) {
+                            showNotification('success', `Successfully imported ${places.length} places`);
+                            fetchPlacesControl();
+                          } else {
+                            showNotification('error', 'Failed to import places');
+                          }
+                        } catch (err) {
+                          console.error(err);
+                          showNotification('error', 'Invalid JSON file');
+                        }
+                        // Reset input
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {selectedPlaces.length > 0 && (
+                <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 mb-6 flex items-center justify-between animate-in fade-in slide-in-from-top-2">
+                  <span className="text-sm font-bold text-primary">{selectedPlaces.length} places selected</span>
+                  <div className="flex gap-2">
+                    <button
+                      disabled={isMassActionLoading}
+                      onClick={async () => {
+                        setIsMassActionLoading(true);
+                        try {
+                          await Promise.all(selectedPlaces.map(id => 
+                            fetchWithAuth(`/api/admin/places/${id}/control`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ is_approved: 1 })
+                            })
+                          ));
+                          showNotification('success', `Approved ${selectedPlaces.length} places`);
+                          setSelectedPlaces([]);
+                          await fetchPlacesControl();
+                        } catch (err) {
+                          console.error(err);
+                          showNotification('error', 'Failed to mass approve');
+                        } finally {
+                          setIsMassActionLoading(false);
+                        }
+                      }}
+                      className="bg-success text-inverse px-4 py-2 rounded-lg text-xs font-bold hover:bg-success/90 transition-all disabled:opacity-50"
+                    >
+                      {isMassActionLoading ? 'Processing...' : 'Mass Approve'}
+                    </button>
+                    <button
+                      disabled={isMassActionLoading}
+                      onClick={async () => {
+                        setIsMassActionLoading(true);
+                        try {
+                          await Promise.all(selectedPlaces.map(id => 
+                            fetchWithAuth(`/api/admin/places/${id}/control`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ is_hidden: 1 })
+                            })
+                          ));
+                          showNotification('success', `Hidden ${selectedPlaces.length} places`);
+                          setSelectedPlaces([]);
+                          await fetchPlacesControl();
+                        } catch (err) {
+                          console.error(err);
+                          showNotification('error', 'Failed to mass hide');
+                        } finally {
+                          setIsMassActionLoading(false);
+                        }
+                      }}
+                      className="bg-error text-inverse px-4 py-2 rounded-lg text-xs font-bold hover:bg-error/90 transition-all disabled:opacity-50"
+                    >
+                      {isMassActionLoading ? 'Processing...' : 'Mass Hide'}
+                    </button>
+                    <button
+                      onClick={() => setSelectedPlaces([])}
+                      className="text-steel hover:text-chrome px-4 py-2 text-xs font-bold"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {placesControl.length > 0 && (
+                <div className="flex items-center gap-2 mb-4 px-1">
+                  <input
+                    type="checkbox"
+                    checked={filteredPlacesControl.length > 0 && filteredPlacesControl.every(p => selectedPlaces.includes(p.place_id))}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        const newSelected = [...new Set([...selectedPlaces, ...filteredPlacesControl.map(p => p.place_id)])];
+                        setSelectedPlaces(newSelected);
+                      } else {
+                        const filteredIds = filteredPlacesControl.map(p => p.place_id);
+                        setSelectedPlaces(selectedPlaces.filter(id => !filteredIds.includes(id)));
+                      }
+                    }}
+                    className="w-4 h-4 rounded border-inverse/10 text-primary focus:ring-primary bg-oil"
+                  />
+                  <span className="text-[10px] font-mono font-black uppercase tracking-widest text-steel">
+                    {filteredPlacesControl.length > 0 && filteredPlacesControl.every(p => selectedPlaces.includes(p.place_id)) ? 'Deselect All Filtered' : 'Select All Filtered'}
+                  </span>
+                </div>
+              )}
+
+              <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
+                {filteredPlacesControl.map(place => (
+                  <div key={place.place_id} className={`bg-inverse/5 rounded-xl p-4 transition-all border ${selectedPlaces.includes(place.place_id) ? 'border-primary/50 bg-primary/5' : 'border-transparent'}`}>
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedPlaces.includes(place.place_id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedPlaces(prev => [...prev, place.place_id]);
+                            } else {
+                              setSelectedPlaces(prev => prev.filter(id => id !== place.place_id));
+                            }
+                          }}
+                          className="mt-1 w-4 h-4 rounded border-inverse/10 text-primary focus:ring-primary bg-oil"
+                        />
+                        <div>
+                          <h4 className="font-bold text-chrome">{place.name}</h4>
+                          <p className="text-sm text-steel">{place.category} • {place.rating}★ ({place.reviews})</p>
+                          {place.full_address && (
+                            <p className="text-[10px] text-steel/60 mt-1 italic">{place.full_address}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={async () => {
+                            try {
+                              const res = await fetchWithAuth(`/api/admin/places/${place.place_id}/control`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  is_approved: !place.is_approved,
+                                  is_hidden: place.is_hidden,
+                                  custom_category: place.custom_category,
+                                  priority_score: place.priority_score
+                                })
+                              });
+                              if (res.ok) fetchPlacesControl();
+                            } catch (err) {
+                              console.error(err);
+                            }
+                          }}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold ${place.is_approved ? 'bg-success/20 text-success' : 'bg-inverse/10 text-steel'}`}
+                        >
+                          {place.is_approved ? 'Approved' : 'Approve'}
+                        </button>
+                        <button
+                          onClick={async () => {
+                            try {
+                              const res = await fetchWithAuth(`/api/admin/places/${place.place_id}/control`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  is_approved: place.is_approved,
+                                  is_hidden: !place.is_hidden,
+                                  custom_category: place.custom_category,
+                                  priority_score: place.priority_score
+                                })
+                              });
+                              if (res.ok) fetchPlacesControl();
+                            } catch (err) {
+                              console.error(err);
+                            }
+                          }}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold ${place.is_hidden ? 'bg-error/20 text-error' : 'bg-inverse/10 text-steel'}`}
+                        >
+                          {place.is_hidden ? 'Hidden' : 'Hide'}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex gap-4 mt-4">
+                      <div className="flex-1">
+                        <label className="text-[10px] uppercase tracking-widest text-steel block mb-1">Custom Category</label>
+                        <input
+                          type="text"
+                          defaultValue={place.custom_category || ''}
+                          onBlur={async (e) => {
+                            if (e.target.value !== place.custom_category) {
+                              try {
+                                const res = await fetchWithAuth(`/api/admin/places/${place.place_id}/control`, {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    is_approved: place.is_approved,
+                                    is_hidden: place.is_hidden,
+                                    custom_category: e.target.value,
+                                    priority_score: place.priority_score
+                                  })
+                                });
+                                if (res.ok) fetchPlacesControl();
+                              } catch (err) {
+                                console.error(err);
+                              }
+                            }
+                          }}
+                          className="w-full bg-oil border border-inverse/10 rounded-lg px-3 py-1 text-sm text-chrome"
+                        />
+                      </div>
+                      <div className="w-24">
+                        <label className="text-[10px] uppercase tracking-widest text-steel block mb-1">Priority</label>
+                        <input
+                          type="number"
+                          defaultValue={place.priority_score || 0}
+                          onBlur={async (e) => {
+                            if (parseInt(e.target.value) !== place.priority_score) {
+                              try {
+                                const res = await fetchWithAuth(`/api/admin/places/${place.place_id}/control`, {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    is_approved: place.is_approved,
+                                    is_hidden: place.is_hidden,
+                                    custom_category: place.custom_category,
+                                    priority_score: parseInt(e.target.value)
+                                  })
+                                });
+                                if (res.ok) fetchPlacesControl();
+                              } catch (err) {
+                                console.error(err);
+                              }
+                            }
+                          }}
+                          className="w-full bg-oil border border-inverse/10 rounded-lg px-3 py-1 text-sm text-chrome"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
     ) : activeTab === 'badges' ? (
         <div className="space-y-8">
@@ -1642,14 +2209,14 @@ export default function Admin() {
                     <button
                       type="button"
                       onClick={() => setNewBadge({ ...newBadge, item_type: 'badge' })}
-                      className={`flex-1 py-3 rounded-xl font-mono text-xs font-bold uppercase tracking-widest transition-all ${newBadge.item_type === 'badge' ? 'bg-primary text-asphalt shadow-lg shadow-primary/20' : 'bg-carbon text-steel hover:bg-white/5 border border-white/10'}`}
+                      className={`flex-1 py-3 rounded-xl font-mono text-xs font-bold uppercase tracking-widest transition-all ${newBadge.item_type === 'badge' ? 'bg-primary text-inverse shadow-lg shadow-primary/20' : 'bg-oil text-steel hover:bg-inverse/5 border border-inverse/10'}`}
                     >
                       Badge
                     </button>
                     <button
                       type="button"
                       onClick={() => setNewBadge({ ...newBadge, item_type: 'stamp' })}
-                      className={`flex-1 py-3 rounded-xl font-mono text-xs font-bold uppercase tracking-widest transition-all ${newBadge.item_type === 'stamp' ? 'bg-primary text-asphalt shadow-lg shadow-primary/20' : 'bg-carbon text-steel hover:bg-white/5 border border-white/10'}`}
+                      className={`flex-1 py-3 rounded-xl font-mono text-xs font-bold uppercase tracking-widest transition-all ${newBadge.item_type === 'stamp' ? 'bg-primary text-inverse shadow-lg shadow-primary/20' : 'bg-oil text-steel hover:bg-inverse/5 border border-inverse/10'}`}
                     >
                       Stamp
                     </button>
@@ -1692,9 +2259,9 @@ export default function Admin() {
                     <label className="text-[10px] font-mono font-black text-steel uppercase tracking-widest ml-1">{t('admin.badges.image')}</label>
                     <div className="flex items-center gap-4">
                       {newBadge.icon && newBadge.icon.startsWith('/') ? (
-                        <img src={newBadge.icon} alt="Badge Preview" className="w-12 h-12 rounded-full object-cover border border-white/10" />
+                        <img src={newBadge.icon} alt="Badge Preview" className="w-12 h-12 rounded-full object-cover border border-inverse/10" />
                       ) : (
-                        <div className="w-12 h-12 rounded-full bg-carbon border border-white/10 flex items-center justify-center">
+                        <div className="w-12 h-12 rounded-full bg-oil border border-inverse/10 flex items-center justify-center">
                           <ShieldCheck className="w-6 h-6 text-steel" />
                         </div>
                       )}
@@ -1735,13 +2302,13 @@ export default function Admin() {
                         required 
                       />
                       {shopSearchTerm && !newBadge.creator_id && (
-                        <div className="absolute top-full left-0 w-full mt-1 bg-carbon border border-white/10 rounded-xl shadow-xl z-50 max-h-48 overflow-y-auto">
+                        <div className="absolute top-full left-0 w-full mt-1 bg-oil border border-inverse/10 rounded-xl shadow-xl z-50 max-h-48 overflow-y-auto">
                           {users
                             .filter(u => u.type === 'ecosystem' && (u.company_name?.toLowerCase().includes(shopSearchTerm.toLowerCase()) || u.username.toLowerCase().includes(shopSearchTerm.toLowerCase())))
                             .map(shop => (
                               <div 
                                 key={shop.id}
-                                className="p-3 hover:bg-white/5 cursor-pointer text-sm text-chrome transition-colors"
+                                className="p-3 hover:bg-inverse/5 cursor-pointer text-sm text-chrome transition-colors"
                                 onClick={() => {
                                   setNewBadge({...newBadge, creator_id: shop.id.toString()});
                                   setShopSearchTerm(shop.company_name || shop.username);
@@ -1756,7 +2323,7 @@ export default function Admin() {
                   )}
                 </div>
 
-                <div className="pt-6 border-t border-white/5 flex justify-end gap-4">
+                <div className="pt-6 border-t border-inverse/5 flex justify-end gap-4">
                   <button type="button" onClick={() => { setIsCreatingBadge(false); setEditingBadge(null); }} className="btn-secondary px-10">
                     {t('common.cancel')}
                   </button>
@@ -1782,20 +2349,20 @@ export default function Admin() {
 
               return (
                 <div key={`${item.item_type}-${item.id}`} className="glass-card p-6 flex flex-col items-center text-center relative">
-                  <div className="absolute top-4 right-4 px-2 py-1 rounded bg-white/5 border border-white/10 text-[8px] font-mono font-bold uppercase tracking-widest text-steel">
+                  <div className="absolute top-4 right-4 px-2 py-1 rounded bg-inverse/5 border border-inverse/10 text-[8px] font-mono font-bold uppercase tracking-widest text-steel">
                     {item.item_type}
                   </div>
-                  <div className="w-20 h-20 rounded-full bg-asphalt border-2 border-primary/20 flex items-center justify-center mb-4 shadow-lg shadow-primary/10 overflow-hidden">
+                  <div className="w-20 h-20 rounded-full bg-engine border-2 border-primary/20 flex items-center justify-center mb-4 shadow-lg shadow-primary/10 overflow-hidden">
                     {item.icon && item.icon.startsWith('/') ? (
                       <img src={item.icon} alt={item.name} className="w-full h-full object-cover" />
                     ) : (
                       <IconComponent className="w-10 h-10 text-primary" />
                     )}
                   </div>
-                  <h3 className="text-lg font-bold text-white mb-1">{item.name}</h3>
+                  <h3 className="text-lg font-bold text-chrome mb-1">{item.name}</h3>
                   <p className="text-[10px] font-mono text-steel uppercase tracking-widest mb-3">{item.category}</p>
                   <p className="text-sm text-steel mb-4 line-clamp-2">{item.description}</p>
-                  <div className="mt-auto pt-4 border-t border-white/5 w-full flex justify-between items-center mb-4">
+                  <div className="mt-auto pt-4 border-t border-inverse/5 w-full flex justify-between items-center mb-4">
                     <span className="text-[10px] font-mono text-steel uppercase tracking-widest">{t('admin.badges.creatorType')}</span>
                     <span className="text-[10px] font-bold text-primary uppercase tracking-widest">
                       {item.creator_username ? `@${item.creator_username}` : (item.creator_type === 'platform' ? t('admin.badges.creator.platform') : item.creator_type)}
@@ -1833,7 +2400,7 @@ export default function Admin() {
           </div>
         </div>
       ) : (
-        <div className="glass-card p-10 border-white/5 shadow-2xl relative overflow-hidden group">
+        <div className="glass-card p-10 border-inverse/5 shadow-2xl relative overflow-hidden group">
           <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full -mr-32 -mt-32 blur-[120px] opacity-0 group-hover:opacity-100 transition-opacity" />
           
           <h2 className="text-3xl font-display font-black uppercase italic tracking-tighter mb-10 flex items-center gap-4 text-primary relative z-10">
@@ -1845,9 +2412,9 @@ export default function Admin() {
               <div className="space-y-6">
                 <h3 className="text-[10px] font-mono font-black text-steel uppercase tracking-[0.2em] mb-6">{t('admin.settings.interface')}</h3>
                 <div className="space-y-4">
-                  <label className="flex items-center justify-between p-6 bg-asphalt rounded-2xl border border-white/5 hover:border-primary/20 transition-all cursor-pointer group/label">
+                  <label className="flex items-center justify-between p-6 bg-engine rounded-2xl border border-inverse/5 hover:border-primary/20 transition-all cursor-pointer group/label">
                     <div className="flex flex-col gap-1">
-                      <span className="text-sm font-medium text-chrome group-hover/label:text-white transition-colors">{t('admin.settings.fullscreen')}</span>
+                      <span className="text-sm font-medium text-chrome group-hover/label:text-chrome transition-colors">{t('admin.settings.fullscreen')}</span>
                       <span className="text-[10px] font-mono text-steel uppercase tracking-widest">{t('admin.settings.fullscreenDesc')}</span>
                     </div>
                     <input 
@@ -1863,14 +2430,81 @@ export default function Admin() {
               <div className="space-y-6">
                 <h3 className="text-[10px] font-mono font-black text-steel uppercase tracking-[0.2em] mb-6">{t('admin.settings.registration')}</h3>
                 <div className="space-y-4">
-                  <label className="flex items-center justify-between p-6 bg-asphalt rounded-2xl border border-white/5 hover:border-primary/20 transition-all cursor-pointer group/label">
-                    <span className="text-sm font-medium text-chrome group-hover/label:text-white transition-colors">{t('admin.settings.approval')}</span>
+                  <label className="flex items-center justify-between p-6 bg-engine rounded-2xl border border-inverse/5 hover:border-primary/20 transition-all cursor-pointer group/label">
+                    <span className="text-sm font-medium text-chrome group-hover/label:text-chrome transition-colors">{t('admin.settings.approval')}</span>
                     <input type="checkbox" defaultChecked className="w-5 h-5 accent-primary cursor-pointer" />
                   </label>
-                  <label className="flex items-center justify-between p-6 bg-asphalt rounded-2xl border border-white/5 hover:border-primary/20 transition-all cursor-pointer group/label">
-                    <span className="text-sm font-medium text-chrome group-hover/label:text-white transition-colors">{t('admin.settings.allowRiders')}</span>
+                  <label className="flex items-center justify-between p-6 bg-engine rounded-2xl border border-inverse/5 hover:border-primary/20 transition-all cursor-pointer group/label">
+                    <span className="text-sm font-medium text-chrome group-hover/label:text-chrome transition-colors">{t('admin.settings.allowRiders')}</span>
                     <input type="checkbox" defaultChecked className="w-5 h-5 accent-primary cursor-pointer" />
                   </label>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <h3 className="text-[10px] font-mono font-black text-steel uppercase tracking-[0.2em] mb-6">Map Data Sources</h3>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-6 bg-engine rounded-2xl border border-inverse/5 hover:border-primary/20 transition-all group/label">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-sm font-medium text-chrome group-hover/label:text-chrome transition-colors uppercase">
+                        Google Maps API
+                      </span>
+                      <span className="text-[10px] font-mono text-steel uppercase tracking-widest">Enable Google Places Search</span>
+                    </div>
+                    <button 
+                      onClick={async () => {
+                        try {
+                          const newValue = !settings.api_google_maps;
+                          const res = await fetchWithAuth('/api/admin/settings', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ key: 'api_google_maps', value: newValue })
+                          });
+                          if (res.ok) {
+                            setSettings(prev => ({ ...prev, api_google_maps: newValue }));
+                            showNotification('success', 'Settings updated');
+                          }
+                        } catch (err) {
+                          console.error(err);
+                          showNotification('error', 'Failed to update settings');
+                        }
+                      }}
+                      className="text-primary"
+                    >
+                      {settings.api_google_maps ? <ToggleRight className="w-8 h-8" /> : <ToggleLeft className="w-8 h-8 text-steel" />}
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between p-6 bg-engine rounded-2xl border border-inverse/5 hover:border-primary/20 transition-all group/label">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-sm font-medium text-chrome group-hover/label:text-chrome transition-colors uppercase">
+                        OpenStreetMap API
+                      </span>
+                      <span className="text-[10px] font-mono text-steel uppercase tracking-widest">Enable Overpass API Search</span>
+                    </div>
+                    <button 
+                      onClick={async () => {
+                        try {
+                          const newValue = !settings.api_osm;
+                          const res = await fetchWithAuth('/api/admin/settings', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ key: 'api_osm', value: newValue })
+                          });
+                          if (res.ok) {
+                            setSettings(prev => ({ ...prev, api_osm: newValue }));
+                            showNotification('success', 'Settings updated');
+                          }
+                        } catch (err) {
+                          console.error(err);
+                          showNotification('error', 'Failed to update settings');
+                        }
+                      }}
+                      className="text-primary"
+                    >
+                      {settings.api_osm ? <ToggleRight className="w-8 h-8" /> : <ToggleLeft className="w-8 h-8 text-steel" />}
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -1878,9 +2512,9 @@ export default function Admin() {
                 <h3 className="text-[10px] font-mono font-black text-steel uppercase tracking-[0.2em] mb-6">{t('admin.featureAccess.title')}</h3>
                 <div className="space-y-4">
                   {/* Photo Contest Global Toggle */}
-                  <div className="flex items-center justify-between p-6 bg-asphalt rounded-2xl border border-white/5 hover:border-primary/20 transition-all group/label">
+                  <div className="flex items-center justify-between p-6 bg-engine rounded-2xl border border-inverse/5 hover:border-primary/20 transition-all group/label">
                     <div className="flex flex-col gap-1">
-                      <span className="text-sm font-medium text-chrome group-hover/label:text-white transition-colors uppercase">
+                      <span className="text-sm font-medium text-chrome group-hover/label:text-chrome transition-colors uppercase">
                         {t('admin.contestPromotion.enable')}
                       </span>
                       <span className="text-[10px] font-mono text-steel uppercase tracking-widest">Global Contest Status</span>
@@ -1894,19 +2528,19 @@ export default function Admin() {
                   </div>
 
                   {featureAccess.map((feature) => (
-                    <div key={feature.key} className="flex items-center justify-between p-6 bg-asphalt rounded-2xl border border-white/5 hover:border-primary/20 transition-all group/label">
+                    <div key={feature.key} className="flex items-center justify-between p-6 bg-engine rounded-2xl border border-inverse/5 hover:border-primary/20 transition-all group/label">
                       <div className="flex flex-col gap-1">
-                        <span className="text-sm font-medium text-chrome group-hover/label:text-white transition-colors capitalize">
+                        <span className="text-sm font-medium text-chrome group-hover/label:text-chrome transition-colors capitalize">
                           {feature.key.replace('feature_', '').replace(/_/g, ' ')}
                         </span>
                         <span className="text-[10px] font-mono text-steel uppercase tracking-widest">{t('admin.featureAccess.allowedPlan')}</span>
                       </div>
-                      <div className="flex bg-carbon rounded-xl p-1 border border-white/5">
+                      <div className="flex bg-oil rounded-xl p-1 border border-inverse/5">
                         <button
                           onClick={() => handleFeatureAccessChange(feature.key, 'freemium')}
                           className={`text-[9px] font-mono font-black uppercase tracking-widest px-4 py-2 rounded-lg transition-all ${
                             feature.value === 'freemium'
-                              ? 'bg-asphalt text-white shadow-lg'
+                              ? 'bg-engine text-chrome shadow-lg'
                               : 'text-steel hover:text-chrome'
                           }`}
                         >
@@ -1916,7 +2550,7 @@ export default function Admin() {
                           onClick={() => handleFeatureAccessChange(feature.key, 'premium')}
                           className={`text-[9px] font-mono font-black uppercase tracking-widest px-4 py-2 rounded-lg transition-all ${
                             feature.value === 'premium'
-                              ? 'bg-primary text-white shadow-lg shadow-primary/20'
+                              ? 'bg-primary text-inverse shadow-lg shadow-primary/20'
                               : 'text-steel hover:text-chrome'
                           }`}
                         >
@@ -1932,8 +2566,8 @@ export default function Admin() {
                 <h3 className="text-[10px] font-mono font-black text-steel uppercase tracking-[0.2em] mb-6">{t('admin.settings.flags')}</h3>
                 <div className="space-y-4">
                   {Object.entries(flags).map(([key, value]) => (
-                    <label key={key} className="flex items-center justify-between p-6 bg-asphalt rounded-2xl border border-white/5 hover:border-primary/20 transition-all cursor-pointer group/label">
-                      <span className="text-sm font-medium text-chrome group-hover/label:text-white transition-colors capitalize">{key}</span>
+                    <label key={key} className="flex items-center justify-between p-6 bg-engine rounded-2xl border border-inverse/5 hover:border-primary/20 transition-all cursor-pointer group/label">
+                      <span className="text-sm font-medium text-chrome group-hover/label:text-chrome transition-colors capitalize">{key}</span>
                       <button onClick={() => toggleFlag(key as any)} className="text-primary">
                         {value ? <ToggleRight className="w-8 h-8" /> : <ToggleLeft className="w-8 h-8 text-steel" />}
                       </button>
@@ -1943,7 +2577,7 @@ export default function Admin() {
               </div>
             </div>
 
-            <div className="pt-10 border-t border-white/5 flex justify-end">
+            <div className="pt-10 border-t border-inverse/5 flex justify-end">
               <button className="btn-primary px-10">
                 {t('admin.settings.save')}
               </button>
@@ -1952,7 +2586,7 @@ export default function Admin() {
         )}
 
         {awardingBadgeId && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-engine/80 backdrop-blur-sm">
             <div className="glass-card w-full max-w-md p-6 relative">
               <button 
                 onClick={() => {
@@ -1961,7 +2595,7 @@ export default function Admin() {
                   setAwardSearchTerm('');
                   setAwardMessage(null);
                 }}
-                className="absolute top-4 right-4 text-steel hover:text-white transition-colors"
+                className="absolute top-4 right-4 text-steel hover:text-chrome transition-colors"
               >
                 <XCircle className="w-6 h-6" />
               </button>
@@ -1969,7 +2603,7 @@ export default function Admin() {
               <h3 className="text-2xl font-display font-black uppercase italic tracking-tighter mb-6 text-primary">{t('admin.badges.awardTitle')}</h3>
               
               {awardMessage && (
-                <div className={`p-4 rounded-xl mb-6 text-sm font-bold ${awardMessage.type === 'success' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                <div className={`p-4 rounded-xl mb-6 text-sm font-bold ${awardMessage.type === 'success' ? 'bg-success/20 text-success' : 'bg-error/20 text-error'}`}>
                   {awardMessage.text}
                 </div>
               )}
@@ -1988,7 +2622,7 @@ export default function Admin() {
                     placeholder={t('admin.badges.award.searchPlaceholder')}
                   />
                   {awardSearchTerm && !selectedUserIdToAward && (
-                    <div className="absolute top-full left-0 w-full mt-1 bg-carbon border border-white/10 rounded-xl shadow-xl z-50 max-h-48 overflow-y-auto">
+                    <div className="absolute top-full left-0 w-full mt-1 bg-oil border border-inverse/10 rounded-xl shadow-xl z-50 max-h-48 overflow-y-auto">
                       {users
                         .filter(u => 
                           u.username.toLowerCase().includes(awardSearchTerm.toLowerCase()) || 
@@ -1998,7 +2632,7 @@ export default function Admin() {
                         .map(user => (
                           <div 
                             key={user.id}
-                            className="p-3 hover:bg-white/5 cursor-pointer text-sm text-chrome transition-colors flex justify-between items-center"
+                            className="p-3 hover:bg-inverse/5 cursor-pointer text-sm text-chrome transition-colors flex justify-between items-center"
                             onClick={() => {
                               setSelectedUserIdToAward(user.id);
                               setAwardSearchTerm(user.company_name || user.rider_name || user.username);

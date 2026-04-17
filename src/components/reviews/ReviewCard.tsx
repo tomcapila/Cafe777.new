@@ -63,10 +63,10 @@ export const ReviewCard: React.FC<ReviewCardProps> = ({ review, currentUser, onR
             <h4 className="font-semibold">{review.username}</h4>
             <div className="flex items-center gap-1">
               {[...Array(5)].map((_, i) => (
-                <Star key={i} className={`w-4 h-4 ${i < review.rating ? 'fill-yellow-400 text-yellow-400' : 'text-steel'}`} />
+                <Star key={i} className={`w-4 h-4 ${i < review.rating ? 'fill-warning text-warning' : 'text-steel'}`} />
               ))}
               {review.verification_status === 'verified' && (
-                <span className="flex items-center gap-1 text-xs text-emerald-400 ml-2">
+                <span className="flex items-center gap-1 text-xs text-success ml-2">
                   <CheckCircle className="w-3 h-3" /> {t('common.verified')}
                 </span>
               )}
@@ -80,7 +80,7 @@ export const ReviewCard: React.FC<ReviewCardProps> = ({ review, currentUser, onR
             <button
               onClick={() => setIsScanning(!isScanning)}
               disabled={verifying}
-              className="flex items-center gap-1 text-xs bg-engine hover:bg-carbon text-chrome px-2 py-1 rounded transition-colors"
+              className="flex items-center gap-1 text-xs bg-engine hover:bg-oil text-chrome px-2 py-1 rounded transition-colors"
             >
               <QrCode className="w-3 h-3" />
               {isScanning ? t('common.cancel') : t('common.scan')}
@@ -92,12 +92,12 @@ export const ReviewCard: React.FC<ReviewCardProps> = ({ review, currentUser, onR
       <span className="text-xs text-steel">{review.created_at ? new Date(review.created_at.replace(' ', 'T') + 'Z').toLocaleDateString() : ''}</span>
       
       {isScanning && (
-        <div className="mt-4 p-4 bg-carbon rounded-xl border border-white/10">
+        <div className="mt-4 p-4 bg-oil rounded-xl border border-inverse/10">
           <div className="flex items-center justify-between mb-2">
             <h5 className="text-sm font-semibold text-center flex-1">{t('review.scanLocation')}</h5>
             <button 
               onClick={() => handleScan(JSON.stringify({ target_type: review.target_type, target_id: review.target_id }))}
-              className="text-[10px] bg-engine px-2 py-1 rounded text-steel hover:text-white"
+              className="text-[10px] bg-engine px-2 py-1 rounded text-steel hover:text-chrome"
             >
               {t('common.simulate')}
             </button>

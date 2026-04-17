@@ -43,6 +43,48 @@
         "joinedAt": { "type": "string", "format": "date-time", "description": "Timestamp when user joined" }
       },
       "required": ["userId", "joinedAt"]
+    },
+    "KeywordsConfig": {
+      "title": "KeywordsConfig",
+      "description": "Admin configuration for map search categories.",
+      "type": "object",
+      "properties": {
+        "category_name": { "type": "string" },
+        "keywords": { "type": "array", "items": { "type": "string" } },
+        "radius": { "type": "number" },
+        "icon": { "type": "string" }
+      },
+      "required": ["category_name", "keywords", "radius", "icon"]
+    },
+    "PlacesCache": {
+      "title": "PlacesCache",
+      "description": "Cached places from Google Maps API.",
+      "type": "object",
+      "properties": {
+        "place_id": { "type": "string" },
+        "name": { "type": "string" },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "rating": { "type": "number" },
+        "reviews": { "type": "number" },
+        "category": { "type": "string" },
+        "source_keyword": { "type": "string" },
+        "last_fetched": { "type": "string", "format": "date-time" }
+      },
+      "required": ["place_id", "name", "lat", "lng", "last_fetched"]
+    },
+    "PlacesControl": {
+      "title": "PlacesControl",
+      "description": "Admin control over specific places.",
+      "type": "object",
+      "properties": {
+        "place_id": { "type": "string" },
+        "is_approved": { "type": "boolean" },
+        "is_hidden": { "type": "boolean" },
+        "custom_category": { "type": "string" },
+        "priority_score": { "type": "number" }
+      },
+      "required": ["place_id", "is_approved", "is_hidden"]
     }
   },
   "firestore": {
@@ -61,6 +103,18 @@
     "/chats/{chatId}/participants/{participantId}": {
       "schema": { "$ref": "Participant" },
       "description": "Participants in a chat"
+    },
+    "/keywords_config/{configId}": {
+      "schema": { "$ref": "KeywordsConfig" },
+      "description": "Map search keywords configuration"
+    },
+    "/places_cache/{placeId}": {
+      "schema": { "$ref": "PlacesCache" },
+      "description": "Cached Google Places"
+    },
+    "/places_control/{placeId}": {
+      "schema": { "$ref": "PlacesControl" },
+      "description": "Admin controls for places"
     }
   }
 }

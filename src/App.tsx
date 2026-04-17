@@ -3,6 +3,7 @@ import { APIProvider } from '@vis.gl/react-google-maps';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 import { FeatureFlagProvider } from './contexts/FeatureFlagContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 import Header from './components/Header';
 import BottomNavigation from './components/BottomNavigation';
 import Home from './pages/Home';
@@ -61,12 +62,13 @@ export default function App() {
 
   return (
     <APIProvider apiKey={API_KEY} version="weekly">
-      <LanguageProvider>
-        <NotificationProvider>
-          <FeatureFlagProvider>
-            <Router>
-              <div className="h-[100dvh] flex flex-col bg-asphalt text-chrome font-sans selection:bg-primary/30 grid-pattern overflow-hidden">
-                <Header />
+      <ThemeProvider>
+        <LanguageProvider>
+          <NotificationProvider>
+            <FeatureFlagProvider>
+              <Router>
+                <div className="h-[100dvh] flex flex-col bg-engine text-chrome font-sans selection:bg-primary/30 grid-pattern overflow-hidden">
+                  <Header />
               
               <main className="flex-1 relative z-10 overflow-y-auto overflow-x-hidden pt-20 pb-20">
                 <Routes>
@@ -106,6 +108,7 @@ export default function App() {
         </FeatureFlagProvider>
       </NotificationProvider>
     </LanguageProvider>
+    </ThemeProvider>
     </APIProvider>
   );
 }

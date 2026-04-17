@@ -93,6 +93,35 @@ service cloud.firestore {
              data.joinedAt is timestamp;
     }
 
+    function isValidKeywordsConfig(data) {
+      return hasOnlyAllowedFields(['category_name', 'keywords', 'radius', 'icon']) &&
+             data.category_name is string && data.category_name.size() > 0 && data.category_name.size() < 100 &&
+             data.keywords is list && data.keywords.size() <= 20 &&
+             data.radius is number && data.radius > 0 && data.radius <= 50000 &&
+             data.icon is string && data.icon.size() < 100;
+    }
+
+    function isValidPlacesCache(data) {
+      return hasOnlyAllowedFields(['place_id', 'name', 'lat', 'lng', 'rating', 'reviews', 'category', 'source_keyword', 'last_fetched']) &&
+             data.place_id is string && data.place_id.size() > 0 && data.place_id.size() < 200 &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 500 &&
+             data.lat is number && data.lng is number &&
+             (!('rating' in data) || data.rating is number) &&
+             (!('reviews' in data) || data.reviews is number) &&
+             (!('category' in data) || (data.category is string && data.category.size() < 100)) &&
+             (!('source_keyword' in data) || (data.source_keyword is string && data.source_keyword.size() < 100)) &&
+             data.last_fetched is timestamp;
+    }
+
+    function isValidPlacesControl(data) {
+      return hasOnlyAllowedFields(['place_id', 'is_approved', 'is_hidden', 'custom_category', 'priority_score']) &&
+             data.place_id is string && data.place_id.size() > 0 && data.place_id.size() < 200 &&
+             data.is_approved is bool &&
+             data.is_hidden is bool &&
+             (!('custom_category' in data) || (data.custom_category is string && data.custom_category.size() < 100)) &&
+             (!('priority_score' in data) || data.priority_score is number);
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================

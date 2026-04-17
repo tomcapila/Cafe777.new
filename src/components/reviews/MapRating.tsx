@@ -27,7 +27,7 @@ export default function MapRating({ type, id, onClick, refreshTrigger = 0 }: Map
         e.stopPropagation();
         if (onClick) onClick();
       }}
-      className="flex items-center gap-1 text-yellow-400 hover:bg-white/5 px-2 py-1 rounded-lg transition-colors -ml-2"
+      className="flex items-center gap-1 text-warning hover:bg-inverse/5 px-2 py-1 rounded-lg transition-colors -ml-2"
     >
       <Star className={`w-3 h-3 ${summary.total_reviews > 0 ? 'fill-current' : 'text-steel'}`} />
       <span className="text-[10px] font-mono font-bold text-chrome">

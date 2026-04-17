@@ -14,10 +14,15 @@ export function useFeatureAccess() {
   useEffect(() => {
     async function fetchAccess() {
       try {
-        const res = await fetchWithAuth('/api/feature-access');
+        const res = await fetch('/api/feature-access');
         if (res.ok) {
-          const data = await res.json();
-          setAccess(data);
+          const contentType = res.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const data = await res.json();
+            setAccess(data);
+          } else {
+            console.warn('Feature access endpoint returned non-JSON response');
+          }
         }
       } catch (err) {
         console.error('Failed to fetch feature access:', err);

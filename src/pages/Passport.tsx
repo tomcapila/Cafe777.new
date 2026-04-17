@@ -29,8 +29,8 @@ export default function Passport() {
       <div className="max-w-4xl mx-auto px-4 pt-8">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-4xl font-display font-black uppercase italic tracking-tighter text-white">
-              {t('passport.title')} <span className="text-primary">Passport</span>
+            <h1 className="text-4xl font-display font-black uppercase italic tracking-tighter text-chrome">
+              {t('passport.titleMain')} <span className="text-primary">{t('passport.titleHighlight')}</span>
             </h1>
             <p className="text-steel font-mono text-xs uppercase tracking-widest mt-2">{t('passport.subtitle')}</p>
           </div>
@@ -49,8 +49,8 @@ export default function Passport() {
               className={`
                 flex items-center gap-2 px-6 py-3 rounded-2xl font-mono text-[10px] font-black uppercase tracking-widest transition-all shrink-0
                 ${activeCategory === cat.id 
-                  ? 'bg-primary text-asphalt shadow-lg shadow-primary/20' 
-                  : 'bg-carbon text-steel border border-white/5 hover:border-white/10'}
+                  ? 'bg-primary text-inverse shadow-lg shadow-primary/20' 
+                  : 'bg-oil text-steel border border-inverse/5 hover:border-inverse/10'}
               `}
             >
               <cat.icon className="w-4 h-4" />
@@ -71,31 +71,31 @@ export default function Passport() {
               >
                 <div className={`absolute top-0 right-0 w-24 h-24 -mr-8 -mt-8 blur-3xl opacity-20 transition-opacity group-hover:opacity-40
                   ${stamp.rarity === 'common' ? 'bg-steel' : ''}
-                  ${stamp.rarity === 'rare' ? 'bg-blue-500' : ''}
-                  ${stamp.rarity === 'epic' ? 'bg-purple-500' : ''}
+                  ${stamp.rarity === 'rare' ? 'bg-info' : ''}
+                  ${stamp.rarity === 'epic' ? 'bg-primary' : ''}
                 `} />
                 
                 <div className="flex items-start justify-between mb-6 relative z-10">
-                  <div className="w-16 h-16 rounded-full bg-asphalt border-4 border-white/5 flex items-center justify-center shadow-inner">
+                  <div className="w-16 h-16 rounded-full bg-engine border-4 border-inverse/5 flex items-center justify-center shadow-inner">
                     <MapPin className={`w-8 h-8 ${
                       stamp.rarity === 'common' ? 'text-steel' : 
-                      stamp.rarity === 'rare' ? 'text-blue-400' : 
-                      'text-purple-400'
+                      stamp.rarity === 'rare' ? 'text-info' : 
+                      'text-primary'
                     }`} />
                   </div>
                   <div className={`text-[8px] font-mono font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full border
                     ${stamp.rarity === 'common' ? 'text-steel border-steel/20 bg-steel/5' : ''}
-                    ${stamp.rarity === 'rare' ? 'text-blue-400 border-blue-400/20 bg-blue-400/5' : ''}
-                    ${stamp.rarity === 'epic' ? 'text-purple-400 border-purple-400/20 bg-purple-400/5' : ''}
+                    ${stamp.rarity === 'rare' ? 'text-info border-info/20 bg-info/5' : ''}
+                    ${stamp.rarity === 'epic' ? 'text-primary border-primary/20 bg-primary/5' : ''}
                   `}>
                     {t(`passport.rarity.${stamp.rarity}`)}
                   </div>
                 </div>
 
                 <div className="relative z-10">
-                  <h3 className="text-xl font-display font-black uppercase italic tracking-tight text-white mb-1">{stamp.location}</h3>
+                  <h3 className="text-xl font-display font-black uppercase italic tracking-tight text-chrome mb-1">{stamp.location}</h3>
                   <p className="text-[10px] font-mono text-steel uppercase tracking-widest mb-4">{t('passport.issuedBy')} {stamp.entity}</p>
-                  <div className="flex items-center justify-between pt-4 border-t border-white/5">
+                  <div className="flex items-center justify-between pt-4 border-t border-inverse/5">
                     <span className="text-[10px] font-mono text-steel uppercase tracking-widest">{stamp.date}</span>
                     <ChevronRight className="w-4 h-4 text-steel group-hover:text-primary transition-colors" />
                   </div>
@@ -103,11 +103,11 @@ export default function Passport() {
               </motion.div>
             ))
           ) : (
-            <div className="sm:col-span-2 py-20 text-center glass-card border-dashed border-white/10">
-              <div className="w-16 h-16 bg-carbon rounded-full flex items-center justify-center mx-auto mb-4">
+            <div className="sm:col-span-2 py-20 text-center glass-card border-dashed border-inverse/10">
+              <div className="w-16 h-16 bg-oil rounded-full flex items-center justify-center mx-auto mb-4">
                 <Shield className="w-8 h-8 text-steel" />
               </div>
-              <h3 className="text-xl font-display font-black uppercase italic tracking-tight text-white mb-2">{t('passport.noStamps')}</h3>
+              <h3 className="text-xl font-display font-black uppercase italic tracking-tight text-chrome mb-2">{t('passport.noStamps')}</h3>
               <p className="text-steel font-mono text-xs uppercase tracking-widest">{t('passport.exploreMap')}</p>
             </div>
           )}

@@ -231,18 +231,18 @@ export default function EditProfile() {
           <form onSubmit={handleSubmit} className="space-y-8">
             <div className="mb-12">
               <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-4">{t('profile.coverPhoto') || 'Cover Photo'}</label>
-              <div className="relative h-48 w-full rounded-3xl overflow-hidden border-4 border-asphalt bg-carbon shadow-2xl group">
+              <div className="relative h-48 w-full rounded-3xl overflow-hidden border-4 border-asphalt bg-oil shadow-2xl group">
                 <img 
                   src={coverPhotoUrl || 'https://picsum.photos/seed/moto/1920/1080'} 
                   alt="Cover" 
                   className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500"
                   referrerPolicy="no-referrer"
                 />
-                <div className="absolute inset-0 bg-asphalt/40 group-hover:bg-transparent transition-colors" />
+                <div className="absolute inset-0 bg-engine/40 group-hover:bg-transparent transition-colors" />
                 <button
                   type="button"
                   onClick={() => coverInputRef.current?.click()}
-                  className="absolute bottom-4 right-4 p-3 bg-primary text-asphalt rounded-xl shadow-xl hover:bg-white transition-all hover:scale-110"
+                  className="absolute bottom-4 right-4 p-3 bg-primary text-inverse rounded-xl shadow-xl hover:bg-inverse hover:text-inverse transition-all hover:scale-110"
                 >
                   <Upload className="w-5 h-5" />
                 </button>
@@ -258,7 +258,7 @@ export default function EditProfile() {
 
             <div className="flex flex-col items-center mb-12">
               <div className="relative group">
-                <div className="w-40 h-40 rounded-3xl overflow-hidden border-4 border-asphalt bg-carbon shadow-2xl shadow-primary/20">
+                <div className="w-40 h-40 rounded-3xl overflow-hidden border-4 border-asphalt bg-oil shadow-2xl shadow-primary/20">
                   <img 
                     src={profilePicUrl} 
                     alt="Profile" 
@@ -266,7 +266,7 @@ export default function EditProfile() {
                     referrerPolicy="no-referrer"
                   />
                   {uploading && (
-                    <div className="absolute inset-0 bg-asphalt/80 flex items-center justify-center">
+                    <div className="absolute inset-0 bg-engine/80 flex items-center justify-center">
                       <Loader2 className="w-10 h-10 text-primary animate-spin" />
                     </div>
                   )}
@@ -274,7 +274,7 @@ export default function EditProfile() {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="absolute -bottom-3 -right-3 p-4 bg-primary text-asphalt rounded-2xl shadow-xl hover:bg-oil transition-all hover:scale-110 active:scale-95"
+                  className="absolute -bottom-3 -right-3 p-4 bg-primary text-inverse rounded-2xl shadow-xl hover:bg-oil transition-all hover:scale-110 active:scale-95"
                 >
                   <Camera className="w-6 h-6" />
                 </button>
@@ -305,6 +305,7 @@ export default function EditProfile() {
               <input 
                 type="text" 
                 name="new_username" 
+                autoCapitalize="sentences"
                 required
                 defaultValue={username}
                 className="input-field"
@@ -331,6 +332,7 @@ export default function EditProfile() {
                   <input 
                     type="text" 
                     name="name" 
+                    autoCapitalize="sentences"
                     required
                     defaultValue={data.profile.name}
                     className="input-field"
@@ -348,11 +350,11 @@ export default function EditProfile() {
                   </div>
                   <div>
                     <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-2">{t('profile.city')}</label>
-                    <input 
-                      type="text" 
+                    <LocationAutocomplete 
                       name="city" 
                       defaultValue={data.profile.city}
                       className="input-field"
+                      types={['(cities)']}
                     />
                   </div>
                 </div>
@@ -360,6 +362,7 @@ export default function EditProfile() {
                   <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-2">{t('profile.bio') || 'Bio'}</label>
                   <textarea 
                     name="bio" 
+                    autoCapitalize="sentences"
                     rows={3}
                     defaultValue={data.bio}
                     className="input-field resize-none"
@@ -371,6 +374,7 @@ export default function EditProfile() {
                   <input 
                     type="text" 
                     name="motorcycle" 
+                    autoCapitalize="sentences"
                     defaultValue={data.motorcycle}
                     className="input-field"
                     placeholder="e.g. 2023 Triumph Bonneville T120"
@@ -394,6 +398,7 @@ export default function EditProfile() {
                   <input 
                     type="text" 
                     name="company_name" 
+                    autoCapitalize="sentences"
                     required
                     defaultValue={data.profile.company_name}
                     className="input-field"
@@ -415,13 +420,26 @@ export default function EditProfile() {
                     <option value="other">{t('category.other')}</option>
                   </select>
                 </div>
+                {data.profile.service_category === 'club' && (
+                  <div>
+                    <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-2">Chapter Label (e.g. Chapter, Party, Faction)</label>
+                    <input 
+                      type="text" 
+                      name="chapter_label" 
+                      autoCapitalize="sentences"
+                      defaultValue={data.profile.chapter_label || 'Chapter'}
+                      className="input-field"
+                      placeholder="Chapter"
+                    />
+                  </div>
+                )}
                 <div>
                   <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-2">{t('profile.fullAddress')}</label>
-                  <input 
-                    type="text" 
+                  <LocationAutocomplete 
                     name="full_address" 
                     defaultValue={data.profile.full_address}
                     className="input-field"
+                    types={['address']}
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-6">
@@ -450,6 +468,7 @@ export default function EditProfile() {
                   <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-2">{t('profile.detailsBio')}</label>
                   <textarea 
                     name="details" 
+                    autoCapitalize="sentences"
                     rows={5}
                     defaultValue={data.profile.details || ''}
                     className="input-field resize-none"
@@ -485,7 +504,7 @@ export default function EditProfile() {
           </form>
 
           {isOwner && (
-            <div className="mt-12 pt-12 border-t border-white/10">
+            <div className="mt-12 pt-12 border-t border-inverse/10">
               <h3 className="text-xs font-mono uppercase tracking-widest text-engine mb-4">Danger Zone</h3>
               <p className="text-steel text-sm mb-6 font-light">
                 Once you delete your account, there is no going back. Please be certain.

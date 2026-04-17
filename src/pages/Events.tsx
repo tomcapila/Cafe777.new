@@ -7,6 +7,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useNotification } from '../contexts/NotificationContext';
 import PremiumBadge from '../components/PremiumBadge';
 import { useFeatureAccess } from '../hooks/useFeatureAccess';
+import LocationAutocomplete from '../components/LocationAutocomplete';
 
 export default function Events() {
   const [events, setEvents] = useState<any[]>([]);
@@ -258,11 +259,11 @@ export default function Events() {
       </div>
 
       {currentUser && (
-        <div className="flex items-center gap-2 mb-10 bg-asphalt p-1.5 rounded-2xl border border-white/5 w-fit">
+        <div className="flex items-center gap-2 mb-10 bg-engine p-1.5 rounded-2xl border border-inverse/5 w-fit">
           <button
             onClick={() => setActiveTab('all')}
             className={`px-6 py-2.5 rounded-xl text-[10px] font-mono font-black uppercase tracking-widest transition-all ${
-              activeTab === 'all' ? 'bg-primary text-asphalt shadow-lg shadow-primary/20' : 'text-steel hover:text-white'
+              activeTab === 'all' ? 'bg-primary text-inverse shadow-lg shadow-primary/20' : 'text-steel hover:text-chrome'
             }`}
           >
             {t('nav.events')}
@@ -270,7 +271,7 @@ export default function Events() {
           <button
             onClick={() => setActiveTab('my')}
             className={`px-6 py-2.5 rounded-xl text-[10px] font-mono font-black uppercase tracking-widest transition-all ${
-              activeTab === 'my' ? 'bg-primary text-asphalt shadow-lg shadow-primary/20' : 'text-steel hover:text-white'
+              activeTab === 'my' ? 'bg-primary text-inverse shadow-lg shadow-primary/20' : 'text-steel hover:text-chrome'
             }`}
           >
             {t('nav.myEvents')}
@@ -314,17 +315,17 @@ export default function Events() {
               <option value="other">{t('events.category.other')}</option>
             </select>
           </div>
-          <div className="hidden lg:flex items-center gap-2 bg-asphalt p-1.5 rounded-2xl border border-white/5">
+          <div className="hidden lg:flex items-center gap-2 bg-engine p-1.5 rounded-2xl border border-inverse/5">
             <button
               onClick={() => setViewMode('list')}
-              className={`p-2.5 rounded-xl transition-all ${viewMode === 'list' ? 'bg-primary text-asphalt shadow-lg' : 'text-steel hover:text-white'}`}
+              className={`p-2.5 rounded-xl transition-all ${viewMode === 'list' ? 'bg-primary text-inverse shadow-lg' : 'text-steel hover:text-chrome'}`}
               title={t('events.view.list')}
             >
               <List className="w-4 h-4" />
             </button>
             <button
               onClick={() => setViewMode('grid')}
-              className={`p-2.5 rounded-xl transition-all ${viewMode === 'grid' ? 'bg-primary text-asphalt shadow-lg' : 'text-steel hover:text-white'}`}
+              className={`p-2.5 rounded-xl transition-all ${viewMode === 'grid' ? 'bg-primary text-inverse shadow-lg' : 'text-steel hover:text-chrome'}`}
               title={t('events.view.grid')}
             >
               <LayoutGrid className="w-4 h-4" />
@@ -372,7 +373,7 @@ export default function Events() {
                     />
                   ))
                 ) : (
-                  <div className="p-8 rounded-2xl border border-dashed border-white/5 text-center text-steel font-mono text-[10px] uppercase tracking-widest">
+                  <div className="p-8 rounded-2xl border border-dashed border-inverse/5 text-center text-steel font-mono text-[10px] uppercase tracking-widest">
                     {t('events.noHosted')}
                   </div>
                 )}
@@ -382,7 +383,7 @@ export default function Events() {
             {/* Attending Events */}
             <div>
               <h3 className="text-xs font-mono font-black text-steel uppercase tracking-[0.2em] mb-6 flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/50" />
+                <div className="w-2 h-2 rounded-full bg-success shadow-lg shadow-success/50" />
                 {t('events.attending')}
               </h3>
               <div className={`grid gap-6 ${viewMode === 'grid' ? 'lg:grid-cols-2' : 'grid-cols-1'}`}>
@@ -399,7 +400,7 @@ export default function Events() {
                     />
                   ))
                 ) : (
-                  <div className="p-8 rounded-2xl border border-dashed border-white/5 text-center text-steel font-mono text-[10px] uppercase tracking-widest">
+                  <div className="p-8 rounded-2xl border border-dashed border-inverse/5 text-center text-steel font-mono text-[10px] uppercase tracking-widest">
                     {t('events.notAttending')}
                   </div>
                 )}
@@ -417,7 +418,7 @@ export default function Events() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setShowModal(false)}
-              className="absolute inset-0 bg-asphalt/90 backdrop-blur-md"
+              className="absolute inset-0 bg-engine/90 backdrop-blur-md"
             />
             <motion.div 
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -427,7 +428,7 @@ export default function Events() {
             >
               <button 
                 onClick={() => setShowModal(false)}
-                className="absolute top-8 right-8 p-2 text-steel hover:text-white transition-colors"
+                className="absolute top-8 right-8 p-2 text-steel hover:text-chrome transition-colors"
               >
                 <X className="w-6 h-6" />
               </button>
@@ -442,6 +443,7 @@ export default function Events() {
                     <input
                       type="text"
                       required
+                      autoCapitalize="sentences"
                       placeholder={t('event.modal.titlePlaceholder')}
                       value={eventData.title || ''}
                       onChange={(e) => setEventData({...eventData, title: e.target.value})}
@@ -481,6 +483,7 @@ export default function Events() {
                     <input
                       type="text"
                       required
+                      autoCapitalize="sentences"
                       placeholder={t('event.modal.timePlaceholder')}
                       value={eventData.time || ''}
                       onChange={(e) => setEventData({...eventData, time: e.target.value})}
@@ -491,13 +494,10 @@ export default function Events() {
                 
                 <div className="space-y-2">
                   <label className="text-[10px] font-mono font-bold text-steel uppercase tracking-widest ml-1">{t('event.field.location')}</label>
-                  <input
-                    type="text"
-                    required
+                  <LocationAutocomplete
+                    value={eventData.location}
+                    onChange={(value) => setEventData({...eventData, location: value})}
                     placeholder={t('event.modal.locationPlaceholder')}
-                    value={eventData.location || ''}
-                    onChange={(e) => setEventData({...eventData, location: e.target.value})}
-                    className="input-field"
                   />
                 </div>
                 
@@ -506,13 +506,13 @@ export default function Events() {
                   <div className="flex items-center gap-6">
                     <div 
                       onClick={() => fileInputRef.current?.click()}
-                      className="w-28 h-28 rounded-3xl bg-asphalt border border-white/10 flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 transition-all overflow-hidden relative group shadow-xl"
+                      className="w-28 h-28 rounded-3xl bg-engine border border-inverse/10 flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 transition-all overflow-hidden relative group shadow-xl"
                     >
                       {eventData.image_url ? (
                         <>
                           <img src={eventData.image_url} alt="Event" className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all" />
-                          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                            <Plus className="w-8 h-8 text-white" />
+                          <div className="absolute inset-0 bg-engine/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                            <Plus className="w-8 h-8 text-chrome" />
                           </div>
                         </>
                       ) : (
@@ -522,7 +522,7 @@ export default function Events() {
                         </>
                       )}
                       {isUploading && (
-                        <div className="absolute inset-0 bg-asphalt/90 flex items-center justify-center">
+                        <div className="absolute inset-0 bg-engine/90 flex items-center justify-center">
                           <Clock className="w-6 h-6 text-primary animate-spin" />
                         </div>
                       )}
@@ -540,7 +540,7 @@ export default function Events() {
                         <button 
                           type="button"
                           onClick={() => setEventData(prev => ({ ...prev, image_url: '' }))}
-                          className="text-[10px] font-mono font-black text-accent uppercase tracking-widest hover:text-red-400 transition-colors"
+                          className="text-[10px] font-mono font-black text-accent uppercase tracking-widest hover:text-error transition-colors"
                         >
                           {t('event.field.remove')}
                         </button>
@@ -549,9 +549,9 @@ export default function Events() {
                   </div>
 
                   {/* Image Preview Area */}
-                  <div className="mt-4 p-4 rounded-2xl bg-asphalt border border-white/5">
+                  <div className="mt-4 p-4 rounded-2xl bg-engine border border-inverse/5">
                     <div className="text-[10px] font-mono font-bold text-steel uppercase tracking-widest mb-4">{t('event.preview.title')}</div>
-                    <div className="aspect-video w-full rounded-xl overflow-hidden bg-carbon border border-white/5 flex items-center justify-center relative group">
+                    <div className="aspect-video w-full rounded-xl overflow-hidden bg-oil border border-inverse/5 flex items-center justify-center relative group">
                       {eventData.image_url ? (
                         <img src={eventData.image_url} alt="Preview" className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500" />
                       ) : (
@@ -580,7 +580,7 @@ export default function Events() {
                             <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
                               <ShieldCheck className="w-4 h-4 text-primary" />
                             </div>
-                            <span className="text-white">
+                            <span className="text-chrome">
                               {stamps.find(s => s.id === eventData.participation_stamp_id)?.name}
                             </span>
                           </>
@@ -597,9 +597,9 @@ export default function Events() {
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, y: 10 }}
-                          className="absolute z-50 w-full mt-2 bg-asphalt border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
+                          className="absolute z-50 w-full mt-2 bg-engine border border-inverse/10 rounded-2xl shadow-2xl overflow-hidden"
                         >
-                          <div className="p-4 border-bottom border-white/5">
+                          <div className="p-4 border-bottom border-inverse/5">
                             <div className="relative">
                               <Search className="w-4 h-4 text-steel absolute left-3 top-1/2 -translate-y-1/2" />
                               <input
@@ -607,7 +607,7 @@ export default function Events() {
                                 placeholder="Search stamps..."
                                 value={stampSearchTerm}
                                 onChange={(e) => setStampSearchTerm(e.target.value)}
-                                className="w-full bg-carbon border border-white/5 rounded-xl pl-10 pr-4 py-2 text-xs text-white focus:outline-none focus:border-primary transition-all"
+                                className="w-full bg-oil border border-inverse/5 rounded-xl pl-10 pr-4 py-2 text-xs text-chrome focus:outline-none focus:border-primary transition-all"
                               />
                             </div>
                           </div>
@@ -618,9 +618,9 @@ export default function Events() {
                                 setEventData({ ...eventData, participation_stamp_id: null });
                                 setIsStampSelectorOpen(false);
                               }}
-                              className="w-full px-4 py-3 text-left hover:bg-white/5 transition-colors flex items-center gap-3 border-b border-white/5"
+                              className="w-full px-4 py-3 text-left hover:bg-inverse/5 transition-colors flex items-center gap-3 border-b border-inverse/5"
                             >
-                              <div className="w-8 h-8 rounded-full bg-carbon flex items-center justify-center border border-white/10">
+                              <div className="w-8 h-8 rounded-full bg-oil flex items-center justify-center border border-inverse/10">
                                 <X className="w-4 h-4 text-steel" />
                               </div>
                               <span className="text-[10px] font-mono font-black uppercase tracking-widest text-steel">
@@ -637,13 +637,13 @@ export default function Events() {
                                     setEventData({ ...eventData, participation_stamp_id: stamp.id });
                                     setIsStampSelectorOpen(false);
                                   }}
-                                  className="w-full px-4 py-3 text-left hover:bg-white/5 transition-colors flex items-center gap-3 border-b border-white/5 last:border-0"
+                                  className="w-full px-4 py-3 text-left hover:bg-inverse/5 transition-colors flex items-center gap-3 border-b border-inverse/5 last:border-0"
                                 >
                                   <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20">
                                     <ShieldCheck className="w-4 h-4 text-primary" />
                                   </div>
                                   <div className="flex flex-col">
-                                    <span className="text-[10px] font-mono font-black uppercase tracking-widest text-white">
+                                    <span className="text-[10px] font-mono font-black uppercase tracking-widest text-chrome">
                                       {stamp.name}
                                     </span>
                                     <span className="text-[8px] font-mono text-steel uppercase tracking-widest">
@@ -664,6 +664,7 @@ export default function Events() {
                   <textarea
                     required
                     rows={4}
+                    autoCapitalize="sentences"
                     placeholder={t('event.modal.descPlaceholder')}
                     value={eventData.description || ''}
                     onChange={(e) => setEventData({...eventData, description: e.target.value})}
@@ -698,13 +699,13 @@ function EventListItem({ event, t, isAdmin, handleRSVP, handlePromote, viewMode 
       }`}
     >
       {event.is_promoted === 1 && (
-        <div className="absolute top-0 right-0 bg-primary text-asphalt text-[10px] font-black uppercase tracking-widest px-4 py-1.5 rounded-bl-2xl flex items-center gap-2 shadow-lg z-20">
+        <div className="absolute top-0 right-0 bg-primary text-inverse text-[10px] font-black uppercase tracking-widest px-4 py-1.5 rounded-bl-2xl flex items-center gap-2 shadow-lg z-20">
           <Star className="w-3 h-3 fill-current" />
           {t('events.promoted')}
         </div>
       )}
 
-      <div className={`${viewMode === 'list' ? 'md:w-56' : 'w-full h-48'} shrink-0 flex flex-col justify-center items-center bg-asphalt rounded-3xl border border-white/5 overflow-hidden relative group/img shadow-2xl`}>
+      <div className={`${viewMode === 'list' ? 'md:w-56' : 'w-full h-48'} shrink-0 flex flex-col justify-center items-center bg-engine rounded-3xl border border-inverse/5 overflow-hidden relative group/img shadow-2xl`}>
         {event.image_url ? (
           <img src={event.image_url} alt="" className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover/img:opacity-60 grayscale group-hover/img:grayscale-0 transition-all duration-700" referrerPolicy="no-referrer" />
         ) : (
@@ -717,7 +718,7 @@ function EventListItem({ event, t, isAdmin, handleRSVP, handlePromote, viewMode 
           <span className="text-6xl font-display font-black italic tracking-tighter">
             {new Date(event.date + 'T12:00:00').getDate()}
           </span>
-          <div className="flex items-center gap-2 text-steel font-mono text-[10px] uppercase tracking-widest mt-4 bg-asphalt/80 px-3 py-1 rounded-full border border-white/5">
+          <div className="flex items-center gap-2 text-steel font-mono text-[10px] uppercase tracking-widest mt-4 bg-engine/80 px-3 py-1 rounded-full border border-inverse/5">
             <Clock className="w-3 h-3" />
             {event.time}
           </div>
@@ -727,10 +728,10 @@ function EventListItem({ event, t, isAdmin, handleRSVP, handlePromote, viewMode 
       <div className="flex-1">
         <div className="flex items-center gap-4 mb-4">
           <Link to={`/profile/${event.username}`} className="flex items-center gap-3 hover:opacity-80 transition-opacity group/author">
-            <div className="w-8 h-8 rounded-full overflow-hidden border border-white/10 shadow-lg">
+            <div className="w-8 h-8 rounded-full overflow-hidden border border-inverse/10 shadow-lg">
               <img src={event.profile_picture_url} alt="" className="w-full h-full object-cover grayscale group-hover/author:grayscale-0 transition-all" referrerPolicy="no-referrer" />
             </div>
-            <span className="text-xs font-mono font-black uppercase tracking-widest text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/20 group-hover/author:bg-primary group-hover/author:text-asphalt transition-all flex items-center gap-1.5">
+            <span className="text-xs font-mono font-black uppercase tracking-widest text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/20 group-hover/author:bg-primary group-hover/author:text-inverse transition-all flex items-center gap-1.5">
               {event.company_name || event.username}
               {event.plan === 'premium' && <PremiumBadge size={10} />}
             </span>
@@ -777,8 +778,8 @@ function EventListItem({ event, t, isAdmin, handleRSVP, handlePromote, viewMode 
           onClick={() => handleRSVP(event.id)}
           className={`w-full py-3 rounded-2xl font-display font-black uppercase italic tracking-widest text-xs transition-all border ${
             event.has_rsvpd 
-              ? 'bg-primary text-asphalt border-primary hover:bg-oil shadow-lg shadow-primary/20' 
-              : 'bg-white/5 text-white border-white/10 hover:bg-white/10'
+              ? 'bg-primary text-inverse border-primary hover:bg-oil shadow-lg shadow-primary/20' 
+              : 'bg-inverse/5 text-chrome border-inverse/10 hover:bg-inverse/10'
           }`}
         >
           {event.has_rsvpd ? t('events.attending') : t('events.rsvp')}
@@ -788,7 +789,7 @@ function EventListItem({ event, t, isAdmin, handleRSVP, handlePromote, viewMode 
             onClick={() => handlePromote(event.id, event.is_promoted)}
             className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-2xl text-[10px] font-mono font-bold uppercase tracking-widest transition-all ${
               event.is_promoted 
-                ? 'bg-engine text-steel hover:bg-carbon' 
+                ? 'bg-engine text-steel hover:bg-oil' 
                 : 'bg-primary/5 text-primary border border-primary/20 hover:bg-primary/10'
             }`}
           >
@@ -803,7 +804,7 @@ function EventListItem({ event, t, isAdmin, handleRSVP, handlePromote, viewMode 
 
 function EmptyEvents({ t }: any) {
   return (
-    <div className="text-center py-32 glass-card border-dashed border-white/10">
+    <div className="text-center py-32 glass-card border-dashed border-inverse/10">
       <Calendar className="w-16 h-16 text-engine mx-auto mb-6" />
       <h3 className="text-2xl font-display font-black uppercase italic mb-4 tracking-tight">{t('events.noFound')}</h3>
       <p className="text-steel font-light">{t('events.checkBack')}</p>

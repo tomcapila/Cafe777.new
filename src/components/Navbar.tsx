@@ -143,20 +143,20 @@ export default function Navbar() {
   };
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-asphalt/90 backdrop-blur-xl border-b border-white/5 shadow-2xl">
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-engine/90 backdrop-blur-xl border-b border-inverse/5 shadow-2xl">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-20">
           <Link to="/" className="flex items-center gap-3 group">
             <div className="bg-primary p-2.5 rounded-2xl group-hover:bg-oil transition-all shadow-lg shadow-primary/20 group-hover:scale-110">
-              <Bike className="w-6 h-6 text-asphalt" />
+              <Bike className="w-6 h-6 text-inverse" />
             </div>
-            <span className="font-display font-black text-2xl tracking-tighter uppercase italic text-white group-hover:text-primary transition-colors">Café777</span>
+            <span className="font-display font-black text-2xl tracking-tighter uppercase italic text-chrome group-hover:text-primary transition-colors">Café777</span>
           </Link>
           
           <div className="flex items-center gap-4 sm:gap-6">
             <button 
               onClick={toggleLanguage}
-              className="flex items-center gap-2 text-[10px] font-mono font-black text-steel hover:text-primary transition-all uppercase tracking-[0.2em] border border-white/5 px-2 sm:px-3 py-1.5 rounded-xl hover:border-primary/20"
+              className="flex items-center gap-2 text-[10px] font-mono font-black text-steel hover:text-primary transition-all uppercase tracking-[0.2em] border border-inverse/5 px-2 sm:px-3 py-1.5 rounded-xl hover:border-primary/20"
               title={language === 'en' ? 'Mudar para Português' : 'Switch to English'}
             >
               <Languages className="w-4 h-4" />
@@ -176,7 +176,7 @@ export default function Navbar() {
                   to={`/profile/${user.username}`} 
                   className="flex items-center gap-2 text-[10px] font-mono font-black uppercase tracking-[0.2em] text-steel hover:text-primary transition-all group/profile"
                 >
-                  <div className="w-8 h-8 rounded-xl bg-carbon border border-white/5 flex items-center justify-center group-hover/profile:border-primary/30 transition-all">
+                  <div className="w-8 h-8 rounded-xl bg-oil border border-inverse/5 flex items-center justify-center group-hover/profile:border-primary/30 transition-all">
                     <UserIcon className="w-4 h-4" />
                   </div>
                   <span className="hidden lg:inline">{t('nav.profile')}</span>
@@ -189,7 +189,7 @@ export default function Navbar() {
                 </Link>
                 <Link 
                   to="/onboarding" 
-                  className="text-[10px] font-display font-black bg-primary text-asphalt px-4 py-2 sm:px-6 sm:py-3 rounded-2xl hover:bg-oil transition-all active:scale-95 uppercase italic tracking-widest shadow-xl shadow-primary/20"
+                  className="text-[10px] font-display font-black bg-primary text-inverse px-4 py-2 sm:px-6 sm:py-3 rounded-2xl hover:bg-oil transition-all active:scale-95 uppercase italic tracking-widest shadow-xl shadow-primary/20"
                 >
                   {t('nav.join')}
                 </Link>
@@ -201,7 +201,7 @@ export default function Navbar() {
                 <Link to="/messages" className="text-steel hover:text-primary ml-2 relative">
                   <MessageSquare className="w-6 h-6" />
                   {unreadMessagesCount > 0 && (
-                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary text-asphalt text-[10px] font-bold rounded-full flex items-center justify-center">
+                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary text-inverse text-[10px] font-bold rounded-full flex items-center justify-center">
                       {unreadMessagesCount}
                     </span>
                   )}
@@ -209,7 +209,7 @@ export default function Navbar() {
                 <Link to="/notifications" className="text-steel hover:text-primary ml-2 relative">
                   <Bell className="w-6 h-6" />
                   {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary text-asphalt text-[10px] font-bold rounded-full flex items-center justify-center">
+                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary text-inverse text-[10px] font-bold rounded-full flex items-center justify-center">
                       {unreadCount}
                     </span>
                   )}

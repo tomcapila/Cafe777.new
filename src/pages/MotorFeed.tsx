@@ -401,16 +401,16 @@ export default function MotorFeed() {
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Feed Header */}
-      <div className="px-4 pt-6 pb-4 border-b border-white/5 bg-asphalt/50 backdrop-blur-xl sticky top-0 z-20">
+      <div className="px-4 pt-6 pb-4 border-b border-inverse/5 bg-engine/50 backdrop-blur-xl sticky top-0 z-20">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-display font-black uppercase italic tracking-tighter">
-            <span className="text-primary">{t('feed.title.motor')}</span><span className="text-white">{t('feed.title.feed')}</span>
+            <span className="text-primary">{t('feed.title.motor')}</span><span className="text-chrome">{t('feed.title.feed')}</span>
           </h1>
           <div className="flex gap-2">
-            <button className="p-2 bg-carbon rounded-xl border border-white/5 text-steel hover:text-white transition-colors" title={t('feed.search')}>
+            <button className="p-2 bg-oil rounded-xl border border-inverse/5 text-steel hover:text-chrome transition-colors" title={t('feed.search')}>
               <Search className="w-5 h-5" />
             </button>
-            <button className="p-2 bg-carbon rounded-xl border border-white/5 text-steel hover:text-white transition-colors" title={t('feed.filter')}>
+            <button className="p-2 bg-oil rounded-xl border border-inverse/5 text-steel hover:text-chrome transition-colors" title={t('feed.filter')}>
               <Filter className="w-5 h-5" />
             </button>
           </div>
@@ -424,8 +424,8 @@ export default function MotorFeed() {
               onClick={() => setActiveCategory(cat.id)}
               className={`px-4 py-2 rounded-xl text-[10px] font-mono font-black uppercase tracking-widest whitespace-nowrap transition-all ${
                 activeCategory === cat.id
-                  ? 'bg-primary text-asphalt shadow-lg shadow-primary/20'
-                  : 'bg-carbon text-steel hover:text-white border border-white/5'
+                  ? 'bg-primary text-inverse shadow-lg shadow-primary/20'
+                  : 'bg-oil text-steel hover:text-chrome border border-inverse/5'
               }`}
             >
               {cat.label}
@@ -442,7 +442,7 @@ export default function MotorFeed() {
               onClick={() => setIsCreateModalOpen(true)}
               className="glass-card p-4 flex items-center gap-4 cursor-pointer hover:border-primary/30 transition-all group"
             >
-              <div className="w-10 h-10 rounded-full bg-carbon border border-white/10 overflow-hidden shrink-0">
+              <div className="w-10 h-10 rounded-full bg-oil border border-inverse/10 overflow-hidden shrink-0">
                 {currentUser.profile_picture_url ? (
                   <img src={currentUser.profile_picture_url} alt={currentUser.username} className="w-full h-full object-cover" />
                 ) : (
@@ -451,17 +451,17 @@ export default function MotorFeed() {
                   </div>
                 )}
               </div>
-              <div className="flex-1 bg-carbon/50 border border-white/5 rounded-xl px-4 py-2.5 text-steel text-sm font-light group-hover:text-chrome transition-colors">
+              <div className="flex-1 bg-oil/50 border border-inverse/5 rounded-xl px-4 py-2.5 text-steel text-sm font-light group-hover:text-chrome transition-colors">
                 {t('feed.create.placeholder').replace('{name}', currentUser.rider_name || currentUser.username)}
               </div>
-              <div className="p-2 bg-primary/10 rounded-lg text-primary group-hover:bg-primary group-hover:text-asphalt transition-all">
+              <div className="p-2 bg-primary/10 rounded-lg text-primary group-hover:bg-primary group-hover:text-inverse transition-all">
                 <Plus className="w-5 h-5" />
               </div>
             </div>
           )}
 
           {error && (
-            <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-4 rounded-xl">
+            <div className="bg-error/10 border border-error/20 text-error p-4 rounded-xl">
               {error}
             </div>
           )}
@@ -478,12 +478,12 @@ export default function MotorFeed() {
                   layout: { type: "spring", stiffness: 300, damping: 30 },
                   opacity: { duration: 0.2 }
                 }}
-                className="glass-card overflow-hidden group hover:border-white/10 transition-all"
+                className="glass-card overflow-hidden group hover:border-inverse/10 transition-all"
               >
                 <div className="p-6 sm:p-8">
                   <div className="flex items-center justify-between mb-6">
                     <Link to={`/profile/${post.username}`} className="flex items-center gap-3 group/author">
-                      <div className="w-10 h-10 rounded-full bg-carbon border border-white/10 overflow-hidden">
+                      <div className="w-10 h-10 rounded-full bg-oil border border-inverse/10 overflow-hidden">
                         {post.profile_picture_url ? (
                           <img src={post.profile_picture_url} alt={post.username} className="w-full h-full object-cover" />
                         ) : (
@@ -493,7 +493,7 @@ export default function MotorFeed() {
                         )}
                       </div>
                       <div>
-                        <div className="text-sm font-bold text-white group-hover/author:text-primary transition-colors flex items-center gap-1.5">
+                        <div className="text-sm font-bold text-chrome group-hover/author:text-primary transition-colors flex items-center gap-1.5">
                           {post.rider_name || post.company_name || post.username}
                           {post.plan === 'premium' && <PremiumBadge size={12} />}
                         </div>
@@ -521,22 +521,22 @@ export default function MotorFeed() {
                   )}
                   
                   {post.image_url && (
-                    <div className="rounded-3xl overflow-hidden mb-6 border border-white/5 shadow-2xl relative group/img">
+                    <div className="rounded-3xl overflow-hidden mb-6 border border-inverse/5 shadow-2xl relative group/img">
                       <img src={post.image_url} alt="" className="w-full aspect-video object-cover grayscale group-hover/img:grayscale-0 transition-all duration-1000 scale-105 group-hover/img:scale-100" referrerPolicy="no-referrer" />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover/img:opacity-100 transition-opacity duration-500" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-oil/40 to-transparent opacity-0 group-hover/img:opacity-100 transition-opacity duration-500" />
                     </div>
                   )}
 
                   {post.shared_event_id && (
                     <Link to={`/events/${post.shared_event_id}`} className="block mb-6 group/event">
-                      <div className="flex items-center gap-4 p-4 rounded-2xl border border-white/10 bg-carbon/30 hover:bg-carbon/60 hover:border-primary/30 transition-all duration-500 overflow-hidden relative group/card">
+                      <div className="flex items-center gap-4 p-4 rounded-2xl border border-inverse/10 bg-oil/30 hover:bg-oil/60 hover:border-primary/30 transition-all duration-500 overflow-hidden relative group/card">
                         <div className="w-20 h-20 shrink-0 rounded-xl overflow-hidden relative shadow-xl">
                           <img src={post.shared_event_image_url} alt={post.shared_event_title} className="w-full h-full object-cover grayscale group-hover/event:grayscale-0 transition-all duration-700" referrerPolicy="no-referrer" />
                         </div>
                         
                         <div className="flex-1 min-w-0 py-1">
                           <div className="text-[9px] font-mono font-black text-primary uppercase tracking-widest mb-1">{t('profile.eventLabel')}</div>
-                          <h4 className="text-lg font-display font-black uppercase italic tracking-tight text-white group-hover/card:text-primary transition-colors duration-500 mb-2 line-clamp-1">
+                          <h4 className="text-lg font-display font-black uppercase italic tracking-tight text-chrome group-hover/card:text-primary transition-colors duration-500 mb-2 line-clamp-1">
                             {post.shared_event_title}
                           </h4>
                           <div className="flex items-center gap-4 text-steel text-[9px] font-mono uppercase tracking-widest">
@@ -563,7 +563,7 @@ export default function MotorFeed() {
                   )}
                 </div>
                 
-                <div className="px-6 py-4 border-t border-white/5 flex flex-col bg-asphalt/30">
+                <div className="px-6 py-4 border-t border-inverse/5 flex flex-col bg-engine/30">
                   <div className="flex items-center gap-8">
                     <button 
                       onClick={() => handleLike(post.id)}
@@ -584,7 +584,7 @@ export default function MotorFeed() {
                       className={`flex items-center gap-2 transition-all group/btn px-3 py-1.5 rounded-full ${
                         expandedComments[post.id]
                           ? 'bg-primary/10 text-primary border border-primary/20'
-                          : 'text-steel hover:text-white hover:bg-white/5 border border-transparent'
+                          : 'text-steel hover:text-chrome hover:bg-inverse/5 border border-transparent'
                       }`}
                     >
                       <MessageSquare className={`w-5 h-5 transition-all ${expandedComments[post.id] ? 'text-primary' : 'group-hover/btn:text-primary'}`} />
@@ -613,7 +613,7 @@ export default function MotorFeed() {
                         </span>
                       </button>
                     )}
-                    <button className="flex items-center gap-2 text-steel hover:text-white transition-all group/btn ml-auto">
+                    <button className="flex items-center gap-2 text-steel hover:text-chrome transition-all group/btn ml-auto">
                       <Share2 className="w-5 h-5 group-hover/btn:text-primary transition-all" />
                     </button>
                   </div>
@@ -631,7 +631,7 @@ export default function MotorFeed() {
                           {/* Comment Input */}
                           {currentUser && (
                             <div className="flex gap-3">
-                              <div className="w-8 h-8 rounded-full bg-carbon border border-white/10 overflow-hidden shrink-0">
+                              <div className="w-8 h-8 rounded-full bg-oil border border-inverse/10 overflow-hidden shrink-0">
                                 {currentUser.profile_picture_url ? (
                                   <img src={currentUser.profile_picture_url} alt={currentUser.username} className="w-full h-full object-cover" />
                                 ) : (
@@ -643,16 +643,17 @@ export default function MotorFeed() {
                               <div className="flex-1 relative">
                                 <input
                                   type="text"
+                                  autoCapitalize="sentences"
                                   value={newComment[post.id] || ''}
                                   onChange={(e) => setNewComment(prev => ({ ...prev, [post.id]: e.target.value }))}
                                   onKeyDown={(e) => e.key === 'Enter' && handleAddComment(post.id)}
                                   placeholder={t('feed.writeComment')}
-                                  className="w-full bg-carbon/50 border border-white/5 rounded-xl px-4 py-2 text-sm text-white placeholder:text-steel focus:border-primary/50 transition-all outline-none pr-10"
+                                  className="w-full bg-oil/50 border border-inverse/5 rounded-xl px-4 py-2 text-sm text-chrome placeholder:text-steel focus:border-primary/50 transition-all outline-none pr-10"
                                 />
                                 <button 
                                   onClick={() => handleAddComment(post.id)}
                                   disabled={isCommenting[post.id] || !newComment[post.id]?.trim()}
-                                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-primary hover:text-white disabled:opacity-50 transition-colors"
+                                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-primary hover:text-chrome disabled:opacity-50 transition-colors"
                                 >
                                   <Send className="w-4 h-4" />
                                 </button>
@@ -670,7 +671,7 @@ export default function MotorFeed() {
                               postComments[post.id].map((comment: any) => (
                                 <div key={comment.id} className="flex gap-3 group/comment">
                                   <Link to={`/profile/${comment.username}`} className="shrink-0">
-                                    <div className="w-8 h-8 rounded-full bg-carbon border border-white/10 overflow-hidden">
+                                    <div className="w-8 h-8 rounded-full bg-oil border border-inverse/10 overflow-hidden">
                                       {comment.profile_picture_url ? (
                                         <img src={comment.profile_picture_url} alt={comment.username} className="w-full h-full object-cover" />
                                       ) : (
@@ -681,9 +682,9 @@ export default function MotorFeed() {
                                     </div>
                                   </Link>
                                   <div className="flex-1 min-w-0">
-                                    <div className="bg-carbon/50 rounded-2xl px-4 py-2 border border-white/5">
+                                    <div className="bg-oil/50 rounded-2xl px-4 py-2 border border-inverse/5">
                                       <div className="flex items-center justify-between mb-0.5">
-                                        <Link to={`/profile/${comment.username}`} className="text-xs font-bold text-white hover:text-primary transition-colors flex items-center gap-1.5">
+                                        <Link to={`/profile/${comment.username}`} className="text-xs font-bold text-chrome hover:text-primary transition-colors flex items-center gap-1.5">
                                           {comment.username}
                                           {comment.plan === 'premium' && <PremiumBadge size={10} />}
                                         </Link>
@@ -729,19 +730,19 @@ export default function MotorFeed() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsCreateModalOpen(false)}
-              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+              className="absolute inset-0 bg-engine/80 backdrop-blur-sm"
             />
             <motion.div
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative w-full max-w-lg glass-card overflow-hidden border-white/10 shadow-2xl"
+              className="relative w-full max-w-lg glass-card overflow-hidden border-inverse/10 shadow-2xl"
             >
-              <div className="p-6 border-b border-white/5 flex items-center justify-between bg-asphalt/50">
+              <div className="p-6 border-b border-inverse/5 flex items-center justify-between bg-engine/50">
                 <h2 className="text-xl font-display font-black uppercase italic tracking-tight">{t('feed.create.title').split(' ')[0]} <span className="text-primary">{t('feed.create.title').split(' ')[1]}</span></h2>
                 <button 
                   onClick={() => setIsCreateModalOpen(false)}
-                  className="p-2 hover:bg-white/5 rounded-lg text-steel hover:text-white transition-colors"
+                  className="p-2 hover:bg-inverse/5 rounded-lg text-steel hover:text-chrome transition-colors"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -749,7 +750,7 @@ export default function MotorFeed() {
 
               <form onSubmit={handleCreatePost} className="p-6 space-y-6">
                 <div className="flex gap-4">
-                  <div className="w-10 h-10 rounded-full bg-carbon border border-white/10 overflow-hidden shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-oil border border-inverse/10 overflow-hidden shrink-0">
                     {currentUser.profile_picture_url ? (
                       <img src={currentUser.profile_picture_url} alt={currentUser.username} className="w-full h-full object-cover" />
                     ) : (
@@ -761,6 +762,7 @@ export default function MotorFeed() {
                   <div className="flex-1 relative">
                     <textarea
                       ref={textareaRef}
+                      autoCapitalize="sentences"
                       value={postContent || ''}
                       onChange={handleTextareaChange}
                       placeholder={t('feed.create.textarea')}
@@ -773,9 +775,9 @@ export default function MotorFeed() {
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, y: 10 }}
-                          className="absolute left-0 bottom-full mb-2 w-64 bg-asphalt border border-white/10 rounded-xl shadow-2xl overflow-hidden z-[60]"
+                          className="absolute left-0 bottom-full mb-2 w-64 bg-engine border border-inverse/10 rounded-xl shadow-2xl overflow-hidden z-[60]"
                         >
-                          <div className="p-2 border-b border-white/5 bg-carbon/50">
+                          <div className="p-2 border-b border-inverse/5 bg-oil/50">
                             <span className="text-[9px] font-mono font-black uppercase tracking-widest text-steel">{t('feed.mentions')}</span>
                           </div>
                           <div className="max-h-48 overflow-y-auto">
@@ -784,9 +786,9 @@ export default function MotorFeed() {
                                 key={user.id}
                                 type="button"
                                 onClick={() => insertMention(user.username)}
-                                className="w-full flex items-center gap-3 p-3 hover:bg-white/5 transition-colors text-left group"
+                                className="w-full flex items-center gap-3 p-3 hover:bg-inverse/5 transition-colors text-left group"
                               >
-                                <div className="w-8 h-8 rounded-full bg-carbon border border-white/10 overflow-hidden shrink-0">
+                                <div className="w-8 h-8 rounded-full bg-oil border border-inverse/10 overflow-hidden shrink-0">
                                   {user.profile_picture_url ? (
                                     <img src={user.profile_picture_url} alt={user.username} className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all" />
                                   ) : (
@@ -806,7 +808,7 @@ export default function MotorFeed() {
                 </div>
 
                 {postPreview && (
-                  <div className="relative rounded-2xl overflow-hidden border border-white/10 group">
+                  <div className="relative rounded-2xl overflow-hidden border border-inverse/10 group">
                     <img src={postPreview} alt="Preview" className="w-full aspect-video object-cover" />
                     <button 
                       type="button"
@@ -814,7 +816,7 @@ export default function MotorFeed() {
                         setPostImage(null);
                         setPostPreview(null);
                       }}
-                      className="absolute top-2 right-2 p-1.5 bg-black/60 backdrop-blur-md rounded-lg text-white hover:bg-red-500 transition-colors"
+                      className="absolute top-2 right-2 p-1.5 bg-engine/60 backdrop-blur-md rounded-lg text-chrome hover:bg-error hover:text-chrome transition-colors"
                     >
                       <X className="w-4 h-4" />
                     </button>
@@ -826,7 +828,7 @@ export default function MotorFeed() {
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="flex items-center gap-2 px-4 py-2 bg-carbon border border-white/5 rounded-xl text-[10px] font-mono font-black uppercase tracking-widest text-steel hover:text-white hover:border-primary/30 transition-all"
+                      className="flex items-center gap-2 px-4 py-2 bg-oil border border-inverse/5 rounded-xl text-[10px] font-mono font-black uppercase tracking-widest text-steel hover:text-chrome hover:border-primary/30 transition-all"
                     >
                       <ImageIcon className="w-4 h-4 text-primary" />
                       {postImage ? t('feed.create.changePhoto') : t('feed.create.addPhoto')}
@@ -844,7 +846,7 @@ export default function MotorFeed() {
                         <select
                           value={taggedMotorcycleId || ''}
                           onChange={(e) => setTaggedMotorcycleId(e.target.value)}
-                          className="w-full bg-carbon border border-white/5 rounded-xl px-4 py-2 text-[10px] font-mono font-black uppercase tracking-widest text-steel hover:text-white hover:border-primary/30 transition-all appearance-none outline-none"
+                          className="w-full bg-oil border border-inverse/5 rounded-xl px-4 py-2 text-[10px] font-mono font-black uppercase tracking-widest text-steel hover:text-chrome hover:border-primary/30 transition-all appearance-none outline-none"
                         >
                           <option value="">{t('feed.create.tagMotorcycle')}</option>
                           {motorcycles.map((moto) => (
@@ -860,7 +862,7 @@ export default function MotorFeed() {
                 <button
                   type="submit"
                   disabled={isSubmitting || (!postContent.trim() && !postImage)}
-                  className="w-full bg-primary text-asphalt font-display font-black uppercase italic text-xl py-4 rounded-2xl shadow-xl shadow-primary/20 hover:bg-white transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
+                  className="w-full bg-primary text-inverse font-display font-black uppercase italic text-xl py-4 rounded-2xl shadow-xl shadow-primary/20 hover:bg-inverse hover:text-inverse transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
                 >
                   <span className="flex items-center justify-center gap-2">
                     {isSubmitting ? t('feed.create.posting') : t('feed.create.button')}

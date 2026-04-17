@@ -62,7 +62,7 @@ export default function ReviewForm({ reviewer_user_id, target_type, target_id, o
         {[1, 2, 3, 4, 5].map((star) => (
           <Star
             key={star}
-            className={`cursor-pointer ${star <= (hoveredRating || rating) ? 'fill-yellow-400 text-yellow-400' : 'text-steel'}`}
+            className={`cursor-pointer ${star <= (hoveredRating || rating) ? 'fill-warning text-warning' : 'text-steel'}`}
             onClick={() => setRating(star)}
             onMouseEnter={() => setHoveredRating(star)}
             onMouseLeave={() => setHoveredRating(0)}
@@ -73,14 +73,14 @@ export default function ReviewForm({ reviewer_user_id, target_type, target_id, o
         value={review_text || ''}
         onChange={(e) => setReviewText(e.target.value)}
         placeholder={t('review.placeholder')}
-        className="w-full p-2 bg-carbon border border-engine rounded-lg text-chrome"
+        className="w-full p-2 bg-oil border border-engine rounded-lg text-chrome"
         rows={3}
       />
       {error && <p className="text-accent text-sm">{error}</p>}
       <button
         type="submit"
         disabled={submitting || rating === 0}
-        className="px-4 py-2 bg-primary text-white rounded-lg disabled:opacity-50"
+        className="px-4 py-2 bg-primary text-inverse rounded-lg disabled:opacity-50"
       >
         {submitting ? t('common.loading') : t('review.submit')}
       </button>

@@ -8,10 +8,10 @@ export default function FloatingActionButton() {
   const navigate = useNavigate();
 
   const actions = [
-    { icon: MessageSquare, label: 'Post', onClick: () => navigate('/feed?action=create'), color: 'bg-blue-500' },
-    { icon: Bike, label: 'Motorcycle', onClick: () => navigate('/profile'), color: 'bg-emerald-500' },
+    { icon: MessageSquare, label: 'Post', onClick: () => navigate('/feed?action=create'), color: 'bg-info' },
+    { icon: Bike, label: 'Motorcycle', onClick: () => navigate('/profile'), color: 'bg-success' },
     { icon: Route, label: 'Route', onClick: () => navigate('/roads'), color: 'bg-accent' },
-    { icon: Calendar, label: 'Event', onClick: () => navigate('/events'), color: 'bg-rose-500' },
+    { icon: Calendar, label: 'Event', onClick: () => navigate('/events'), color: 'bg-primary' },
   ];
 
   return (
@@ -32,10 +32,10 @@ export default function FloatingActionButton() {
                 }}
                 className="flex items-center gap-3 group"
               >
-                <span className="bg-carbon border border-white/10 px-3 py-1.5 rounded-xl text-[10px] font-mono font-black uppercase tracking-widest text-chrome opacity-0 group-hover:opacity-100 transition-opacity shadow-2xl">
+                <span className="bg-oil border border-inverse/10 px-3 py-1.5 rounded-xl text-[10px] font-mono font-black uppercase tracking-widest text-chrome opacity-0 group-hover:opacity-100 transition-opacity shadow-2xl">
                   {action.label}
                 </span>
-                <div className={`${action.color} p-3 rounded-2xl text-white shadow-xl shadow-black/50 hover:scale-110 transition-transform`}>
+                <div className={`${action.color} p-3 rounded-2xl text-chrome shadow-xl shadow-inverse/50 hover:scale-110 transition-transform`}>
                   <action.icon className="w-5 h-5" />
                 </div>
               </motion.button>
@@ -47,7 +47,7 @@ export default function FloatingActionButton() {
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`p-4 rounded-2xl shadow-2xl transition-all duration-300 active:scale-90 ${
-          isOpen ? 'bg-carbon text-chrome rotate-45' : 'bg-primary text-asphalt shadow-primary/20'
+          isOpen ? 'bg-oil text-chrome rotate-45' : 'bg-primary text-inverse shadow-primary/20'
         }`}
       >
         {isOpen ? <X className="w-6 h-6" /> : <Plus className="w-6 h-6" />}
@@ -55,7 +55,7 @@ export default function FloatingActionButton() {
 
       {isOpen && (
         <div 
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm -z-10"
+          className="fixed inset-0 bg-engine/60 backdrop-blur-sm -z-10"
           onClick={() => setIsOpen(false)}
         />
       )}

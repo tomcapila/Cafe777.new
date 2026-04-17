@@ -758,7 +758,7 @@ export default function Profile() {
   return (
     <div className="pb-24">
       {/* Cover Photo */}
-      <div className="h-64 sm:h-80 w-full bg-carbon relative overflow-hidden">
+      <div className="h-64 sm:h-80 w-full bg-oil relative overflow-hidden">
           <div 
             className="absolute inset-0 bg-cover bg-center opacity-30 mix-blend-luminosity grayscale scale-105 blur-[2px]" 
             style={{ backgroundImage: `url(${data.cover_photo_url || 'https://picsum.photos/seed/moto/1920/1080'})` }}
@@ -775,14 +775,14 @@ export default function Profile() {
             className="flex flex-col md:flex-row gap-6 md:items-end mb-12"
           >
             {/* Avatar */}
-            <div className="w-32 h-32 sm:w-48 sm:h-48 rounded-[2rem] border-4 border-asphalt bg-carbon overflow-hidden shrink-0 shadow-2xl relative group">
+            <div className="w-32 h-32 sm:w-48 sm:h-48 rounded-[2rem] border-4 border-asphalt bg-oil overflow-hidden shrink-0 shadow-2xl relative group">
               <img 
                 src={data.profile_picture_url} 
                 alt={username} 
                 className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700 scale-110 group-hover:scale-100"
                 referrerPolicy="no-referrer"
               />
-              <div className="absolute inset-0 border border-white/10 rounded-[2rem] pointer-events-none" />
+              <div className="absolute inset-0 border border-inverse/10 rounded-[2rem] pointer-events-none" />
             </div>
 
             {/* Header Info */}
@@ -809,7 +809,7 @@ export default function Profile() {
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-steel font-mono text-[9px] uppercase tracking-[0.2em] mb-4">
                 <span className="text-primary font-black bg-primary/5 px-2 py-0.5 rounded-full border border-primary/10">@{data.username}</span>
                 {data.is_mock === 1 && (
-                  <span className="bg-asphalt border border-white/10 text-steel px-2 py-0.5 rounded-full font-bold animate-pulse">
+                  <span className="bg-engine border border-inverse/10 text-steel px-2 py-0.5 rounded-full font-bold animate-pulse">
                     {t('profile.demoAccount')}
                   </span>
                 )}
@@ -829,11 +829,11 @@ export default function Profile() {
                     <span className="text-[8px] text-primary">{t('profile.referrals')}</span>
                   </div>
                   <div className="flex flex-col items-center">
-                    <span className="text-white text-base font-bold">{data.followers_count || 0}</span>
+                    <span className="text-chrome text-base font-bold">{data.followers_count || 0}</span>
                     <span className="text-[8px] text-steel">{t('profile.followers')}</span>
                   </div>
                   <div className="flex flex-col items-center">
-                    <span className="text-white text-base font-bold">{data.following_count || 0}</span>
+                    <span className="text-chrome text-base font-bold">{data.following_count || 0}</span>
                     <span className="text-[8px] text-steel">{t('profile.following')}</span>
                   </div>
                 </div>
@@ -845,13 +845,13 @@ export default function Profile() {
                   className="flex items-center gap-4 cursor-pointer group/badges mt-2"
                   onClick={() => setActiveTab('biker_passport')}
                 >
-                  <div className="flex items-center gap-2 bg-asphalt/50 px-3 py-1.5 rounded-xl border border-white/5 hover:border-primary/30 transition-colors">
+                  <div className="flex items-center gap-2 bg-engine/50 px-3 py-1.5 rounded-xl border border-inverse/5 hover:border-primary/30 transition-colors">
                     <MapPin className="w-4 h-4 text-primary" />
-                    <span className="text-xs font-bold text-white">{passportStamps.length} <span className="text-[10px] text-steel font-mono uppercase tracking-widest">Stamps</span></span>
+                    <span className="text-xs font-bold text-chrome">{passportStamps.length} <span className="text-[10px] text-steel font-mono uppercase tracking-widest">Stamps</span></span>
                   </div>
-                  <div className="flex items-center gap-2 bg-asphalt/50 px-3 py-1.5 rounded-xl border border-white/5 hover:border-accent/30 transition-colors">
+                  <div className="flex items-center gap-2 bg-engine/50 px-3 py-1.5 rounded-xl border border-inverse/5 hover:border-accent/30 transition-colors">
                     <ShieldCheck className="w-4 h-4 text-accent" />
-                    <span className="text-xs font-bold text-white">{badges.length} <span className="text-[10px] text-steel font-mono uppercase tracking-widest">Badges</span></span>
+                    <span className="text-xs font-bold text-chrome">{badges.length} <span className="text-[10px] text-steel font-mono uppercase tracking-widest">Badges</span></span>
                   </div>
                   
                   {/* Recent Badges Preview */}
@@ -871,7 +871,7 @@ export default function Profile() {
                         return (
                           <div 
                             key={badge.user_badge_id} 
-                            className="w-7 h-7 rounded-full bg-asphalt border-2 border-carbon flex items-center justify-center shadow-lg overflow-hidden relative z-[4] hover:z-10 transition-transform hover:scale-110 cursor-pointer"
+                            className="w-7 h-7 rounded-full bg-engine border-2 border-oil flex items-center justify-center shadow-lg overflow-hidden relative z-[4] hover:z-10 transition-transform hover:scale-110 cursor-pointer"
                             style={{ zIndex: 4 - idx }}
                             onClick={(e) => handleBadgeClick(e, badge.badge_id)}
                           >
@@ -887,13 +887,13 @@ export default function Profile() {
                                   initial={{ opacity: 0, y: 10, scale: 0.9 }}
                                   animate={{ opacity: 1, y: 0, scale: 1 }}
                                   exit={{ opacity: 0, y: 10, scale: 0.9 }}
-                                  className="fixed sm:absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-48 p-3 bg-carbon/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl z-[100] pointer-events-none"
+                                  className="fixed sm:absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-48 p-3 bg-oil/95 backdrop-blur-xl border border-inverse/10 rounded-2xl shadow-2xl z-[100] pointer-events-none"
                                 >
                                   <div className="text-[10px] font-mono font-black text-accent uppercase tracking-widest mb-1">{badge.name}</div>
                                   <div className="text-[9px] text-steel leading-relaxed font-medium">
                                     {badge.description || t('profile.noBadgeDescription')}
                                   </div>
-                                  <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-carbon border-r border-b border-white/10 rotate-45" />
+                                  <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-oil border-r border-b border-inverse/10 rotate-45" />
                                 </motion.div>
                               )}
                             </AnimatePresence>
@@ -931,9 +931,9 @@ export default function Profile() {
             </div>
 
             {isChatOpen && chatId && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-                <div className="bg-carbon border border-white/10 rounded-2xl w-full max-w-md h-[500px] flex flex-col">
-                  <div className="p-4 border-b border-white/10 flex justify-between items-center bg-asphalt/50">
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-engine/50 backdrop-blur-sm p-4">
+                <div className="bg-oil border border-inverse/10 rounded-2xl w-full max-w-md h-[500px] flex flex-col">
+                  <div className="p-4 border-b border-inverse/10 flex justify-between items-center bg-engine/50">
                     <h3 
                       className="text-chrome font-bold cursor-pointer hover:text-primary transition-colors"
                       onClick={() => {
@@ -954,7 +954,7 @@ export default function Profile() {
           </motion.div>
 
           {/* Tab Navigation */}
-          <div className="sticky top-0 z-40 bg-asphalt/90 backdrop-blur-xl -mx-4 px-4 sm:mx-0 sm:px-0 py-3 mb-8 border-b border-white/5 shadow-lg">
+          <div className="sticky top-0 z-40 bg-engine/90 backdrop-blur-xl -mx-4 px-4 sm:mx-0 sm:px-0 py-3 mb-8 border-b border-inverse/5 shadow-lg">
             <div className="max-w-6xl mx-auto flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 overflow-x-auto no-scrollbar flex-1 mask-linear-fade">
                 {[
@@ -974,8 +974,8 @@ export default function Profile() {
                     }}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[10px] font-mono font-bold uppercase tracking-widest transition-all whitespace-nowrap ${
                       activeTab === tab.id 
-                        ? 'bg-primary text-asphalt shadow-[0_0_15px_rgba(255,85,0,0.3)]' 
-                        : 'text-steel hover:text-chrome hover:bg-white/5'
+                        ? 'bg-primary text-inverse shadow-[0_0_15px_rgba(255,85,0,0.3)]' 
+                        : 'text-steel hover:text-chrome hover:bg-inverse/5'
                     }`}
                   >
                     <tab.icon className="w-3.5 h-3.5" />
@@ -991,7 +991,7 @@ export default function Profile() {
                   className={`p-2 rounded-lg border transition-all flex items-center gap-2 ${
                     showMoreTabs 
                       ? 'bg-primary/10 border-primary/30 text-primary' 
-                      : 'bg-carbon border-white/5 text-steel hover:text-chrome hover:bg-white/5'
+                      : 'bg-oil border-inverse/5 text-steel hover:text-chrome hover:bg-inverse/5'
                   }`}
                   title={t('profile.allTabs')}
                 >
@@ -1012,10 +1012,10 @@ export default function Profile() {
                         initial={{ opacity: 0, y: 10, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                        className="absolute right-0 mt-3 w-64 glass-card z-50 overflow-hidden border-white/10 shadow-2xl origin-top-right"
+                        className="absolute right-0 mt-3 w-64 glass-card z-50 overflow-hidden border-inverse/10 shadow-2xl origin-top-right"
                       >
                          <div className="p-2 flex flex-col gap-1">
-                          <div className="px-3 py-2 text-[9px] font-mono text-steel uppercase tracking-widest border-b border-white/5 mb-1">
+                          <div className="px-3 py-2 text-[9px] font-mono text-steel uppercase tracking-widest border-b border-inverse/5 mb-1">
                             {t('profile.navigation')}
                           </div>
                           {[
@@ -1036,7 +1036,7 @@ export default function Profile() {
                               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[10px] font-mono font-bold uppercase tracking-widest transition-all ${
                                 activeTab === tab.id 
                                   ? 'bg-primary/10 text-primary border border-primary/20' 
-                                  : 'text-steel hover:text-chrome hover:bg-white/5 border border-transparent'
+                                  : 'text-steel hover:text-chrome hover:bg-inverse/5 border border-transparent'
                               }`}
                             >
                               <tab.icon className={`w-4 h-4 ${activeTab === tab.id ? 'text-primary' : 'text-steel'}`} />
@@ -1139,7 +1139,7 @@ export default function Profile() {
                             />
                           </div>
                         </div>
-                        <div className="pt-6 border-t border-white/5">
+                        <div className="pt-6 border-t border-inverse/5">
                           <div className="flex justify-between items-center mb-6">
                             <h3 className="text-xs font-mono font-bold text-steel uppercase tracking-widest">Motorcycle Photo</h3>
                             <button
@@ -1159,7 +1159,7 @@ export default function Profile() {
                           </div>
                           <div className="flex flex-col gap-4">
                             {(motoData.image_url || motoData.photo) && (
-                              <div className="relative w-full h-48 rounded-xl overflow-hidden border border-white/10">
+                              <div className="relative w-full h-48 rounded-xl overflow-hidden border border-inverse/10">
                                 <img 
                                   src={motoData.photo ? URL.createObjectURL(motoData.photo) : motoData.image_url} 
                                   alt="Motorcycle preview" 
@@ -1171,7 +1171,7 @@ export default function Profile() {
                                     setMotoData({...motoData, image_url: undefined, photo: null});
                                     if (motoImageInputRef.current) motoImageInputRef.current.value = '';
                                   }}
-                                  className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/80 rounded-full text-white transition-colors"
+                                  className="absolute top-2 right-2 p-1.5 bg-engine/50 hover:bg-engine/80 rounded-full text-chrome transition-colors"
                                 >
                                   <X className="w-4 h-4" />
                                 </button>
@@ -1187,7 +1187,7 @@ export default function Profile() {
                           </div>
                         </div>
                         {!editingMotoId && (
-                          <div className="pt-6 border-t border-white/5">
+                          <div className="pt-6 border-t border-inverse/5">
                             <h3 className="text-xs font-mono font-bold text-steel uppercase tracking-widest mb-6">{t('profile.initialLog')}</h3>
                             <div className="grid sm:grid-cols-3 gap-6">
                               <input
@@ -1230,7 +1230,7 @@ export default function Profile() {
                       {data.garage.map((moto: any) => (
                         <div key={moto.id} className="glass-card group hover:border-primary/30 transition-all relative overflow-hidden flex flex-col">
                           {/* Card Header with Background */}
-                          <div className="h-32 bg-asphalt relative overflow-hidden">
+                          <div className="h-32 bg-engine relative overflow-hidden">
                             <div 
                               className="absolute inset-0 bg-cover bg-center opacity-20 group-hover:opacity-40 transition-opacity duration-700 grayscale group-hover:grayscale-0" 
                               style={{ backgroundImage: `url('${moto.image_url || `https://picsum.photos/seed/${moto.make}-${moto.model}/800/400`}')` }}
@@ -1261,21 +1261,21 @@ export default function Profile() {
                                     setIsAddingMoto(true);
                                     window.scrollTo({ top: 0, behavior: 'smooth' });
                                   }}
-                                  className="p-2 bg-carbon/80 backdrop-blur-md rounded-lg border border-white/5 text-steel hover:text-primary transition-all"
+                                  className="p-2 bg-oil/80 backdrop-blur-md rounded-lg border border-inverse/5 text-steel hover:text-primary transition-all"
                                   title={t('profile.editMoto') || 'Edit Motorcycle'}
                                 >
                                   <Edit2 className="w-4 h-4" />
                                 </button>
                                 <button 
                                   onClick={() => handleDeleteMoto(moto.id)}
-                                  className="p-2 bg-carbon/80 backdrop-blur-md rounded-lg border border-white/5 text-steel hover:text-red-500 transition-all"
+                                  className="p-2 bg-oil/80 backdrop-blur-md rounded-lg border border-inverse/5 text-steel hover:text-error transition-all"
                                   title={t('profile.deleteMoto') || 'Delete Motorcycle'}
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </button>
                                 <button 
                                   onClick={() => setActiveMaintenanceMotoId(activeMaintenanceMotoId === moto.id ? null : moto.id)}
-                                  className="p-2 bg-carbon/80 backdrop-blur-md rounded-lg border border-white/5 text-steel hover:text-primary transition-all"
+                                  className="p-2 bg-oil/80 backdrop-blur-md rounded-lg border border-inverse/5 text-steel hover:text-primary transition-all"
                                   title={t('profile.addLog')}
                                 >
                                   <Plus className={`w-4 h-4 transition-transform duration-300 ${activeMaintenanceMotoId === moto.id ? 'rotate-45 text-primary' : ''}`} />
@@ -1338,16 +1338,16 @@ export default function Profile() {
                                     <Clock className="w-3 h-3" />
                                     {t('profile.maintenance')}
                                   </div>
-                                  <span className="text-[9px] font-mono text-steel bg-white/5 px-2 py-0.5 rounded uppercase">
+                                  <span className="text-[9px] font-mono text-steel bg-inverse/5 px-2 py-0.5 rounded uppercase">
                                     {moto.maintenance_logs.length} {t('profile.logs')}
                                   </span>
                                 </div>
                                 <div className="space-y-3">
                                   {moto.maintenance_logs.slice(0, 3).map((log: any) => (
-                                    <div key={log.id} className="bg-asphalt/40 p-4 rounded-2xl border border-white/5 group/log hover:border-primary/20 transition-all">
+                                    <div key={log.id} className="bg-engine/40 p-4 rounded-2xl border border-inverse/5 group/log hover:border-primary/20 transition-all">
                                       <div className="flex justify-between items-start mb-2">
                                         <div className="font-display font-bold text-sm text-chrome group-hover/log:text-primary transition-colors">{log.service}</div>
-                                        <div className="text-[9px] font-mono text-steel bg-carbon px-2 py-0.5 rounded uppercase">
+                                        <div className="text-[9px] font-mono text-steel bg-oil px-2 py-0.5 rounded uppercase">
                                           {new Date(log.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                                         </div>
                                       </div>
@@ -1385,7 +1385,7 @@ export default function Profile() {
                       ))}
                     </div>
                   ) : (
-                    <div className="bg-carbon/50 border border-white/5 rounded-2xl p-8 text-center">
+                    <div className="bg-oil/50 border border-inverse/5 rounded-2xl p-8 text-center">
                       <Wrench className="w-8 h-8 text-steel mx-auto mb-3" />
                       <h3 className="text-lg font-medium mb-1">{t('profile.emptyGarage')}</h3>
                       <p className="text-steel text-sm">{t('profile.noMoto')}</p>
@@ -1443,6 +1443,7 @@ export default function Profile() {
                             type="text"
                             placeholder={t('profile.eventTitle')}
                             required
+                            autoCapitalize="sentences"
                             value={eventData.title || ''}
                             onChange={(e) => setEventData({...eventData, title: e.target.value})}
                             className="input-field"
@@ -1469,6 +1470,7 @@ export default function Profile() {
                           <input
                             type="text"
                             placeholder={t('profile.eventTimePlaceholder')}
+                            autoCapitalize="sentences"
                             value={eventData.time || ''}
                             onChange={(e) => setEventData({...eventData, time: e.target.value})}
                             className="input-field"
@@ -1513,13 +1515,13 @@ export default function Profile() {
                           <div className="flex items-center gap-6">
                             <div 
                               onClick={() => eventImageInputRef.current?.click()}
-                              className="w-32 h-32 rounded-3xl bg-asphalt border border-white/5 flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 transition-all overflow-hidden relative group shadow-xl"
+                              className="w-32 h-32 rounded-3xl bg-engine border border-inverse/5 flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 transition-all overflow-hidden relative group shadow-xl"
                             >
                               {eventData.image_url ? (
                                 <>
                                   <img src={eventData.image_url} alt="Event" className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all" />
-                                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                                    <ImageIcon className="w-8 h-8 text-white" />
+                                  <div className="absolute inset-0 bg-engine/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                    <ImageIcon className="w-8 h-8 text-chrome" />
                                   </div>
                                 </>
                               ) : (
@@ -1529,7 +1531,7 @@ export default function Profile() {
                                 </>
                               )}
                               {isUploadingEventImage && (
-                                <div className="absolute inset-0 bg-asphalt/80 flex items-center justify-center">
+                                <div className="absolute inset-0 bg-engine/80 flex items-center justify-center">
                                   <Clock className="w-6 h-6 text-primary animate-spin" />
                                 </div>
                               )}
@@ -1547,7 +1549,7 @@ export default function Profile() {
                                 <button 
                                   type="button"
                                   onClick={() => setEventData(prev => ({ ...prev, image_url: '' }))}
-                                  className="text-[10px] font-mono font-bold text-accent uppercase tracking-widest hover:text-red-400 transition-colors"
+                                  className="text-[10px] font-mono font-bold text-accent uppercase tracking-widest hover:text-error transition-colors"
                                 >
                                   {t('profile.removeImage')}
                                 </button>
@@ -1559,6 +1561,7 @@ export default function Profile() {
                         <textarea
                           placeholder={t('profile.eventDescription')}
                           rows={4}
+                          autoCapitalize="sentences"
                           value={eventData.description || ''}
                           onChange={(e) => setEventData({...eventData, description: e.target.value})}
                           className="input-field resize-none"
@@ -1603,7 +1606,7 @@ export default function Profile() {
                     {data.rsvpd_events && data.rsvpd_events.length > 0 && (
                       <div className="space-y-6">
                         <div className="flex items-center gap-3 px-2">
-                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          <div className="w-1.5 h-1.5 rounded-full bg-success" />
                           <h3 className="text-[10px] font-mono font-black text-steel uppercase tracking-[0.3em]">{t('profile.attending')}</h3>
                         </div>
                         <div className="grid gap-4">
@@ -1622,7 +1625,7 @@ export default function Profile() {
                     )}
 
                     {(!data.events || data.events.length === 0) && (!data.rsvpd_events || data.rsvpd_events.length === 0) && (
-                      <div className="bg-carbon/50 border border-white/5 rounded-2xl p-8 text-center">
+                      <div className="bg-oil/50 border border-inverse/5 rounded-2xl p-8 text-center">
                         <Calendar className="w-8 h-8 text-steel mx-auto mb-3" />
                         <h3 className="text-lg font-medium mb-1">{t('profile.noEvents')}</h3>
                         <p className="text-steel text-sm">{t('profile.noEventsDesc')}</p>
@@ -1698,7 +1701,7 @@ export default function Profile() {
                         {data.services.split(',').map((service: string, index: number) => (
                           <span 
                             key={index}
-                            className="px-4 py-2 bg-asphalt/50 border border-white/10 rounded-xl text-sm font-medium text-chrome flex items-center gap-2"
+                            className="px-4 py-2 bg-engine/50 border border-inverse/10 rounded-xl text-sm font-medium text-chrome flex items-center gap-2"
                           >
                             <div className="w-1.5 h-1.5 rounded-full bg-primary" />
                             {service.trim()}
@@ -1749,11 +1752,11 @@ export default function Profile() {
                     <motion.div 
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: 'auto' }}
-                      className="bg-carbon/50 border border-primary/20 rounded-3xl p-6 mb-8 overflow-hidden"
+                      className="bg-oil/50 border border-primary/20 rounded-3xl p-6 mb-8 overflow-hidden"
                     >
                       <form onSubmit={handleEventSubmit} className="space-y-4">
                         {notification && (
-                          <div className={`p-4 rounded-xl text-sm font-bold ${notification.type === 'success' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                          <div className={`p-4 rounded-xl text-sm font-bold ${notification.type === 'success' ? 'bg-success/20 text-success' : 'bg-error/20 text-error'}`}>
                             {notification.message}
                           </div>
                         )}
@@ -1762,15 +1765,16 @@ export default function Profile() {
                             type="text"
                             placeholder={t('event.field.title')}
                             required
+                            autoCapitalize="sentences"
                             value={eventData.title || ''}
                             onChange={(e) => setEventData({...eventData, title: e.target.value})}
-                            className="w-full bg-asphalt border border-white/10 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-primary transition-all"
+                            className="w-full bg-engine border border-inverse/10 rounded-xl py-3 px-4 text-chrome focus:outline-none focus:border-primary transition-all"
                           />
                           <select
                             required
                             value={eventData.category || 'road_trip'}
                             onChange={(e) => setEventData({...eventData, category: e.target.value})}
-                            className="w-full bg-asphalt border border-white/10 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-primary transition-all appearance-none"
+                            className="w-full bg-engine border border-inverse/10 rounded-xl py-3 px-4 text-chrome focus:outline-none focus:border-primary transition-all appearance-none"
                           >
                             <option value="road_trip">{t('events.category.road_trip')}</option>
                             <option value="club_meetup">{t('events.category.club_meetup')}</option>
@@ -1783,14 +1787,15 @@ export default function Profile() {
                             required
                             value={eventData.date || ''}
                             onChange={(e) => setEventData({...eventData, date: e.target.value})}
-                            className="w-full bg-asphalt border border-white/10 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-primary transition-all"
+                            className="w-full bg-engine border border-inverse/10 rounded-xl py-3 px-4 text-chrome focus:outline-none focus:border-primary transition-all"
                           />
                           <input
                             type="text"
                             placeholder={t('event.field.time')}
+                            autoCapitalize="sentences"
                             value={eventData.time || ''}
                             onChange={(e) => setEventData({...eventData, time: e.target.value})}
-                            className="w-full bg-asphalt border border-white/10 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-primary transition-all"
+                            className="w-full bg-engine border border-inverse/10 rounded-xl py-3 px-4 text-chrome focus:outline-none focus:border-primary transition-all"
                           />
                           <LocationAutocomplete
                             value={eventData.location}
@@ -1801,14 +1806,15 @@ export default function Profile() {
                         <textarea
                           placeholder={t('event.field.description')}
                           rows={3}
+                          autoCapitalize="sentences"
                           value={eventData.description || ''}
                           onChange={(e) => setEventData({...eventData, description: e.target.value})}
-                          className="w-full bg-asphalt border border-white/10 rounded-xl p-4 text-white focus:outline-none focus:border-primary transition-all resize-none"
+                          className="w-full bg-engine border border-inverse/10 rounded-xl p-4 text-chrome focus:outline-none focus:border-primary transition-all resize-none"
                         />
                         <button
                           type="submit"
                           disabled={isSubmitting}
-                          className="w-full bg-primary text-asphalt py-3 rounded-xl font-bold hover:bg-accent transition-colors disabled:opacity-50"
+                          className="w-full bg-primary text-inverse py-3 rounded-xl font-bold hover:bg-accent transition-colors disabled:opacity-50"
                         >
                           {isSubmitting ? t('event.btn.creating') : t('event.btn.publish')}
                         </button>
@@ -1857,7 +1863,7 @@ export default function Profile() {
                     )}
 
                     {(!data.events || data.events.length === 0) && (!data.rsvpd_events || data.rsvpd_events.length === 0) && (
-                      <div className="bg-carbon/50 border border-white/5 rounded-2xl p-8 text-center">
+                      <div className="bg-oil/50 border border-inverse/5 rounded-2xl p-8 text-center">
                         <Calendar className="w-8 h-8 text-steel mx-auto mb-3" />
                         <h3 className="text-lg font-medium mb-1">{t('profile.noEvents')}</h3>
                         <p className="text-steel text-sm">{t('profile.noEventsDesc')}</p>
@@ -1891,7 +1897,7 @@ export default function Profile() {
                 <div className="glass-card p-6 sm:p-8 border-primary/20 shadow-xl shadow-primary/5 mb-12">
                   <form onSubmit={handlePostSubmit}>
                     <div className="flex gap-6">
-                      <div className="w-14 h-14 rounded-[1.25rem] bg-asphalt border border-white/5 flex items-center justify-center shrink-0 overflow-hidden">
+                      <div className="w-14 h-14 rounded-[1.25rem] bg-engine border border-inverse/5 flex items-center justify-center shrink-0 overflow-hidden">
                         {data.profile?.avatar_url ? (
                           <img src={data.profile.avatar_url} alt="" className="w-full h-full object-cover" />
                         ) : (
@@ -1908,7 +1914,7 @@ export default function Profile() {
                         />
 
                         {postPreview && (
-                          <div className="relative rounded-2xl overflow-hidden border border-white/10 group">
+                          <div className="relative rounded-2xl overflow-hidden border border-inverse/10 group">
                             <img src={postPreview} alt="Preview" className="w-full aspect-video object-cover" />
                             <button 
                               type="button"
@@ -1916,14 +1922,14 @@ export default function Profile() {
                                 setPostImage(null);
                                 setPostPreview(null);
                               }}
-                              className="absolute top-2 right-2 p-1.5 bg-black/60 backdrop-blur-md rounded-lg text-white hover:bg-red-500 transition-colors"
+                              className="absolute top-2 right-2 p-1.5 bg-engine/60 backdrop-blur-md rounded-lg text-chrome hover:bg-error hover:text-chrome transition-colors"
                             >
                               <X className="w-4 h-4" />
                             </button>
                           </div>
                         )}
 
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-6 border-t border-white/5">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-6 border-t border-inverse/5">
                           <div className="flex flex-wrap gap-2 items-center w-full sm:w-auto">
                             <button 
                               type="button" 
@@ -1945,7 +1951,7 @@ export default function Profile() {
                                 <select
                                   value={taggedMotorcycleId || ''}
                                   onChange={(e) => setTaggedMotorcycleId(e.target.value)}
-                                  className="bg-carbon border border-white/10 rounded-lg px-3 py-1.5 text-xs text-steel focus:outline-none focus:border-primary/50 appearance-none pr-8"
+                                  className="bg-oil border border-inverse/10 rounded-lg px-3 py-1.5 text-xs text-steel focus:outline-none focus:border-primary/50 appearance-none pr-8"
                                 >
                                   <option value="">{t('profile.tagBike')}</option>
                                   {data.garage.map((moto: any) => (
@@ -1959,7 +1965,7 @@ export default function Profile() {
                             <select
                               value={postPrivacy || ''}
                               onChange={(e) => setPostPrivacy(e.target.value)}
-                              className="bg-carbon border border-white/10 rounded-lg px-3 py-1.5 text-xs text-steel focus:outline-none focus:border-primary/50"
+                              className="bg-oil border border-inverse/10 rounded-lg px-3 py-1.5 text-xs text-steel focus:outline-none focus:border-primary/50"
                             >
                               <option value="public">{t('profile.public')}</option>
                               <option value="followers">{t('profile.followersOnly')}</option>
@@ -1992,7 +1998,7 @@ export default function Profile() {
                         layout: { type: "spring", stiffness: 300, damping: 30 },
                         opacity: { duration: 0.2 }
                       }}
-                      className="glass-card overflow-hidden group hover:border-white/10 transition-all"
+                      className="glass-card overflow-hidden group hover:border-inverse/10 transition-all"
                     >
                       <div className="p-6 sm:p-10">
                         <div className="flex items-start sm:items-center justify-between mb-8 sm:mb-10 gap-4">
@@ -2009,7 +2015,7 @@ export default function Profile() {
                               <span className="bg-engine text-steel px-2 py-1 rounded ml-2">{t('profile.followersOnly')}</span>
                             )}
                           </div>
-                          <button className="text-steel hover:text-white transition-colors p-2 hover:bg-white/5 rounded-lg">
+                          <button className="text-steel hover:text-chrome transition-colors p-2 hover:bg-inverse/5 rounded-lg">
                             <Share2 className="w-4 h-4" />
                           </button>
                         </div>
@@ -2021,29 +2027,29 @@ export default function Profile() {
                         )}
                         
                         {post.image_url && (
-                          <div className="rounded-[2.5rem] overflow-hidden mb-10 border border-white/5 shadow-2xl relative group/img">
+                          <div className="rounded-[2.5rem] overflow-hidden mb-10 border border-inverse/5 shadow-2xl relative group/img">
                             <img src={post.image_url} alt="" className="w-full aspect-video object-cover grayscale group-hover/img:grayscale-0 transition-all duration-1000 scale-105 group-hover/img:scale-100" referrerPolicy="no-referrer" />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover/img:opacity-100 transition-opacity duration-500" />
+                            <div className="absolute inset-0 bg-gradient-to-t from-oil/40 to-transparent opacity-0 group-hover/img:opacity-100 transition-opacity duration-500" />
                           </div>
                         )}
 
                         {post.shared_event_id && (
                           <Link to={`/events/${post.shared_event_id}`} className="block mb-10 group/event">
-                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-8 p-4 sm:p-6 rounded-[2rem] border border-white/10 bg-carbon/30 hover:bg-carbon/60 hover:border-primary/30 transition-all duration-500 overflow-hidden relative group/card">
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-8 p-4 sm:p-6 rounded-[2rem] border border-inverse/10 bg-oil/30 hover:bg-oil/60 hover:border-primary/30 transition-all duration-500 overflow-hidden relative group/card">
                               <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-500" />
                               
                               <div className="w-full sm:w-32 h-48 sm:h-32 shrink-0 rounded-2xl overflow-hidden relative shadow-2xl">
                                 <img src={post.shared_event_image_url} alt={post.shared_event_title} className="w-full h-full object-cover grayscale group-hover/event:grayscale-0 transition-all duration-700 scale-110 group-hover/card:scale-100" referrerPolicy="no-referrer" />
-                                <div className="absolute inset-0 ring-1 ring-inset ring-white/10 rounded-2xl" />
+                                <div className="absolute inset-0 ring-1 ring-inset ring-inverse/10 rounded-2xl" />
                               </div>
                               
                               <div className="flex-1 min-w-0 py-2 relative z-10">
                                 <div className="flex items-center gap-3 mb-3">
                                   <div className="text-[10px] font-mono font-black text-primary uppercase tracking-[0.2em] px-3 py-1 rounded-full bg-primary/10 border border-primary/20">{t('profile.eventLabel')}</div>
-                                  <div className="h-px w-8 bg-white/10" />
+                                  <div className="h-px w-8 bg-inverse/10" />
                                 </div>
                                 
-                                <h4 className="text-2xl sm:text-3xl font-display font-black uppercase italic tracking-tight text-white group-hover/card:text-primary transition-colors duration-500 mb-4 line-clamp-1">
+                                <h4 className="text-2xl sm:text-3xl font-display font-black uppercase italic tracking-tight text-chrome group-hover/card:text-primary transition-colors duration-500 mb-4 line-clamp-1">
                                   {post.shared_event_title}
                                 </h4>
                                 
@@ -2078,7 +2084,7 @@ export default function Profile() {
                         )}
                       </div>
                       
-                      <div className="px-6 sm:px-10 py-6 sm:py-8 border-t border-white/5 flex flex-wrap items-center gap-6 sm:gap-12 bg-asphalt/30">
+                      <div className="px-6 sm:px-10 py-6 sm:py-8 border-t border-inverse/5 flex flex-wrap items-center gap-6 sm:gap-12 bg-engine/30">
                         <button 
                           onClick={() => handleLike(post.id)}
                           className={`flex items-center gap-3 transition-all group/btn px-4 py-2 rounded-full ${
@@ -2098,7 +2104,7 @@ export default function Profile() {
                           className={`flex items-center gap-3 transition-all group/btn px-4 py-2 rounded-full ${
                             expandedComments[post.id]
                               ? 'bg-primary/10 text-primary border border-primary/20'
-                              : 'text-steel hover:text-white hover:bg-white/5 border border-transparent'
+                              : 'text-steel hover:text-chrome hover:bg-inverse/5 border border-transparent'
                           }`}
                         >
                           <MessageSquare className={`w-6 h-6 transition-all ${expandedComments[post.id] ? 'text-primary' : 'group-hover/btn:text-primary'}`} />
@@ -2127,7 +2133,7 @@ export default function Profile() {
                             </span>
                           </button>
                         )}
-                        <button className="flex items-center gap-3 text-steel hover:text-white transition-all group/btn ml-auto">
+                        <button className="flex items-center gap-3 text-steel hover:text-chrome transition-all group/btn ml-auto">
                           <Share2 className="w-6 h-6 group-hover/btn:text-primary transition-all" />
                         </button>
                       </div>
@@ -2139,13 +2145,13 @@ export default function Profile() {
                             initial={{ height: 0, opacity: 0 }}
                             animate={{ height: 'auto', opacity: 1 }}
                             exit={{ height: 0, opacity: 0 }}
-                            className="border-t border-white/5 bg-carbon/20 overflow-hidden"
+                            className="border-t border-inverse/5 bg-oil/20 overflow-hidden"
                           >
                             <div className="p-6 sm:p-10 space-y-8">
                               {/* Comment Input */}
                               {currentUser && (
                                 <div className="flex gap-4">
-                                  <div className="w-10 h-10 rounded-xl bg-asphalt shrink-0 overflow-hidden border border-white/5">
+                                  <div className="w-10 h-10 rounded-xl bg-engine shrink-0 overflow-hidden border border-inverse/5">
                                     <img src={currentUser.profile_picture_url} alt="" className="w-full h-full object-cover" />
                                   </div>
                                   <div className="flex-1 relative">
@@ -2153,7 +2159,7 @@ export default function Profile() {
                                       value={newComment[post.id] || ''}
                                       onChange={(e) => setNewComment(prev => ({ ...prev, [post.id]: e.target.value }))}
                                       placeholder={t('feed.writeComment') || "Write a comment..."}
-                                      className="w-full bg-asphalt/50 border border-white/10 rounded-2xl py-3 px-4 text-sm text-chrome placeholder:text-steel focus:outline-none focus:border-primary/50 transition-all resize-none"
+                                      className="w-full bg-engine/50 border border-inverse/10 rounded-2xl py-3 px-4 text-sm text-chrome placeholder:text-steel focus:outline-none focus:border-primary/50 transition-all resize-none"
                                       rows={1}
                                       onKeyDown={(e) => {
                                         if (e.key === 'Enter' && !e.shiftKey) {
@@ -2183,7 +2189,7 @@ export default function Profile() {
                                   postComments[post.id].map((comment: any) => (
                                     <div key={comment.id} className="flex gap-4 group/comment">
                                       <Link to={`/profile/${comment.username}`} className="shrink-0">
-                                        <div className="w-10 h-10 rounded-xl bg-asphalt overflow-hidden border border-white/5 group-hover/comment:border-primary/30 transition-colors">
+                                        <div className="w-10 h-10 rounded-xl bg-engine overflow-hidden border border-inverse/5 group-hover/comment:border-primary/30 transition-colors">
                                           <img src={comment.profile_picture_url} alt="" className="w-full h-full object-cover" />
                                         </div>
                                       </Link>
@@ -2217,8 +2223,8 @@ export default function Profile() {
                     </motion.article>
                   ))
                 ) : (
-                  <div className="text-center py-32 glass-card border-dashed border-white/5 bg-transparent">
-                    <MessageSquare className="w-16 h-16 text-carbon mx-auto mb-8" />
+                  <div className="text-center py-32 glass-card border-dashed border-inverse/5 bg-transparent">
+                    <MessageSquare className="w-16 h-16 text-oil mx-auto mb-8" />
                     <p className="text-steel font-mono text-[10px] font-black uppercase tracking-[0.4em]">{t('profile.noUpdates')}</p>
                   </div>
                 )}
@@ -2238,28 +2244,28 @@ export default function Profile() {
             className="space-y-12"
           >
             {/* Header / Summary */}
-            <section className="glass-card p-8 border-white/5 relative overflow-hidden">
+            <section className="glass-card p-8 border-inverse/5 relative overflow-hidden">
               <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -mr-32 -mt-32" />
               <div className="relative z-10 flex flex-col md:flex-row items-center gap-8">
-                <div className="w-32 h-32 rounded-full border-4 border-primary/20 flex items-center justify-center bg-asphalt shadow-xl shadow-primary/10">
+                <div className="w-32 h-32 rounded-full border-4 border-primary/20 flex items-center justify-center bg-engine shadow-xl shadow-primary/10">
                   <MapPin className="w-12 h-12 text-primary" />
                 </div>
                 <div className="flex-1 text-center md:text-left">
                   <h2 className="text-4xl font-display font-black uppercase italic tracking-tight mb-2">{t('profile.bikerPassport')}</h2>
-                  <p className="text-steel font-mono text-sm uppercase tracking-widest mb-6">Digital Motorcycle Journey Log</p>
+                  <p className="text-steel font-mono text-sm uppercase tracking-widest mb-6">{t('passport.logSubtitle')}</p>
                   
                   <div className="flex flex-wrap justify-center md:justify-start gap-6">
-                    <div className="bg-asphalt/50 px-6 py-3 rounded-2xl border border-white/5">
-                      <div className="text-[10px] font-mono uppercase tracking-widest text-steel mb-1">Total Stamps</div>
+                    <div className="bg-engine/50 px-6 py-3 rounded-2xl border border-inverse/5">
+                      <div className="text-[10px] font-mono uppercase tracking-widest text-steel mb-1">{t('passport.totalStamps')}</div>
                       <div className="font-display font-black text-2xl text-primary italic">{passportStamps.length}</div>
                     </div>
-                    <div className="bg-asphalt/50 px-6 py-3 rounded-2xl border border-white/5">
-                      <div className="text-[10px] font-mono uppercase tracking-widest text-steel mb-1">Badges Earned</div>
+                    <div className="bg-engine/50 px-6 py-3 rounded-2xl border border-inverse/5">
+                      <div className="text-[10px] font-mono uppercase tracking-widest text-steel mb-1">{t('passport.badgesEarned')}</div>
                       <div className="font-display font-black text-2xl text-accent italic">{badges.length}</div>
                     </div>
-                    <div className="bg-asphalt/50 px-6 py-3 rounded-2xl border border-white/5">
-                      <div className="text-[10px] font-mono uppercase tracking-widest text-steel mb-1">Rare Items</div>
-                      <div className="font-display font-black text-2xl text-blue-400 italic">
+                    <div className="bg-engine/50 px-6 py-3 rounded-2xl border border-inverse/5">
+                      <div className="text-[10px] font-mono uppercase tracking-widest text-steel mb-1">{t('passport.rareItems')}</div>
+                      <div className="font-display font-black text-2xl text-info italic">
                         {passportStamps.filter(s => s.rarity === 'rare' || s.rarity === 'epic' || s.rarity === 'legendary').length + badges.filter((b: any) => b.category === 'rare' || b.category === 'epic' || b.category === 'legendary').length}
                       </div>
                     </div>
@@ -2274,11 +2280,11 @@ export default function Profile() {
                 <div className="p-3 bg-primary/10 rounded-2xl">
                   <MapPin className="w-6 h-6 text-primary" />
                 </div>
-                <h3 className="text-2xl font-display font-black uppercase italic tracking-tight">Travel Stamps</h3>
+                <h3 className="text-2xl font-display font-black uppercase italic tracking-tight">{t('passport.travelStamps')}</h3>
               </div>
               
               {passportStamps.length === 0 ? (
-                <div className="glass-card p-12 text-center border-white/5">
+                <div className="glass-card p-12 text-center border-inverse/5">
                   <MapPin className="w-16 h-16 text-engine mx-auto mb-6" />
                   <h3 className="text-2xl font-display font-black uppercase italic mb-2">{t('profile.noStamps')}</h3>
                   <p className="text-steel font-light">{t('profile.noStampsDesc')}</p>
@@ -2300,13 +2306,13 @@ export default function Profile() {
 
                     const rarityColors = {
                       common: 'text-steel bg-steel/10 border-steel/20',
-                      rare: 'text-blue-400 bg-blue-400/10 border-blue-400/20',
-                      epic: 'text-purple-400 bg-purple-400/10 border-purple-400/20',
+                      rare: 'text-info bg-info/10 border-info/20',
+                      epic: 'text-primary bg-primary/10 border-primary/20',
                       legendary: 'text-accent bg-accent/10 border-accent/20'
                     };
 
                     return (
-                      <div key={stamp.id} className="glass-card p-6 border-white/5 relative overflow-hidden group">
+                      <div key={stamp.id} className="glass-card p-6 border-inverse/5 relative overflow-hidden group">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl -mr-16 -mt-16 transition-all duration-500 group-hover:bg-primary/10" />
                         
                         <div className="relative z-10 flex flex-col items-center text-center">
@@ -2317,10 +2323,10 @@ export default function Profile() {
                           <h4 className="font-display font-black uppercase italic text-lg mb-1">{stamp.name}</h4>
                           <p className="text-xs text-steel mb-4 line-clamp-2">{stamp.description}</p>
                           
-                          <div className="w-full pt-4 border-t border-white/5 flex flex-col gap-2">
+                          <div className="w-full pt-4 border-t border-inverse/5 flex flex-col gap-2">
                             <div className="flex justify-between items-center text-[10px] font-mono uppercase tracking-widest">
                               <span className="text-steel">{t('profile.issuedBy')}</span>
-                              <span className="text-white font-bold">{stamp.ambassador_name || t('profile.platform')}</span>
+                              <span className="text-chrome font-bold">{stamp.ambassador_name || t('profile.platform')}</span>
                             </div>
                             <div className="flex justify-between items-center text-[10px] font-mono uppercase tracking-widest">
                               <span className="text-steel">{t('profile.date')}</span>
@@ -2361,14 +2367,14 @@ export default function Profile() {
                         className="glass-card p-6 flex flex-col items-center text-center cursor-pointer hover:border-accent/50 transition-all group"
                         onClick={() => setSelectedBadge(badge)}
                       >
-                      <div className="w-20 h-20 rounded-full bg-asphalt border-2 border-accent/20 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-lg shadow-accent/10 overflow-hidden">
+                      <div className="w-20 h-20 rounded-full bg-engine border-2 border-accent/20 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-lg shadow-accent/10 overflow-hidden">
                         {badge.icon && badge.icon.startsWith('/') ? (
                           <img src={badge.icon} alt={badge.name} className="w-full h-full object-cover" />
                         ) : (
                           <IconComponent className="w-10 h-10 text-accent" />
                         )}
                       </div>
-                        <h3 className="text-sm font-bold text-white mb-1">{badge.name}</h3>
+                        <h3 className="text-sm font-bold text-chrome mb-1">{badge.name}</h3>
                         <p className="text-[10px] font-mono text-steel uppercase tracking-widest mb-3">{badge.category}</p>
                         <div className="text-[10px] text-steel mb-1">
                           {new Date(badge.awarded_date).toLocaleDateString(t('locale'))}
@@ -2381,8 +2387,8 @@ export default function Profile() {
                   })}
                 </div>
               ) : (
-                <div className="text-center py-32 glass-card border-dashed border-white/5 bg-transparent">
-                  <ShieldCheck className="w-16 h-16 text-carbon mx-auto mb-8" />
+                <div className="text-center py-32 glass-card border-dashed border-inverse/5 bg-transparent">
+                  <ShieldCheck className="w-16 h-16 text-oil mx-auto mb-8" />
                   <p className="text-steel font-mono text-[10px] font-black uppercase tracking-[0.4em]">{t('profile.noAchievements')}</p>
                 </div>
               )}
@@ -2397,7 +2403,7 @@ export default function Profile() {
                 <h3 className="text-2xl font-display font-black uppercase italic tracking-tight">Legendary Roads</h3>
               </div>
               
-              <div className="glass-card p-12 text-center border-white/5">
+              <div className="glass-card p-12 text-center border-inverse/5">
                 <Mountain className="w-16 h-16 text-steel mx-auto mb-6 opacity-50" />
                 <h3 className="text-2xl font-display font-black uppercase italic mb-2 text-steel">Coming Soon</h3>
                 <p className="text-steel font-light">Conquer the world's most famous motorcycle routes to earn legendary stamps.</p>
@@ -2444,13 +2450,13 @@ export default function Profile() {
                       {canEdit && (
                         <button 
                           onClick={() => removeRecommendation(rec.id)} 
-                          className="absolute top-6 right-6 text-steel hover:text-red-500 transition-colors p-2 hover:bg-red-500/10 rounded-lg"
+                          className="absolute top-6 right-6 text-steel hover:text-error transition-colors p-2 hover:bg-error/10 rounded-lg"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
                       )}
                       <div className="flex items-start gap-6 mb-6">
-                        <div className="w-16 h-16 rounded-2xl bg-asphalt flex items-center justify-center shrink-0 border border-white/5 group-hover:border-primary/30 transition-colors">
+                        <div className="w-16 h-16 rounded-2xl bg-engine flex items-center justify-center shrink-0 border border-inverse/5 group-hover:border-primary/30 transition-colors">
                           {rec.type === 'road' ? <MapPin className="w-4 h-4 text-primary" /> : <Building2 className="w-4 h-4 text-primary" />}
                         </div>
                         <div>
@@ -2462,11 +2468,11 @@ export default function Profile() {
                       </div>
                       <p className="text-steel mb-6 leading-relaxed">{rec.item_description}</p>
                       {rec.description && (
-                        <div className="bg-asphalt/50 p-6 rounded-2xl border border-white/5 mb-6">
+                        <div className="bg-engine/50 p-6 rounded-2xl border border-inverse/5 mb-6">
                           <p className="text-sm text-chrome italic">"{rec.description}"</p>
                         </div>
                       )}
-                      <div className="flex items-center justify-between pt-6 border-t border-white/5">
+                      <div className="flex items-center justify-between pt-6 border-t border-inverse/5">
                         <span className="text-[10px] font-mono text-steel uppercase tracking-widest">
                           {new Date(rec.created_at).toLocaleDateString(t('locale'))}
                         </span>
@@ -2503,7 +2509,7 @@ export default function Profile() {
                         <select 
                           value={newRec.type || ''} 
                           onChange={(e) => setNewRec({...newRec, type: e.target.value})} 
-                          className="w-full bg-asphalt border border-white/10 rounded-2xl py-4 px-6 text-sm text-white focus:outline-none focus:border-primary/50 transition-all"
+                          className="w-full bg-engine border border-inverse/10 rounded-2xl py-4 px-6 text-sm text-chrome focus:outline-none focus:border-primary/50 transition-all"
                         >
                           <option value="road">{t('profile.roadRoute')}</option>
                           <option value="shop">{t('profile.shopPlace')}</option>
@@ -2516,7 +2522,7 @@ export default function Profile() {
                           placeholder={t('profile.itemIdPlaceholder')} 
                           value={newRec.item_id || ''} 
                           onChange={(e) => setNewRec({...newRec, item_id: e.target.value})} 
-                          className="w-full bg-asphalt border border-white/10 rounded-2xl py-4 px-6 text-sm text-white focus:outline-none focus:border-primary/50 transition-all" 
+                          className="w-full bg-engine border border-inverse/10 rounded-2xl py-4 px-6 text-sm text-chrome focus:outline-none focus:border-primary/50 transition-all" 
                           required 
                         />
                       </div>
@@ -2529,7 +2535,7 @@ export default function Profile() {
                           placeholder={t('profile.displayName')} 
                           value={newRec.item_name || ''} 
                           onChange={(e) => setNewRec({...newRec, item_name: e.target.value})} 
-                          className="w-full bg-asphalt border border-white/10 rounded-2xl py-4 px-6 text-sm text-white focus:outline-none focus:border-primary/50 transition-all" 
+                          className="w-full bg-engine border border-inverse/10 rounded-2xl py-4 px-6 text-sm text-chrome focus:outline-none focus:border-primary/50 transition-all" 
                           required 
                         />
                       </div>
@@ -2539,7 +2545,7 @@ export default function Profile() {
                           placeholder={t('profile.personalNotePlaceholder')} 
                           value={newRec.description || ''} 
                           onChange={(e) => setNewRec({...newRec, description: e.target.value})} 
-                          className="w-full bg-asphalt border border-white/10 rounded-2xl py-4 px-6 text-sm text-white focus:outline-none focus:border-primary/50 transition-all resize-none" 
+                          className="w-full bg-engine border border-inverse/10 rounded-2xl py-4 px-6 text-sm text-chrome focus:outline-none focus:border-primary/50 transition-all resize-none" 
                           rows={1}
                         />
                       </div>
@@ -2566,7 +2572,7 @@ export default function Profile() {
             {/* Sidebar */}
             <div className="lg:col-span-4 space-y-8">
             <div className="glass-card overflow-hidden">
-              <div className="p-8 border-b border-white/5 bg-asphalt/30">
+              <div className="p-8 border-b border-inverse/5 bg-engine/30">
                 <h3 className="font-display font-black uppercase italic tracking-tight text-xl flex items-center gap-3">
                   <ShieldCheck className="w-5 h-5 text-primary" />
                   {t('profile.networkStats')}
@@ -2574,11 +2580,11 @@ export default function Profile() {
               </div>
               <div className="p-8 space-y-8">
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-asphalt/50 p-4 rounded-2xl border border-white/5 text-center">
+                  <div className="bg-engine/50 p-4 rounded-2xl border border-inverse/5 text-center">
                     <div className="text-[10px] font-mono uppercase tracking-widest text-steel mb-1">{t('profile.connections')}</div>
                     <div className="font-display font-black text-2xl text-primary italic">142</div>
                   </div>
-                  <div className="bg-asphalt/50 p-4 rounded-2xl border border-white/5 text-center">
+                  <div className="bg-engine/50 p-4 rounded-2xl border border-inverse/5 text-center">
                     <div className="text-[10px] font-mono uppercase tracking-widest text-steel mb-1">{t('profile.reputation')}</div>
                     <div className="font-display font-black text-2xl text-oil italic">4.9</div>
                   </div>
@@ -2587,7 +2593,7 @@ export default function Profile() {
                 {data.referral_code && (
                   <div className="bg-primary/5 p-4 rounded-2xl border border-primary/20 flex flex-col items-center justify-center gap-2">
                     <div className="text-[10px] font-mono uppercase tracking-widest text-primary font-bold">{t('profile.yourReferralCode')}</div>
-                    <div className="font-mono text-xl text-white tracking-[0.2em] bg-asphalt px-4 py-2 rounded-lg border border-white/10 select-all">
+                    <div className="font-mono text-xl text-chrome tracking-[0.2em] bg-engine px-4 py-2 rounded-lg border border-inverse/10 select-all">
                       {data.referral_code}
                     </div>
                     <div className="text-[9px] text-steel text-center mt-1">{t('profile.referralDesc')}</div>
@@ -2607,16 +2613,16 @@ export default function Profile() {
                   
                   {!isRider && (
                     <>
-                      <div className="h-px bg-white/5" />
+                      <div className="h-px bg-inverse/5" />
                       <div className="space-y-4 pt-2">
                         <div className="flex items-center gap-4 text-[10px] font-mono uppercase tracking-widest group cursor-pointer">
-                          <div className="w-8 h-8 rounded-lg bg-asphalt flex items-center justify-center border border-white/5 group-hover:border-primary/30 transition-colors">
+                          <div className="w-8 h-8 rounded-lg bg-engine flex items-center justify-center border border-inverse/5 group-hover:border-primary/30 transition-colors">
                             <Phone className="w-3.5 h-3.5 text-steel" />
                           </div>
-                          <span className="text-steel group-hover:text-white transition-colors">+{data.profile.phone || '1 (555) 0123-4567'}</span>
+                          <span className="text-steel group-hover:text-chrome transition-colors">+{data.profile.phone || '1 (555) 0123-4567'}</span>
                         </div>
                         <div className="flex items-center gap-4 text-[10px] font-mono uppercase tracking-widest group cursor-pointer">
-                          <div className="w-8 h-8 rounded-lg bg-asphalt flex items-center justify-center border border-white/5 group-hover:border-primary/30 transition-colors">
+                          <div className="w-8 h-8 rounded-lg bg-engine flex items-center justify-center border border-inverse/5 group-hover:border-primary/30 transition-colors">
                             <Globe className="w-3.5 h-3.5 text-steel" />
                           </div>
                           <a href={data.profile.website || "#"} target="_blank" rel="noopener noreferrer" className="text-primary hover:text-oil transition-colors">{data.profile.website || `www.${data.username}.com`}</a>
@@ -2640,24 +2646,24 @@ export default function Profile() {
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[100] flex items-center justify-center p-4"
           >
-            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setSelectedBadge(null)} />
+            <div className="absolute inset-0 bg-engine/80 backdrop-blur-sm" onClick={() => setSelectedBadge(null)} />
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="relative w-full max-w-md bg-carbon border border-white/10 rounded-3xl p-8 shadow-2xl overflow-hidden"
+              className="relative w-full max-w-md bg-oil border border-inverse/10 rounded-3xl p-8 shadow-2xl overflow-hidden"
             >
               <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-primary/20 to-transparent opacity-50" />
               
               <button 
                 onClick={() => setSelectedBadge(null)}
-                className="absolute top-4 right-4 p-2 bg-asphalt/50 hover:bg-engine rounded-full text-steel hover:text-white transition-colors z-10"
+                className="absolute top-4 right-4 p-2 bg-engine/50 hover:bg-engine rounded-full text-steel hover:text-chrome transition-colors z-10"
               >
                 <X className="w-5 h-5" />
               </button>
 
               <div className="relative z-10 flex flex-col items-center text-center mt-4">
-                <div className="w-32 h-32 rounded-full bg-asphalt border-4 border-primary/30 flex items-center justify-center mb-6 shadow-[0_0_40px_rgba(242,125,38,0.2)] overflow-hidden">
+                <div className="w-32 h-32 rounded-full bg-engine border-4 border-primary/30 flex items-center justify-center mb-6 shadow-[0_0_40px_rgba(242,125,38,0.2)] overflow-hidden">
                   {(() => {
                     if (selectedBadge.icon && selectedBadge.icon.startsWith('/')) {
                       return <img src={selectedBadge.icon} alt={selectedBadge.name} className="w-full h-full object-cover" />;
@@ -2673,7 +2679,7 @@ export default function Profile() {
                   })()}
                 </div>
                 
-                <h2 className="text-3xl font-display font-black uppercase italic tracking-tight text-white mb-2">
+                <h2 className="text-3xl font-display font-black uppercase italic tracking-tight text-chrome mb-2">
                   {selectedBadge.name}
                 </h2>
                 
@@ -2685,12 +2691,12 @@ export default function Profile() {
                   {selectedBadge.description}
                 </p>
                 
-                <div className="w-full bg-asphalt/50 rounded-2xl p-6 border border-white/5 space-y-4 text-left">
+                <div className="w-full bg-engine/50 rounded-2xl p-6 border border-inverse/5 space-y-4 text-left">
                   <div className="flex justify-between items-center">
                     <span className="text-[10px] font-mono text-steel uppercase tracking-widest">{t('profile.earnedOn')}</span>
-                    <span className="text-sm font-bold text-white">{new Date(selectedBadge.awarded_date).toLocaleDateString(t('locale'))}</span>
+                    <span className="text-sm font-bold text-chrome">{new Date(selectedBadge.awarded_date).toLocaleDateString(t('locale'))}</span>
                   </div>
-                  <div className="h-px bg-white/5 w-full" />
+                  <div className="h-px bg-inverse/5 w-full" />
                   <div className="flex justify-between items-center">
                     <span className="text-[10px] font-mono text-steel uppercase tracking-widest">{t('profile.issuedBy')}</span>
                     <span className="text-sm font-bold text-primary capitalize">
@@ -2712,7 +2718,7 @@ function EventCard({ event, onRSVP, onEdit, isOwner, currentUsername, hasRSVPd, 
     <div className="glass-card p-6 flex items-center gap-8 group hover:border-primary/30 transition-all relative overflow-hidden">
       <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -mr-16 -mt-16 blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
       
-      <div className="w-24 h-24 bg-asphalt rounded-[1.5rem] flex flex-col items-center justify-center border border-white/5 shrink-0 group-hover:border-primary/30 transition-all shadow-2xl relative z-10 overflow-hidden">
+      <div className="w-24 h-24 bg-engine rounded-[1.5rem] flex flex-col items-center justify-center border border-inverse/5 shrink-0 group-hover:border-primary/30 transition-all shadow-2xl relative z-10 overflow-hidden">
         <div className="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity" />
         <span className="text-primary text-[10px] font-mono font-black uppercase tracking-[0.2em] mb-1 relative z-10">
           {new Date(event.date + 'T12:00:00').toLocaleDateString(t('locale'), { month: 'short' })}
@@ -2762,14 +2768,14 @@ function EventCard({ event, onRSVP, onEdit, isOwner, currentUsername, hasRSVPd, 
             onClick={() => onRSVP(event.id)}
             className={`px-8 py-3 text-[10px] font-display font-black uppercase italic tracking-[0.2em] rounded-full border transition-all ${
               hasRSVPd 
-                ? 'bg-primary text-asphalt border-primary hover:bg-oil' 
-                : 'bg-white/5 text-white border-white/10 hover:bg-white/10'
+                ? 'bg-primary text-inverse border-primary hover:bg-oil' 
+                : 'bg-inverse/5 text-chrome border-inverse/10 hover:bg-inverse/10'
             }`}
           >
             {hasRSVPd ? t('events.attending') : t('events.rsvp')}
           </button>
         )}
-        <Link to={`/events/${event.id}`} className="p-3 text-engine hover:text-white transition-all transform group-hover:translate-x-1">
+        <Link to={`/events/${event.id}`} className="p-3 text-engine hover:text-chrome transition-all transform group-hover:translate-x-1">
           <ArrowRight className="w-5 h-5" />
         </Link>
       </div>

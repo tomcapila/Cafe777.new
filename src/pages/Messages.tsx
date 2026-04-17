@@ -152,14 +152,14 @@ export default function Messages() {
   );
 
   return (
-    <div className="min-h-screen bg-asphalt pb-20">
+    <div className="min-h-screen bg-engine pb-20">
       <div className="max-w-4xl mx-auto p-4">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-4">
             <button 
               onClick={() => navigate(-1)}
-              className="p-2 bg-white/5 hover:bg-white/10 rounded-xl text-steel hover:text-chrome transition-colors"
+              className="p-2 bg-inverse/5 hover:bg-inverse/10 rounded-xl text-steel hover:text-chrome transition-colors"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
@@ -184,11 +184,11 @@ export default function Messages() {
         </div>
 
         {selectedChat ? (
-          <div className="bg-carbon border border-white/10 rounded-2xl overflow-hidden flex flex-col h-[70vh]">
-            <div className="p-4 border-b border-white/10 flex items-center gap-4 bg-asphalt/50">
+          <div className="bg-oil border border-inverse/10 rounded-2xl overflow-hidden flex flex-col h-[70vh]">
+            <div className="p-4 border-b border-inverse/10 flex items-center gap-4 bg-engine/50">
               <button 
                 onClick={() => setSelectedChat(null)}
-                className="p-2 bg-white/5 hover:bg-white/10 rounded-xl text-steel hover:text-chrome transition-colors"
+                className="p-2 bg-inverse/5 hover:bg-inverse/10 rounded-xl text-steel hover:text-chrome transition-colors"
               >
                 <ArrowLeft className="w-5 h-5" />
               </button>
@@ -207,7 +207,7 @@ export default function Messages() {
                   <img 
                     src={getChatAvatar(selectedChat)} 
                     alt="Avatar" 
-                    className="w-10 h-10 rounded-full object-cover border border-white/10"
+                    className="w-10 h-10 rounded-full object-cover border border-inverse/10"
                     referrerPolicy="no-referrer"
                   />
                 ) : (
@@ -234,7 +234,7 @@ export default function Messages() {
                 placeholder="Search messages..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-carbon border border-white/10 rounded-xl py-3 pl-12 pr-4 text-chrome placeholder:text-steel focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all"
+                className="w-full bg-oil border border-inverse/10 rounded-xl py-3 pl-12 pr-4 text-chrome placeholder:text-steel focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all"
               />
             </div>
 
@@ -251,13 +251,13 @@ export default function Messages() {
                   <button
                     key={chat.id}
                     onClick={() => setSelectedChat(chat)}
-                    className="w-full flex items-center gap-4 p-4 bg-carbon border border-white/10 rounded-xl hover:border-primary/50 transition-colors text-left group"
+                    className="w-full flex items-center gap-4 p-4 bg-oil border border-inverse/10 rounded-xl hover:border-primary/50 transition-colors text-left group"
                   >
                     {getChatAvatar(chat) ? (
                       <img 
                         src={getChatAvatar(chat)} 
                         alt="Avatar" 
-                        className="w-12 h-12 rounded-full object-cover border border-white/10"
+                        className="w-12 h-12 rounded-full object-cover border border-inverse/10"
                         referrerPolicy="no-referrer"
                       />
                     ) : (
@@ -273,7 +273,7 @@ export default function Messages() {
                         </h3>
                         <div className="flex items-center gap-2">
                           {chat.unread_count > 0 && (
-                            <span className="bg-primary text-asphalt text-[10px] font-bold px-2 py-0.5 rounded-full">
+                            <span className="bg-primary text-inverse text-[10px] font-bold px-2 py-0.5 rounded-full">
                               {chat.unread_count}
                             </span>
                           )}
@@ -284,7 +284,7 @@ export default function Messages() {
                           )}
                         </div>
                       </div>
-                      <p className={`text-sm truncate ${chat.unread_count > 0 ? 'text-white font-medium' : 'text-steel'}`}>
+                      <p className={`text-sm truncate ${chat.unread_count > 0 ? 'text-chrome font-medium' : 'text-steel'}`}>
                         {chat.last_message || 'No messages yet'}
                       </p>
                     </div>
@@ -297,19 +297,19 @@ export default function Messages() {
 
         {/* New Message Modal */}
         {isNewMessageModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-            <div className="bg-carbon border border-white/10 rounded-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh]">
-              <div className="p-4 border-b border-white/10 flex items-center justify-between bg-asphalt/50">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-engine/80 backdrop-blur-sm">
+            <div className="bg-oil border border-inverse/10 rounded-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh]">
+              <div className="p-4 border-b border-inverse/10 flex items-center justify-between bg-engine/50">
                 <h2 className="text-lg font-display font-black italic uppercase text-chrome">New Message</h2>
                 <button 
                   onClick={() => setIsNewMessageModalOpen(false)}
-                  className="p-2 text-steel hover:text-white transition-colors rounded-lg hover:bg-white/5"
+                  className="p-2 text-steel hover:text-chrome transition-colors rounded-lg hover:bg-inverse/5"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
               
-              <div className="p-4 border-b border-white/10">
+              <div className="p-4 border-b border-inverse/10">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-steel" />
                   <input
@@ -317,7 +317,7 @@ export default function Messages() {
                     placeholder="Search users by username..."
                     value={userSearchQuery}
                     onChange={(e) => setUserSearchQuery(e.target.value)}
-                    className="w-full bg-asphalt border border-white/10 rounded-xl py-2 pl-10 pr-4 text-chrome placeholder:text-steel focus:outline-none focus:border-primary/50 transition-all"
+                    className="w-full bg-engine border border-inverse/10 rounded-xl py-2 pl-10 pr-4 text-chrome placeholder:text-steel focus:outline-none focus:border-primary/50 transition-all"
                     autoFocus
                   />
                 </div>
@@ -332,13 +332,13 @@ export default function Messages() {
                       <button
                         key={user.id}
                         onClick={() => handleStartChat(user.id)}
-                        className="w-full flex items-center gap-3 p-3 hover:bg-white/5 rounded-xl transition-colors text-left"
+                        className="w-full flex items-center gap-3 p-3 hover:bg-inverse/5 rounded-xl transition-colors text-left"
                       >
                         {user.profile_picture_url ? (
                           <img 
                             src={user.profile_picture_url} 
                             alt={user.username} 
-                            className="w-10 h-10 rounded-full object-cover border border-white/10"
+                            className="w-10 h-10 rounded-full object-cover border border-inverse/10"
                             referrerPolicy="no-referrer"
                           />
                         ) : (

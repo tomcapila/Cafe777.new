@@ -26,8 +26,13 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}) {
   }
 
   if (response.status === 403) {
-    const result = await response.clone().json().catch(() => ({}));
-    console.error(`Access denied: Forbidden [${url}]`, result.error || '');
+    try {
+      const result = await response.clone().json();
+      console.error(`Access denied: Forbidden [${url}]`, result.error || '');
+    } catch (e) {
+      const text = await response.clone().text();
+      console.error(`Access denied: Forbidden [${url}] - Non-JSON error response:`, text.substring(0, 200));
+    }
   }
 
   return response;

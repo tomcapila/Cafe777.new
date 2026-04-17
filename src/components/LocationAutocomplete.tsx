@@ -3,15 +3,18 @@ import { useMapsLibrary } from '@vis.gl/react-google-maps';
 import { MapPin } from 'lucide-react';
 
 interface LocationAutocompleteProps {
-  value: string;
-  onChange: (value: string) => void;
+  value?: string;
+  defaultValue?: string;
+  onChange?: (value: string) => void;
   placeholder?: string;
   types?: string[];
+  name?: string;
+  className?: string;
 }
 
-export default function LocationAutocomplete({ value, onChange, placeholder = "Search location...", types = ['geocode'] }: LocationAutocompleteProps) {
+export default function LocationAutocomplete({ value, defaultValue, onChange, placeholder = "Search location...", types = ['geocode'], name, className }: LocationAutocompleteProps) {
   const placesLib = useMapsLibrary('places');
-  const [inputValue, setInputValue] = useState(value || '');
+  const [inputValue, setInputValue] = useState(value || defaultValue || '');
   const [predictions, setPredictions] = useState<google.maps.places.AutocompletePrediction[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   
@@ -26,7 +29,9 @@ export default function LocationAutocomplete({ value, onChange, placeholder = "S
   }, [placesLib]);
 
   useEffect(() => {
-    setInputValue(value || '');
+    if (value !== undefined) {
+      setInputValue(value);
+    }
   }, [value]);
 
   useEffect(() => {
@@ -42,7 +47,7 @@ export default function LocationAutocomplete({ value, onChange, placeholder = "S
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setInputValue(val);
-    onChange(val); // Update parent with raw text
+    if (onChange) onChange(val); // Update parent with raw text
 
     if (!val.trim() || !autocompleteService.current) {
       setPredictions([]);
@@ -70,7 +75,7 @@ export default function LocationAutocomplete({ value, onChange, placeholder = "S
 
   const handleSelectPrediction = (prediction: google.maps.places.AutocompletePrediction) => {
     setInputValue(prediction.description);
-    onChange(prediction.description);
+    if (onChange) onChange(prediction.description);
     setIsOpen(false);
     setPredictions([]);
     
@@ -82,25 +87,27 @@ export default function LocationAutocomplete({ value, onChange, placeholder = "S
 
   return (
     <div ref={wrapperRef} className="relative">
-      <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
+      <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-steel" />
       <input
         type="text"
+        name={name}
         value={inputValue}
         onChange={handleInputChange}
         onFocus={() => {
           if (predictions.length > 0) setIsOpen(true);
         }}
-        className="w-full bg-zinc-900/50 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+        autoCapitalize="sentences"
+        className={className || "w-full bg-oil/50 border border-inverse/10 rounded-xl pl-12 pr-4 py-3 text-chrome focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"}
         placeholder={placeholder}
       />
       
       {isOpen && predictions.length > 0 && (
-        <ul className="absolute z-50 w-full mt-1 bg-zinc-800 border border-white/10 rounded-xl shadow-lg overflow-hidden max-h-60 overflow-y-auto">
+        <ul className="absolute z-50 w-full mt-1 bg-engine border border-inverse/10 rounded-xl shadow-lg overflow-hidden max-h-60 overflow-y-auto">
           {predictions.map((prediction) => (
             <li
               key={prediction.place_id}
               onClick={() => handleSelectPrediction(prediction)}
-              className="px-4 py-3 hover:bg-zinc-700 cursor-pointer text-sm text-zinc-200 border-b border-white/5 last:border-0"
+              className="px-4 py-3 hover:bg-engine cursor-pointer text-sm text-chrome border-b border-inverse/5 last:border-0"
             >
               {prediction.description}
             </li>

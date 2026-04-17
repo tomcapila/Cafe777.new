@@ -190,9 +190,9 @@ export default function EventAttendanceModal({ eventId, eventName, eventDate, ho
   const filteredAttendees = attendees.filter(a => a.username.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
-    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-engine/80 z-50 flex items-center justify-center p-4">
       <div className="glass-card p-6 md:p-8 max-w-3xl w-full max-h-[90vh] flex flex-col relative">
-        <button onClick={onClose} className="absolute top-4 right-4 text-steel hover:text-white">
+        <button onClick={onClose} className="absolute top-4 right-4 text-steel hover:text-chrome">
           <X className="w-6 h-6" />
         </button>
         
@@ -206,8 +206,8 @@ export default function EventAttendanceModal({ eventId, eventName, eventDate, ho
               </div>
             )}
             {!isOnline && (
-              <div className="px-3 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full font-mono text-[10px] uppercase tracking-widest flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+              <div className="px-3 py-1 bg-primary/20 text-primary border border-primary/30 rounded-full font-mono text-[10px] uppercase tracking-widest flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
                 Offline Mode
               </div>
             )}
@@ -222,20 +222,20 @@ export default function EventAttendanceModal({ eventId, eventName, eventDate, ho
               value={searchQuery || ''}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search attendees..."
-              className="w-full bg-carbon border border-white/10 rounded-xl py-2 pl-10 pr-4 text-sm text-white focus:outline-none focus:border-primary transition-colors"
+              className="w-full bg-oil border border-inverse/10 rounded-xl py-2 pl-10 pr-4 text-sm text-chrome focus:outline-none focus:border-primary transition-colors"
             />
           </div>
           <div className="flex gap-2">
             <button 
               onClick={() => setIsScanning(!isScanning)}
-              className="px-4 py-2 bg-carbon hover:bg-engine border border-white/10 rounded-xl text-white font-mono text-[10px] uppercase tracking-widest flex items-center gap-2 transition-colors"
+              className="px-4 py-2 bg-oil hover:bg-engine border border-inverse/10 rounded-xl text-chrome font-mono text-[10px] uppercase tracking-widest flex items-center gap-2 transition-colors"
             >
               <QrCode className="w-4 h-4" />
               {isScanning ? 'Stop Scan' : 'Scan QR'}
             </button>
             <button 
               onClick={exportPDF}
-              className="px-4 py-2 bg-primary hover:bg-oil rounded-xl text-asphalt font-mono text-[10px] uppercase tracking-widest flex items-center gap-2 transition-colors shadow-lg shadow-primary/20"
+              className="px-4 py-2 bg-primary hover:bg-oil rounded-xl text-inverse font-mono text-[10px] uppercase tracking-widest flex items-center gap-2 transition-colors shadow-lg shadow-primary/20"
             >
               <Download className="w-4 h-4" />
               Export PDF
@@ -244,7 +244,7 @@ export default function EventAttendanceModal({ eventId, eventName, eventDate, ho
         </div>
 
         {isScanning && (
-          <div className="mb-6 bg-black rounded-xl overflow-hidden border border-white/10">
+          <div className="mb-6 bg-engine rounded-xl overflow-hidden border border-inverse/10">
             <QRScanner
               onScanSuccess={(decodedText) => {
                 // Expected format: event_checkin_{eventId}_{userId}
@@ -287,7 +287,7 @@ export default function EventAttendanceModal({ eventId, eventName, eventDate, ho
           ) : (
             <div className="grid gap-3">
               {filteredAttendees.map(attendee => (
-                <div key={attendee.id} className="flex items-center justify-between p-4 bg-carbon/50 rounded-xl border border-white/5">
+                <div key={attendee.id} className="flex items-center justify-between p-4 bg-oil/50 rounded-xl border border-inverse/5">
                   <div className="flex items-center gap-3">
                     <img 
                       src={attendee.profile_picture_url || `https://ui-avatars.com/api/?name=${attendee.username}&background=random`} 
@@ -295,17 +295,17 @@ export default function EventAttendanceModal({ eventId, eventName, eventDate, ho
                       className="w-10 h-10 rounded-full object-cover"
                       referrerPolicy="no-referrer"
                     />
-                    <span className="font-display font-bold uppercase tracking-tight text-white">{attendee.username}</span>
+                    <span className="font-display font-bold uppercase tracking-tight text-chrome">{attendee.username}</span>
                     {offlineQueue.some(q => q.userId === attendee.id) && (
-                      <span className="text-[8px] font-mono text-amber-400 uppercase tracking-widest border border-amber-400/30 px-2 py-0.5 rounded-full bg-amber-400/10">Pending Sync</span>
+                      <span className="text-[8px] font-mono text-primary uppercase tracking-widest border border-primary/30 px-2 py-0.5 rounded-full bg-primary/10">Pending Sync</span>
                     )}
                   </div>
                   <button
                     onClick={() => handleCheckIn(attendee.id, !attendee.checked_in)}
                     className={`px-4 py-2 rounded-lg font-mono text-[10px] uppercase tracking-widest flex items-center gap-2 transition-all ${
                       attendee.checked_in 
-                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30' 
-                        : 'bg-white/5 text-steel border border-white/10 hover:bg-white/10'
+                        ? 'bg-success/20 text-success border border-success/30 hover:bg-success/30' 
+                        : 'bg-inverse/5 text-steel border border-inverse/10 hover:bg-inverse/10'
                     }`}
                   >
                     <Check className={`w-3 h-3 ${attendee.checked_in ? 'opacity-100' : 'opacity-0'}`} />

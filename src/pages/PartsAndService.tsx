@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { fetchWithAuth } from '../utils/api';
 import { useLanguage } from '../contexts/LanguageContext';
+import LocationAutocomplete from '../components/LocationAutocomplete';
 
 interface SearchResult {
   id: number;
@@ -68,7 +69,7 @@ export default function PartsAndService() {
   };
 
   return (
-    <div className="min-h-screen bg-asphalt text-chrome pb-24">
+    <div className="min-h-screen bg-engine text-chrome pb-24">
       <div className="p-4">
         <h1 className="text-2xl font-black uppercase tracking-tight mb-2 flex items-center gap-2">
           <Wrench className="w-6 h-6 text-primary" />
@@ -81,31 +82,31 @@ export default function PartsAndService() {
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-steel" />
             <input
               type="text"
+              autoCapitalize="sentences"
               placeholder={t('partsAndService.keywordsPlaceholder')}
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
-              className="w-full bg-carbon border-2 border-white/10 rounded-xl py-3 pl-12 pr-4 text-white placeholder:text-steel focus:outline-none focus:border-primary transition-colors"
+              className="w-full bg-oil border-2 border-inverse/10 rounded-xl py-3 pl-12 pr-4 text-chrome placeholder:text-steel focus:outline-none focus:border-primary transition-colors"
             />
           </div>
           
           <div className="relative">
-            <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-steel" />
-            <input
-              type="text"
-              placeholder={t('partsAndService.locationPlaceholder')}
+            <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-steel z-10" />
+            <LocationAutocomplete
               value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              className="w-full bg-carbon border-2 border-white/10 rounded-xl py-3 pl-12 pr-4 text-white placeholder:text-steel focus:outline-none focus:border-primary transition-colors"
+              onChange={(value) => setLocation(value)}
+              placeholder={t('partsAndService.locationPlaceholder')}
+              className="pl-12"
             />
           </div>
 
           <button
             type="submit"
             disabled={isSearching || (!keyword.trim() && !location.trim())}
-            className="w-full bg-primary text-black font-bold py-3 rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="w-full bg-primary text-inverse font-bold py-3 rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {isSearching ? (
-              <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+              <div className="w-5 h-5 border-2 border-inverse/30 border-t-inverse rounded-full animate-spin" />
             ) : (
               <>
                 <Search className="w-5 h-5" />
@@ -121,7 +122,7 @@ export default function PartsAndService() {
               <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
             </div>
           ) : hasSearched && results.length === 0 ? (
-            <div className="text-center py-12 bg-carbon/50 rounded-2xl border border-white/5">
+            <div className="text-center py-12 bg-oil/50 rounded-2xl border border-inverse/5">
               <Wrench className="w-12 h-12 text-steel mx-auto mb-4 opacity-50" />
               <h3 className="text-lg font-bold mb-2">{t('partsAndService.noResults')}</h3>
               <p className="text-steel text-sm">{t('partsAndService.tryAdjusting')}</p>
@@ -132,12 +133,12 @@ export default function PartsAndService() {
                 key={result.id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-carbon rounded-2xl border border-white/10 overflow-hidden"
+                className="bg-oil rounded-2xl border border-inverse/10 overflow-hidden"
               >
                 <div className="p-4">
                   <div className="flex items-start gap-4 mb-4">
                     <div 
-                      className="w-16 h-16 rounded-xl bg-asphalt border border-white/10 flex-shrink-0 bg-cover bg-center cursor-pointer"
+                      className="w-16 h-16 rounded-xl bg-engine border border-inverse/10 flex-shrink-0 bg-cover bg-center cursor-pointer"
                       style={{ backgroundImage: `url(${result.profile_picture_url || 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?auto=format&fit=crop&q=80&w=200'})` }}
                       onClick={() => navigate(`/profile/${result.username}`)}
                     />
@@ -148,7 +149,7 @@ export default function PartsAndService() {
                       >
                         {result.company_name}
                       </h3>
-                      <span className="inline-block px-2 py-1 bg-white/10 rounded text-xs font-mono text-steel uppercase tracking-wider mt-1">
+                      <span className="inline-block px-2 py-1 bg-inverse/10 rounded text-xs font-mono text-steel uppercase tracking-wider mt-1">
                         {formatCategory(result.service_category)}
                       </span>
                     </div>
@@ -180,7 +181,7 @@ export default function PartsAndService() {
                   <div className="flex gap-2">
                     <button
                       onClick={() => navigate(`/profile/${result.username}`)}
-                      className="flex-1 bg-white/5 hover:bg-white/10 text-white py-2 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2"
+                      className="flex-1 bg-inverse/5 hover:bg-inverse/10 text-chrome py-2 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2"
                     >
                       {t('partsAndService.viewProfile')}
                       <ChevronRight className="w-4 h-4" />

@@ -83,6 +83,17 @@ export async function fetchExternalPOIs(polyline: [number, number][], radiusKm: 
 
   try {
     const response = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
+    if (!response.ok) {
+      console.warn("Overpass API returned non-ok status:", response.status);
+      return [];
+    }
+    
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      console.warn("Overpass API returned non-JSON response");
+      return [];
+    }
+
     const data = await response.json();
     
     return data.elements

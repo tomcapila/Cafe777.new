@@ -39,38 +39,38 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-950 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-engine p-4">
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md bg-zinc-900 p-8 rounded-lg shadow-xl"
+        className="w-full max-w-md bg-oil p-8 rounded-lg shadow-xl"
       >
-        <button onClick={() => navigate('/login')} className="text-zinc-400 hover:text-white mb-6 flex items-center gap-2">
+        <button onClick={() => navigate('/login')} className="text-steel hover:text-chrome mb-6 flex items-center gap-2">
           <ArrowLeft size={16} /> Back to login
         </button>
-        <h1 className="text-2xl font-bold text-white mb-6">Forgot Password</h1>
+        <h1 className="text-2xl font-bold text-chrome mb-6">Forgot Password</h1>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-zinc-400 mb-1">Email</label>
+            <label className="block text-sm font-medium text-steel mb-1">Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-zinc-800 text-white p-2 rounded border border-zinc-700 focus:border-primary outline-none"
+              className="w-full bg-engine text-chrome p-2 rounded border border-inverse/10 focus:border-primary outline-none"
               required
             />
           </div>
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-primary text-white p-2 rounded font-bold hover:bg-primary/90 disabled:opacity-50 flex items-center justify-center gap-2"
+            className="w-full bg-primary text-inverse p-2 rounded font-bold hover:bg-primary/90 disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {loading ? <Loader2 className="animate-spin" size={16} /> : <Mail size={16} />}
             Send Reset Link
           </button>
         </form>
-        {message && <p className="mt-4 text-green-500 text-sm">{message}</p>}
-        {error && <p className="mt-4 text-red-500 text-sm">{error}</p>}
+        {message && <p className="mt-4 text-success text-sm">{message}</p>}
+        {error && <p className="mt-4 text-error text-sm">{error}</p>}
       </motion.div>
     </div>
   );

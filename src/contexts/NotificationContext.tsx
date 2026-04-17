@@ -47,9 +47,9 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
             >
               <div className={`
                 flex items-center gap-4 p-4 rounded-2xl border backdrop-blur-xl shadow-2xl w-[calc(100vw-2rem)] sm:w-auto sm:min-w-[320px] max-w-md
-                ${n.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : ''}
-                ${n.type === 'error' ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' : ''}
-                ${n.type === 'info' ? 'bg-blue-500/10 border-blue-500/20 text-blue-400' : ''}
+                ${n.type === 'success' ? 'bg-success/10 border-success/20 text-success' : ''}
+                ${n.type === 'error' ? 'bg-primary/10 border-primary/20 text-primary' : ''}
+                ${n.type === 'info' ? 'bg-info/10 border-info/20 text-info' : ''}
                 ${n.type === 'warning' ? 'bg-accent/10 border-accent/20 text-accent' : ''}
               `}>
                 <div className="shrink-0">
@@ -65,7 +65,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
                 <button 
                   onClick={() => removeNotification(n.id)}
-                  className="shrink-0 p-1 hover:bg-white/5 rounded-lg transition-colors"
+                  className="shrink-0 p-1 hover:bg-inverse/5 rounded-lg transition-colors"
                 >
                   <X className="w-4 h-4 opacity-50" />
                 </button>

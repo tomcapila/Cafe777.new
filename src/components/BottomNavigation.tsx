@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { Map, Compass, Book, Users, User, Camera, Calendar, Gauge } from 'lucide-react';
+import { Map, Compass, Book, Users, User, Camera, Calendar, Gauge, Crown } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useFeatureFlags } from '../contexts/FeatureFlagContext';
 
@@ -15,11 +15,12 @@ export default function BottomNavigation() {
     { to: '/scan', icon: Camera, label: 'Scan', flag: 'scanner' },
     { to: '/passport', icon: Book, label: 'Passport', flag: 'passport' },
     { to: '/clubs', icon: Users, label: 'Clubs', flag: 'clubs' },
+    { to: '/ambassador', icon: Crown, label: 'Ambassador', flag: 'ambassador' },
     { to: '/profile', icon: User, label: 'Profile', flag: 'profile' },
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-asphalt/90 backdrop-blur-xl border-t border-white/5 h-20 px-1 sm:px-4 pb-safe">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-engine/90 backdrop-blur-xl border-t border-inverse/5 h-20 px-1 sm:px-4 pb-safe">
       <div className="max-w-2xl mx-auto h-full flex items-center justify-between">
         {navItems.filter(item => flags[item.flag as keyof typeof flags]).map((item) => (
           <NavLink

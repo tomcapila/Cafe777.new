@@ -103,7 +103,7 @@ export default function SubmitPhoto() {
   };
 
   return (
-    <div className="min-h-[calc(100dvh-5rem)] bg-asphalt text-white font-sans p-8 pb-28">
+    <div className="min-h-[calc(100dvh-5rem)] bg-engine text-chrome font-sans p-8 pb-28">
       <div className="max-w-4xl mx-auto">
         <button 
           onClick={() => navigate('/contest')}
@@ -133,7 +133,7 @@ export default function SubmitPhoto() {
                       value={selectedContestId}
                       onChange={(e) => setSelectedContestId(e.target.value)}
                       required
-                      className="w-full bg-carbon border-2 border-black p-4 text-white focus:border-primary outline-none appearance-none transition-colors"
+                      className="w-full bg-oil border-2 border-inverse p-4 text-chrome focus:border-primary outline-none appearance-none transition-colors"
                     >
                       <option value="" disabled>Select an active contest</option>
                       {contests.map((c: any) => (
@@ -150,7 +150,7 @@ export default function SubmitPhoto() {
                     value={description || ''}
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="Tell us about this shot..."
-                    className="w-full bg-carbon border-2 border-black p-4 text-white focus:border-primary outline-none min-h-[120px] transition-colors"
+                    className="w-full bg-oil border-2 border-inverse p-4 text-chrome focus:border-primary outline-none min-h-[120px] transition-colors"
                     rows={3}
                   />
                 </div>
@@ -161,7 +161,7 @@ export default function SubmitPhoto() {
                     <select
                       value={motorcycleId || ''}
                       onChange={(e) => setMotorcycleId(e.target.value)}
-                      className="w-full bg-carbon border-2 border-black p-4 text-white focus:border-primary outline-none appearance-none transition-colors"
+                      className="w-full bg-oil border-2 border-inverse p-4 text-chrome focus:border-primary outline-none appearance-none transition-colors"
                     >
                       <option value="">None</option>
                       {motorcycles.map((moto: any) => (
@@ -176,7 +176,7 @@ export default function SubmitPhoto() {
               <button
                 type="submit"
                 disabled={isSubmitting || !photo}
-                className="group relative w-full bg-primary text-black font-black uppercase tracking-widest py-6 text-xl hover:bg-white transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="group relative w-full bg-primary text-inverse font-black uppercase tracking-widest py-6 text-xl hover:bg-inverse hover:text-inverse transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span className="relative z-10 flex items-center justify-center gap-3">
                   {isSubmitting ? 'Submitting...' : 'Submit Entry'} <ChevronRight className="w-6 h-6 group-hover:translate-x-2 transition-transform" />
@@ -190,7 +190,7 @@ export default function SubmitPhoto() {
           <div className="relative">
             <div 
               onClick={() => fileInputRef.current?.click()}
-              className={`group relative aspect-[4/5] bg-carbon border-4 border-dashed border-black hover:border-primary transition-all cursor-pointer flex flex-col items-center justify-center overflow-hidden ${preview ? 'border-solid' : ''}`}
+              className={`group relative aspect-[4/5] bg-oil border-4 border-dashed border-inverse hover:border-primary transition-all cursor-pointer flex flex-col items-center justify-center overflow-hidden ${preview ? 'border-solid' : ''}`}
             >
               {preview ? (
                 <motion.div 
@@ -199,14 +199,14 @@ export default function SubmitPhoto() {
                   className="w-full h-full"
                 >
                   <img src={preview} alt="Preview" className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <p className="bg-white text-black font-black uppercase tracking-widest px-6 py-3 border-2 border-black">Change Photo</p>
+                  <div className="absolute inset-0 bg-engine/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <p className="bg-inverse text-inverse font-black uppercase tracking-widest px-6 py-3 border-2 border-inverse">Change Photo</p>
                   </div>
                 </motion.div>
               ) : (
                 <div className="text-center p-12">
-                  <div className="w-24 h-24 bg-engine border-4 border-black flex items-center justify-center mx-auto mb-6 group-hover:bg-primary transition-colors">
-                    <Upload className="w-10 h-10 text-steel group-hover:text-black transition-colors" />
+                  <div className="w-24 h-24 bg-engine border-4 border-inverse flex items-center justify-center mx-auto mb-6 group-hover:bg-primary transition-colors">
+                    <Upload className="w-10 h-10 text-steel group-hover:text-inverse transition-colors" />
                   </div>
                   <h3 className="text-2xl font-black uppercase tracking-tighter mb-2">Upload Photo</h3>
                   <p className="font-mono text-[10px] uppercase tracking-widest text-steel">

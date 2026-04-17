@@ -136,12 +136,41 @@ const translations: Translations = {
   'menu.riders': { en: 'Riders', pt: 'Motociclistas' },
   'menu.events': { en: 'Events', pt: 'Eventos' },
   'menu.clubs': { en: 'Motorcycle Clubs', pt: 'Moto Clubes' },
+  'menu.applyAmbassador': { en: 'Apply to be an Ambassador', pt: 'Aplicar para ser um Embaixador' },
+  'menu.ambassadorDashboard': { en: 'Ambassador Dashboard', pt: 'Painel do Embaixador' },
   'menu.settings': { en: 'Settings', pt: 'Configurações' },
   'menu.notifications': { en: 'Notifications', pt: 'Notificações' },
   'menu.messages': { en: 'Messages', pt: 'Mensagens' },
   'menu.appSettings': { en: 'App Settings', pt: 'Configurações do App' },
   'menu.helpSupport': { en: 'Help & Support', pt: 'Ajuda e Suporte' },
   'menu.logout': { en: 'Logout', pt: 'Sair' },
+
+  // Ambassador
+  'ambassador.roleExplanation': { en: 'The Ambassador Network is an infrastructure of trusted locations and community leaders that connect the digital platform with the physical motorcycle world. Ambassadors can be motorcyclists, motoclubs, shops, workshops, cafés, brands, or event organizers.', pt: 'A Rede de Embaixadores é uma infraestrutura de locais de confiança e líderes comunitários que conectam a plataforma digital ao mundo físico das motocicletas. Embaixadores podem ser motociclistas, moto clubes, lojas, oficinas, cafés, marcas ou organizadores de eventos.' },
+  'ambassador.notAmbassador': { en: 'You are not currently an ambassador. Apply to become a trusted community node and start issuing passport stamps.', pt: 'Você não é um embaixador atualmente. Aplique para se tornar um nó de confiança da comunidade e comece a emitir selos de passaporte.' },
+  'ambassador.applyNow': { en: 'Apply Now', pt: 'Aplicar Agora' },
+
+  // Passport
+  'passport.titleMain': { en: 'Biker', pt: 'Passaporte' },
+  'passport.titleHighlight': { en: 'Passport', pt: 'Motociclista' },
+  'passport.subtitle': { en: 'Your digital legacy on the road', pt: 'Seu legado digital na estrada' },
+  'passport.stampsEarned': { en: 'Stamps Earned', pt: 'Selos Coletados' },
+  'passport.cat.cities': { en: 'Cities', pt: 'Cidades' },
+  'passport.cat.routes': { en: 'Routes', pt: 'Rotas' },
+  'passport.cat.events': { en: 'Events', pt: 'Eventos' },
+  'passport.cat.ambassadors': { en: 'Ambassadors', pt: 'Embaixadores' },
+  'passport.cat.rare': { en: 'Rare', pt: 'Raros' },
+  'passport.rarity.common': { en: 'Common', pt: 'Comum' },
+  'passport.rarity.rare': { en: 'Rare', pt: 'Raro' },
+  'passport.rarity.epic': { en: 'Epic', pt: 'Épico' },
+  'passport.issuedBy': { en: 'Issued by', pt: 'Emitido por' },
+  'passport.noStamps': { en: 'No stamps collected yet', pt: 'Nenhum selo coletado ainda' },
+  'passport.exploreMap': { en: 'Explore the map to find ambassadors and events', pt: 'Explore o mapa para encontrar embaixadores e eventos' },
+  'passport.logSubtitle': { en: 'Digital Motorcycle Journey Log', pt: 'Registro Digital de Jornada Motociclista' },
+  'passport.totalStamps': { en: 'Total Stamps', pt: 'Total de Selos' },
+  'passport.badgesEarned': { en: 'Badges Earned', pt: 'Medalhas Ganhas' },
+  'passport.rareItems': { en: 'Rare Items', pt: 'Itens Raros' },
+  'passport.travelStamps': { en: 'Travel Stamps', pt: 'Selos de Viagem' },
 
   // Profile
   'profile.edit': { en: 'Edit Profile', pt: 'Editar Perfil' },
@@ -395,6 +424,7 @@ const translations: Translations = {
   'discover.searchArea': { en: 'Search this area', pt: 'Buscar nesta área' },
   'discover.searchSuccess': { en: 'Found {count} places', pt: 'Encontrado {count} locais' },
   'discover.searchError': { en: 'Failed to fetch nearby places', pt: 'Falha ao buscar locais próximos' },
+  'discover.searchAlongRoute': { en: 'Search Along Route', pt: 'Buscar na Rota' },
   'discover.viewProfile': { en: 'View Profile', pt: 'Ver Perfil' },
   'discover.suggestEcosystem': { en: 'Suggest as Ecosystem', pt: 'Sugerir como Ecossistema' },
   'discover.suggestComingSoon': { en: 'Suggest feature coming soon!', pt: 'Recurso de sugestão em breve!' },
@@ -650,6 +680,7 @@ const translations: Translations = {
   'auth.hasAccount': { en: 'Already have an account?', pt: 'Já tem uma conta?' },
 
   // Common
+  'locale': { en: 'en-US', pt: 'pt-BR' },
   'common.cancel': { en: 'Cancel', pt: 'Cancelar' },
   'common.linkCopied': { en: 'Link copied to clipboard!', pt: 'Link copiado!' },
   'common.ends': { en: 'Ends', pt: 'Termina' },
@@ -677,6 +708,7 @@ const translations: Translations = {
   'common.qrCode': { en: 'QR Code', pt: 'Código QR' },
   'common.simulate': { en: 'Simulate', pt: 'Simular' },
   'common.history': { en: 'History', pt: 'Histórico' },
+  'common.na': { en: 'N/A', pt: 'N/D' },
 
   // Reviews
   'review.noFound': { en: 'No reviews found', pt: 'Nenhuma avaliação encontrada' },
@@ -695,7 +727,12 @@ const translations: Translations = {
 
   // Scanner
   'scanner.title': { en: 'Scanner', pt: 'Scanner' },
+  'scanner.subtitle': { en: 'Scan Ambassador QR codes to collect stamps or verify checkpoints.', pt: 'Escaneie QR codes de Embaixadores para coletar selos ou verificar checkpoints.' },
   'scanner.desc': { en: 'Scan Ambassador QR codes to collect stamps or verify checkpoints.', pt: 'Escaneie QR codes de Embaixadores para coletar selos ou verificar checkpoints.' },
+  'scanner.loginRequired': { en: 'Please login to scan QR codes', pt: 'Por favor, faça login para escanear códigos QR' },
+  'scanner.stampCollected': { en: 'Passport stamp collected!', pt: 'Selo do passaporte coletado!' },
+  'scanner.checkpointVerified': { en: 'Checkpoint verified successfully!', pt: 'Checkpoint verificado com sucesso!' },
+  'scanner.failed': { en: 'Scan failed. Please try again.', pt: 'Falha no escaneamento. Tente novamente.' },
   'scanner.verified': { en: 'Checkpoint Verified!', pt: 'Checkpoint Verificado!' },
   'scanner.collect': { en: 'Scan to Collect', pt: 'Escanear para Coletar' },
   'scanner.verify': { en: 'Scan to verify', pt: 'Escanear para verificar' },

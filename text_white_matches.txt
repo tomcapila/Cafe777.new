@@ -1,0 +1,324 @@
+src/components/reviews/ReviewCard.tsx:              className="text-[10px] bg-engine px-2 py-1 rounded text-steel hover:text-white"
+src/components/reviews/ReviewModal.tsx:          <h2 className="font-display font-black uppercase italic text-xl text-white tracking-tight truncate pr-4">
+src/components/reviews/ReviewModal.tsx:              className="w-10 h-10 rounded-full bg-carbon flex items-center justify-center text-steel hover:text-white hover:bg-engine transition-all"
+src/components/reviews/ReviewModal.tsx:              <h3 className="text-sm font-bold text-white mb-4">{t('review.leave')}</h3>
+src/components/reviews/ReviewModal.tsx:            <h3 className="text-sm font-bold text-white">{t('review.all')}</h3>
+src/components/EventAttendanceModal.tsx:        <button onClick={onClose} className="absolute top-4 right-4 text-steel hover:text-white">
+src/components/EventAttendanceModal.tsx:              className="w-full bg-carbon border border-inverse/10 rounded-xl py-2 pl-10 pr-4 text-sm text-white focus:outline-none focus:border-primary transition-colors"
+src/components/EventAttendanceModal.tsx:              className="px-4 py-2 bg-carbon hover:bg-engine border border-inverse/10 rounded-xl text-white font-mono text-[10px] uppercase tracking-widest flex items-center gap-2 transition-colors"
+src/components/EventAttendanceModal.tsx:                    <span className="font-display font-bold uppercase tracking-tight text-white">{attendee.username}</span>
+src/components/PremiumBadge.tsx:      className={`inline-flex items-center justify-center bg-gradient-to-r from-amber-400 to-yellow-600 text-white rounded-full p-0.5 shadow-sm shadow-amber-900/20 ml-1.5 align-middle ${className}`}
+src/components/LocationAutocomplete.tsx:        className={className || "w-full bg-zinc-900/50 border border-inverse/10 rounded-xl pl-12 pr-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"}
+src/components/EventTicketModal.tsx:        <button onClick={onClose} className="absolute top-4 right-4 text-steel hover:text-white">
+src/components/FloatingActionButton.tsx:                <div className={`${action.color} p-3 rounded-2xl text-white shadow-xl shadow-black/50 hover:scale-110 transition-transform`}>
+src/components/QRScanner.tsx:              <CheckCircle2 className="w-12 h-12 text-white" />
+src/components/UniversalSearch.tsx:              className="p-1 -ml-1 text-steel hover:text-white lg:hidden"
+src/components/UniversalSearch.tsx:            <button type="button" onClick={() => setSearchQuery('')} className="p-1 text-steel hover:text-white">
+src/components/ChatWindow.tsx:            <div className={`max-w-[70%] p-3 rounded-2xl ${msg.sender_id === currentUser?.id ? 'bg-primary text-asphalt' : 'bg-carbon text-white'}`}>
+src/components/Gauges.tsx:          <span className="text-2xl font-mono font-bold text-white tracking-tighter">
+src/components/Navbar.tsx:            <span className="font-display font-black text-2xl tracking-tighter uppercase italic text-white group-hover:text-primary transition-colors">Café777</span>
+src/pages/Discover.tsx:  dealership: { color: '#3b82f6', icon: <Building2 className="w-4 h-4 text-white" /> },
+src/pages/Discover.tsx:  gear_shop: { color: '#10b981', icon: <ShoppingBag className="w-4 h-4 text-white" /> },
+src/pages/Discover.tsx:  parts_store: { color: '#eab308', icon: <Settings className="w-4 h-4 text-white" /> },
+src/pages/Discover.tsx:  repair: { color: '#f97316', icon: <Wrench className="w-4 h-4 text-white" /> },
+src/pages/Discover.tsx:  meeting_spot: { color: '#8b5cf6', icon: <Users className="w-4 h-4 text-white" /> },
+src/pages/Discover.tsx:  ride_spot: { color: '#ec4899', icon: <MapPin className="w-4 h-4 text-white" /> },
+src/pages/Discover.tsx:  biker_cafe: { color: '#a8a29e', icon: <Coffee className="w-4 h-4 text-white" /> },
+src/pages/Discover.tsx:  biker_bar: { color: '#ef4444', icon: <Beer className="w-4 h-4 text-white" /> },
+src/pages/Discover.tsx:  ride_stop: { color: '#14b8a6', icon: <Flag className="w-4 h-4 text-white" /> },
+src/pages/Discover.tsx:  motoclub: { color: '#52525b', icon: <Shield className="w-4 h-4 text-white" /> },
+src/pages/Discover.tsx:  barbershop: { color: '#f43f5e', icon: <Building2 className="w-4 h-4 text-white" /> },
+src/pages/Discover.tsx:  band: { color: '#8b5cf6', icon: <Users className="w-4 h-4 text-white" /> },
+src/pages/Discover.tsx:  other: { color: '#a8a29e', icon: <MapPin className="w-4 h-4 text-white" /> },
+src/pages/Discover.tsx:  ride_route: { color: '#06b6d4', icon: <Route className="w-4 h-4 text-white" /> },
+src/pages/Discover.tsx:  passport_stamp: { color: '#f59e0b', icon: <Award className="w-4 h-4 text-white" /> },
+src/pages/Discover.tsx:  ambassador: { color: '#8b5cf6', icon: <Star className="w-4 h-4 text-white" /> },
+src/pages/Discover.tsx:  const config = categoryConfig[category] || { color: '#f97316', icon: <MapPin className="w-4 h-4 text-white" /> };
+src/pages/Discover.tsx:              <div className="text-xs text-white font-light leading-tight">{t('discover.smart.desc')}</div>
+src/pages/Discover.tsx:                      <span className="text-[8px] font-mono font-bold bg-inverse/10 text-white px-1.5 py-0.5 rounded uppercase">Google</span>
+src/pages/Discover.tsx:                        className="flex-1 text-center bg-asphalt text-white text-[10px] font-mono font-bold uppercase tracking-widest py-2.5 rounded-xl hover:bg-primary hover:text-asphalt transition-all"
+src/pages/Discover.tsx:                        className="w-full text-center bg-inverse/10 text-white text-[10px] font-mono font-bold uppercase tracking-widest py-2.5 rounded-xl hover:bg-inverse/20 transition-all"
+src/pages/Discover.tsx:                        className="w-full text-center bg-inverse/10 text-white text-[10px] font-mono font-bold uppercase tracking-widest py-2.5 rounded-xl hover:bg-inverse/20 transition-all"
+src/pages/Discover.tsx:            className={`px-6 py-3 rounded-full font-display font-black uppercase italic tracking-widest text-xs flex items-center gap-2 transition-all ${mapMode === 'ride' ? 'bg-primary text-asphalt shadow-lg shadow-primary/20' : 'text-steel hover:text-white'}`}
+src/pages/Discover.tsx:            className={`px-6 py-3 rounded-full font-display font-black uppercase italic tracking-widest text-xs flex items-center gap-2 transition-all ${mapMode === 'pit_stop' ? 'bg-primary text-asphalt shadow-lg shadow-primary/20' : 'text-steel hover:text-white'}`}
+src/pages/Discover.tsx:          className="w-12 h-12 rounded-full bg-carbon/90 backdrop-blur-xl border border-inverse/10 flex items-center justify-center text-steel hover:text-white hover:border-inverse/30 transition-all shadow-xl"
+src/pages/Discover.tsx:            <label className="w-12 h-12 rounded-full bg-carbon/90 backdrop-blur-xl border border-inverse/10 flex items-center justify-center text-steel hover:text-white hover:border-inverse/30 transition-all shadow-xl cursor-pointer" title={t('discover.uploadGPX')}>
+src/pages/Discover.tsx:                  : 'bg-carbon/90 border-inverse/10 text-steel hover:text-white'
+src/pages/Discover.tsx:                : 'bg-carbon/90 border-inverse/10 text-steel hover:text-white'
+src/pages/Discover.tsx:              <span className="font-display font-black uppercase italic tracking-widest text-xs text-white">
+src/pages/Discover.tsx:                <h3 className="font-display font-black uppercase italic tracking-widest text-sm text-white">
+src/pages/Discover.tsx:                className="w-8 h-8 rounded-full bg-inverse/5 flex items-center justify-center text-steel hover:text-white hover:bg-inverse/10 transition-colors"
+src/pages/Discover.tsx:                      {categoryConfig[place.category]?.icon || <MapPin className="w-6 h-6 text-white" />}
+src/pages/Discover.tsx:                          <h4 className="font-display font-black uppercase italic tracking-tight text-white group-hover:text-primary transition-colors truncate cursor-pointer">
+src/pages/Discover.tsx:                            <span className="text-[8px] font-mono font-bold bg-inverse/10 text-white px-1.5 py-0.5 rounded uppercase shrink-0">Google</span>
+src/pages/PartsAndService.tsx:              className="w-full bg-carbon border-2 border-inverse/10 rounded-xl py-3 pl-12 pr-4 text-white placeholder:text-steel focus:outline-none focus:border-primary transition-colors"
+src/pages/PartsAndService.tsx:                      className="flex-1 bg-inverse/5 hover:bg-inverse/10 text-white py-2 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2"
+src/pages/ForgotPasswordPage.tsx:        <button onClick={() => navigate('/login')} className="text-zinc-400 hover:text-white mb-6 flex items-center gap-2">
+src/pages/ForgotPasswordPage.tsx:        <h1 className="text-2xl font-bold text-white mb-6">Forgot Password</h1>
+src/pages/ForgotPasswordPage.tsx:              className="w-full bg-zinc-800 text-white p-2 rounded border border-zinc-700 focus:border-primary outline-none"
+src/pages/Messages.tsx:                      <p className={`text-sm truncate ${chat.unread_count > 0 ? 'text-white font-medium' : 'text-steel'}`}>
+src/pages/Messages.tsx:                  className="p-2 text-steel hover:text-white transition-colors rounded-lg hover:bg-inverse/5"
+src/pages/FAQ.tsx:            <h1 className="font-display font-black text-3xl uppercase italic tracking-tight text-white">{t('faq.title')}</h1>
+src/pages/FAQ.tsx:            <h3 className="font-bold text-white mb-2">{t('faq.emailUs')}</h3>
+src/pages/FAQ.tsx:            <h3 className="font-bold text-white mb-2">{t('faq.instagram')}</h3>
+src/pages/Onboarding.tsx:          <h1 className="font-display text-4xl font-black italic tracking-tight text-white mb-2">
+src/pages/Onboarding.tsx:                    <div className={`p-3 rounded-xl ${data.type === 'rider' ? 'bg-primary text-black' : 'bg-zinc-700 text-white group-hover:bg-zinc-600'}`}>
+src/pages/Onboarding.tsx:                  <h3 className="font-display font-bold text-xl text-white mb-2">{t('onboarding.imRider')}</h3>
+src/pages/Onboarding.tsx:                    <div className={`p-3 rounded-xl ${data.type === 'ecosystem' ? 'bg-primary text-black' : 'bg-zinc-700 text-white group-hover:bg-zinc-600'}`}>
+src/pages/Onboarding.tsx:                  <h3 className="font-display font-bold text-xl text-white mb-2">{t('onboarding.imBusiness')}</h3>
+src/pages/Onboarding.tsx:                    className="w-full bg-zinc-900/50 border border-inverse/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+src/pages/Onboarding.tsx:                    className="w-full bg-zinc-900/50 border border-inverse/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+src/pages/Onboarding.tsx:                    className="w-full bg-zinc-900/50 border border-inverse/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+src/pages/Onboarding.tsx:                    className="w-full bg-zinc-900/50 border border-inverse/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+src/pages/Onboarding.tsx:                    className="w-full bg-zinc-900/50 border border-inverse/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors h-24 resize-none"
+src/pages/Onboarding.tsx:                    className="w-full bg-zinc-900/50 border border-inverse/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors uppercase"
+src/pages/Onboarding.tsx:                      className="w-full bg-zinc-900/50 border border-inverse/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+src/pages/Onboarding.tsx:                        className="w-full bg-zinc-900/50 border border-inverse/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+src/pages/Onboarding.tsx:                        className="w-full bg-zinc-900/50 border border-inverse/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors appearance-none"
+src/pages/Onboarding.tsx:                className="flex items-center space-x-2 text-zinc-400 hover:text-white transition-colors px-4 py-2"
+src/pages/Onboarding.tsx:              <h2 className="text-3xl font-display font-black uppercase italic text-white mb-2">
+src/pages/Passport.tsx:            <h1 className="text-4xl font-display font-black uppercase italic tracking-tighter text-white">
+src/pages/Passport.tsx:                  <h3 className="text-xl font-display font-black uppercase italic tracking-tight text-white mb-1">{stamp.location}</h3>
+src/pages/Passport.tsx:              <h3 className="text-xl font-display font-black uppercase italic tracking-tight text-white mb-2">{t('passport.noStamps')}</h3>
+src/pages/MotorFeed.tsx:            <span className="text-primary">{t('feed.title.motor')}</span><span className="text-white">{t('feed.title.feed')}</span>
+src/pages/MotorFeed.tsx:            <button className="p-2 bg-carbon rounded-xl border border-inverse/5 text-steel hover:text-white transition-colors" title={t('feed.search')}>
+src/pages/MotorFeed.tsx:            <button className="p-2 bg-carbon rounded-xl border border-inverse/5 text-steel hover:text-white transition-colors" title={t('feed.filter')}>
+src/pages/MotorFeed.tsx:                  : 'bg-carbon text-steel hover:text-white border border-inverse/5'
+src/pages/MotorFeed.tsx:                        <div className="text-sm font-bold text-white group-hover/author:text-primary transition-colors flex items-center gap-1.5">
+src/pages/MotorFeed.tsx:                          <h4 className="text-lg font-display font-black uppercase italic tracking-tight text-white group-hover/card:text-primary transition-colors duration-500 mb-2 line-clamp-1">
+src/pages/MotorFeed.tsx:                          : 'text-steel hover:text-white hover:bg-inverse/5 border border-transparent'
+src/pages/MotorFeed.tsx:                    <button className="flex items-center gap-2 text-steel hover:text-white transition-all group/btn ml-auto">
+src/pages/MotorFeed.tsx:                                  className="w-full bg-carbon/50 border border-inverse/5 rounded-xl px-4 py-2 text-sm text-white placeholder:text-steel focus:border-primary/50 transition-all outline-none pr-10"
+src/pages/MotorFeed.tsx:                                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-primary hover:text-white disabled:opacity-50 transition-colors"
+src/pages/MotorFeed.tsx:                                        <Link to={`/profile/${comment.username}`} className="text-xs font-bold text-white hover:text-primary transition-colors flex items-center gap-1.5">
+src/pages/MotorFeed.tsx:                  className="p-2 hover:bg-inverse/5 rounded-lg text-steel hover:text-white transition-colors"
+src/pages/MotorFeed.tsx:                      className="absolute top-2 right-2 p-1.5 bg-black/60 backdrop-blur-md rounded-lg text-white hover:bg-red-500 transition-colors"
+src/pages/MotorFeed.tsx:                      className="flex items-center gap-2 px-4 py-2 bg-carbon border border-inverse/5 rounded-xl text-[10px] font-mono font-black uppercase tracking-widest text-steel hover:text-white hover:border-primary/30 transition-all"
+src/pages/MotorFeed.tsx:                          className="w-full bg-carbon border border-inverse/5 rounded-xl px-4 py-2 text-[10px] font-mono font-black uppercase tracking-widest text-steel hover:text-white hover:border-primary/30 transition-all appearance-none outline-none"
+src/pages/MotoClubsHub.tsx:        <h2 className="text-2xl font-display font-black uppercase italic tracking-tight text-white mb-6">Discover MotoClubs</h2>
+src/pages/MotoClubsHub.tsx:          <h3 className="text-xl font-display font-black uppercase italic tracking-tight text-white flex items-center gap-1.5">
+src/pages/MotoClubsHub.tsx:            <h1 className="text-4xl sm:text-5xl font-display font-black uppercase italic tracking-tighter text-white mb-2">
+src/pages/MotoClubsHub.tsx:                    : 'bg-carbon/50 text-steel hover:text-white border border-inverse/5'
+src/pages/MotoClubsHub.tsx:                      : 'bg-carbon/50 text-steel hover:text-white border border-inverse/5'
+src/pages/MotoClubsHub.tsx:                className="flex items-center justify-center gap-2 px-6 py-3 rounded-2xl bg-inverse/5 hover:bg-inverse/10 text-white border border-inverse/10 transition-all font-mono font-black text-[10px] uppercase tracking-widest"
+src/pages/MotoClubsHub.tsx:                                ? 'bg-primary/10 border border-primary/30 text-white' 
+src/pages/MotoClubsHub.tsx:                                : 'bg-asphalt/30 border border-inverse/5 text-steel hover:text-white hover:border-inverse/20'
+src/pages/MotoClubsHub.tsx:                                ? 'bg-inverse/10 border border-inverse/30 text-white' 
+src/pages/MotoClubsHub.tsx:                                : 'bg-asphalt/30 border border-inverse/5 text-steel hover:text-white hover:border-inverse/20'
+src/pages/MotoClubsHub.tsx:                <h2 className="text-2xl font-display font-black uppercase italic tracking-tight text-white">Create MotoClub</h2>
+src/pages/MotoClubsHub.tsx:                <button onClick={() => setIsCreatingClub(false)} className="text-steel hover:text-white transition-colors">
+src/pages/MotoClubsHub.tsx:                    className="w-full bg-asphalt/50 border border-inverse/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary transition-colors"
+src/pages/MotoClubsHub.tsx:                    className="w-full bg-asphalt/50 border border-inverse/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary transition-colors h-32 resize-none"
+src/pages/MotoClubsHub.tsx:                    className="w-full bg-asphalt/50 border border-inverse/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary transition-colors"
+src/pages/MotoClubsHub.tsx:              <h2 className="text-3xl sm:text-4xl font-display font-black uppercase italic tracking-tight text-white flex items-center gap-2">
+src/pages/MotoClubsHub.tsx:                activeTab === tab ? 'bg-inverse/10 text-white' : 'text-steel hover:text-white hover:bg-inverse/5'
+src/pages/MotoClubsHub.tsx:              <h3 className="text-xl font-display font-black uppercase italic tracking-tight text-white mb-4">{t('club.mgmt.pendingApps')}</h3>
+src/pages/MotoClubsHub.tsx:                          <div className="font-bold text-white flex items-center gap-1.5">
+src/pages/MotoClubsHub.tsx:                        <button onClick={() => handleMemberStatus(m.id, 'rejected')} className="p-2 bg-red-500/20 text-red-500 rounded-lg hover:bg-red-500 hover:text-white transition-colors" title={t('common.reject')}><X className="w-4 h-4" /></button>
+src/pages/MotoClubsHub.tsx:            <h3 className="text-xl font-display font-black uppercase italic tracking-tight text-white mb-4">{t('club.mgmt.recentMembers')}</h3>
+src/pages/MotoClubsHub.tsx:                    <div className="font-bold text-white flex items-center gap-1.5">
+src/pages/MotoClubsHub.tsx:                        <div className="font-bold text-white flex items-center gap-1.5">
+src/pages/MotoClubsHub.tsx:              <h3 className="text-xl font-display font-black uppercase italic tracking-tight text-white">{t('club.mgmt.members')}</h3>
+src/pages/MotoClubsHub.tsx:                    <div className="font-bold text-white flex items-center gap-1.5">
+src/pages/MotoClubsHub.tsx:              <h3 className="text-xl font-bold text-white">Add Member</h3>
+src/pages/MotoClubsHub.tsx:              <button onClick={() => setShowAddMember(false)} className="text-steel hover:text-white">
+src/pages/MotoClubsHub.tsx:                className="w-full bg-black/50 border border-inverse/10 rounded-xl pl-10 pr-4 py-3 text-white focus:outline-none focus:border-primary transition-all"
+src/pages/MotoClubsHub.tsx:                      <span className="text-white font-bold text-sm">@{u.username}</span>
+src/pages/MotoClubsHub.tsx:      <h3 className="text-xl font-display font-black uppercase italic tracking-tight text-white mb-6">{t('club.mgmt.settings')}</h3>
+src/pages/MotoClubsHub.tsx:        <h3 className="text-xl font-display font-black uppercase italic tracking-tight text-white">{t('club.mgmt.roles')}</h3>
+src/pages/MotoClubsHub.tsx:                <h4 className="text-lg font-bold text-white">{role.name}</h4>
+src/pages/MotoClubsHub.tsx:        <h3 className="text-xl font-display font-black uppercase italic tracking-tight text-white">{chapterLabel || t('club.mgmt.chapters')}</h3>
+src/pages/MotoClubsHub.tsx:                  <h4 className="text-lg font-bold text-white">{chapter.name}</h4>
+src/pages/PrivacyPolicy.tsx:            <h1 className="text-4xl font-display font-black uppercase italic tracking-tighter text-white">Privacy Policy</h1>
+src/pages/PrivacyPolicy.tsx:              <h2 className="text-xl font-display font-bold text-white uppercase italic mb-4 flex items-center gap-2">
+src/pages/PrivacyPolicy.tsx:              <h2 className="text-xl font-display font-bold text-white uppercase italic mb-4 flex items-center gap-2">
+src/pages/PrivacyPolicy.tsx:              <h2 className="text-xl font-display font-bold text-white uppercase italic mb-4 flex items-center gap-2">
+src/pages/PrivacyPolicy.tsx:              <h2 className="text-xl font-display font-bold text-white uppercase italic mb-4 flex items-center gap-2">
+src/pages/PrivacyPolicy.tsx:              <h2 className="text-xl font-display font-bold text-white uppercase italic mb-4 flex items-center gap-2">
+src/pages/PrivacyPolicy.tsx:              <h2 className="text-xl font-display font-bold text-white uppercase italic mb-4 flex items-center gap-2">
+src/pages/Login.tsx:                className="group relative z-10 flex flex-col items-center gap-4 text-white hover:text-primary transition-all"
+src/pages/Login.tsx:              className="absolute bottom-8 right-8 text-white/50 hover:text-white text-sm font-medium transition-colors z-[60]"
+src/pages/Admin.tsx:              activeTab === 'users' ? 'bg-primary text-asphalt shadow-xl shadow-primary/20' : 'text-steel hover:text-white'
+src/pages/Admin.tsx:              activeTab === 'events' ? 'bg-primary text-asphalt shadow-xl shadow-primary/20' : 'text-steel hover:text-white'
+src/pages/Admin.tsx:              activeTab === 'submissions' ? 'bg-primary text-asphalt shadow-xl shadow-primary/20' : 'text-steel hover:text-white'
+src/pages/Admin.tsx:              activeTab === 'event_photos' ? 'bg-primary text-asphalt shadow-xl shadow-primary/20' : 'text-steel hover:text-white'
+src/pages/Admin.tsx:              activeTab === 'settings' ? 'bg-primary text-asphalt shadow-xl shadow-primary/20' : 'text-steel hover:text-white'
+src/pages/Admin.tsx:              activeTab === 'badges' ? 'bg-primary text-asphalt shadow-xl shadow-primary/20' : 'text-steel hover:text-white'
+src/pages/Admin.tsx:              activeTab === 'contests' ? 'bg-primary text-asphalt shadow-xl shadow-primary/20' : 'text-steel hover:text-white'
+src/pages/Admin.tsx:              activeTab === 'ambassadors' ? 'bg-primary text-asphalt shadow-xl shadow-primary/20' : 'text-steel hover:text-white'
+src/pages/Admin.tsx:                              <div className="font-display font-black uppercase italic text-lg tracking-tight text-white group-hover:text-primary transition-colors">
+src/pages/Admin.tsx:                                  ? 'bg-asphalt text-white shadow-lg'
+src/pages/Admin.tsx:                            <div className="font-display font-black uppercase italic text-lg tracking-tight text-white group-hover:text-primary transition-colors leading-none mb-1">{event.title}</div>
+src/pages/Admin.tsx:                  className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-400 rounded-xl font-mono text-[10px] font-black uppercase tracking-widest border border-emerald-500/20 hover:bg-emerald-500 hover:text-white transition-all"
+src/pages/Admin.tsx:                  className="flex items-center gap-2 px-4 py-2 bg-red-500/10 text-red-400 rounded-xl font-mono text-[10px] font-black uppercase tracking-widest border border-red-500/20 hover:bg-red-500 hover:text-white transition-all"
+src/pages/Admin.tsx:                              className="p-3 bg-emerald-500/10 text-emerald-400 rounded-xl hover:bg-emerald-500 hover:text-white transition-all"
+src/pages/Admin.tsx:                              className="p-3 bg-red-500/10 text-red-400 rounded-xl hover:bg-red-500 hover:text-white transition-all"
+src/pages/Admin.tsx:                                    <div className="text-sm font-bold text-white">{badge.name}</div>
+src/pages/Admin.tsx:                              <div className="font-display font-black uppercase italic text-lg tracking-tight text-white group-hover:text-primary transition-colors leading-none mb-1">{contest.title}</div>
+src/pages/Admin.tsx:          <h2 className="text-2xl font-display font-black uppercase italic text-white mb-6">Ambassador Applications</h2>
+src/pages/Admin.tsx:                      <h3 className="text-xl font-bold text-white">{app.name}</h3>
+src/pages/Admin.tsx:                      <p className="text-white">{app.location}</p>
+src/pages/Admin.tsx:                      <p className="text-white text-sm">{app.description}</p>
+src/pages/Admin.tsx:                  <h3 className="text-lg font-bold text-white mb-1">{item.name}</h3>
+src/pages/Admin.tsx:                      <span className="text-sm font-medium text-chrome group-hover/label:text-white transition-colors">{t('admin.settings.fullscreen')}</span>
+src/pages/Admin.tsx:                    <span className="text-sm font-medium text-chrome group-hover/label:text-white transition-colors">{t('admin.settings.approval')}</span>
+src/pages/Admin.tsx:                    <span className="text-sm font-medium text-chrome group-hover/label:text-white transition-colors">{t('admin.settings.allowRiders')}</span>
+src/pages/Admin.tsx:                      <span className="text-sm font-medium text-chrome group-hover/label:text-white transition-colors uppercase">
+src/pages/Admin.tsx:                        <span className="text-sm font-medium text-chrome group-hover/label:text-white transition-colors capitalize">
+src/pages/Admin.tsx:                              ? 'bg-asphalt text-white shadow-lg'
+src/pages/Admin.tsx:                      <span className="text-sm font-medium text-chrome group-hover/label:text-white transition-colors capitalize">{key}</span>
+src/pages/Admin.tsx:                className="absolute top-4 right-4 text-steel hover:text-white transition-colors"
+src/pages/Home.tsx:            className="text-5xl md:text-7xl font-display font-black uppercase italic text-white tracking-tighter mb-6 drop-shadow-2xl"
+src/pages/Home.tsx:              className="w-full sm:w-auto px-8 py-4 bg-transparent border border-inverse/20 text-white font-display font-black uppercase italic tracking-widest text-sm rounded-none hover:bg-inverse/10 transition-all skew-x-[-10deg]"
+src/pages/Home.tsx:                <h3 className="text-xl font-display font-black uppercase italic text-white mb-3 tracking-tight">{pillar.title}</h3>
+src/pages/Home.tsx:            <h2 className="text-3xl md:text-5xl font-display font-black uppercase italic text-white tracking-tighter mb-4">{t('home.code.title')}</h2>
+src/pages/Home.tsx:                <h3 className="text-2xl font-display font-black uppercase italic text-white mb-3 tracking-widest">{principle.title}</h3>
+src/pages/Home.tsx:              <h2 className="text-3xl md:text-5xl font-display font-black uppercase italic text-white tracking-tighter mb-8">
+src/pages/Home.tsx:                      <h4 className="text-lg font-display font-bold uppercase italic text-white mb-1">{item.title}</h4>
+src/pages/Home.tsx:          <h2 className="text-4xl md:text-6xl font-display font-black uppercase italic text-white tracking-tighter mb-6">
+src/pages/EventDetails.tsx:              <h1 className="text-5xl sm:text-7xl font-display font-black uppercase italic tracking-tighter mb-10 leading-[0.85] text-white">
+src/pages/EventDetails.tsx:                      <div className="font-display font-black uppercase italic text-lg tracking-tight text-white group-hover:text-primary transition-colors">{event.rsvp_count} {t('eventDetails.riders')}</div>
+src/pages/EventDetails.tsx:                      : 'bg-inverse/5 text-white border border-inverse/10 hover:bg-inverse/10'
+src/pages/EventDetails.tsx:                    className="w-full py-4 rounded-2xl font-mono font-black text-[10px] uppercase tracking-[0.2em] text-white bg-inverse/5 hover:bg-inverse/10 border border-inverse/10 transition-all flex items-center justify-center gap-3 relative z-10 mb-6"
+src/pages/EventDetails.tsx:                  <div className="text-xl font-display font-black uppercase italic tracking-tight text-white group-hover:text-primary transition-colors leading-none mb-2 flex items-center gap-1.5">
+src/pages/EventDetails.tsx:                <h3 className="text-xl font-display font-black uppercase italic tracking-tight text-white mb-2">
+src/pages/EventDetails.tsx:                        className="p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+src/pages/EventDetails.tsx:                        className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-400 rounded-xl font-mono text-[10px] font-black uppercase tracking-widest border border-emerald-500/20 hover:bg-emerald-500 hover:text-white transition-all"
+src/pages/EventDetails.tsx:                        className="flex items-center gap-2 px-4 py-2 bg-red-500/10 text-red-400 rounded-xl font-mono text-[10px] font-black uppercase tracking-widest border border-red-500/20 hover:bg-red-500 hover:text-white transition-all"
+src/pages/EventDetails.tsx:                              className="p-3 bg-emerald-500 text-white rounded-full hover:scale-110 hover:bg-emerald-400 transition-all shadow-lg group/btn"
+src/pages/EventDetails.tsx:                              className="p-3 bg-red-500 text-white rounded-full hover:scale-110 hover:bg-red-400 transition-all shadow-lg group/btn"
+src/pages/EventDetails.tsx:                          <span className="text-[8px] font-mono font-black uppercase tracking-widest text-white/70">{t('admin.table.actions')}</span>
+src/pages/EventDetails.tsx:                          className="absolute top-3 right-3 p-2 bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white rounded-lg backdrop-blur-md border border-red-500/20 transition-all z-30 opacity-0 group-hover:opacity-100"
+src/pages/EventDetails.tsx:                          <Plus className="w-8 h-8 text-white" />
+src/pages/EventDetails.tsx:                          <span className="text-white">
+src/pages/EventDetails.tsx:                              className="w-full bg-carbon border border-inverse/5 rounded-xl pl-10 pr-4 py-2 text-xs text-white focus:outline-none focus:border-primary transition-all"
+src/pages/EventDetails.tsx:                                  <span className="text-[10px] font-mono font-black uppercase tracking-widest text-white">
+src/pages/EventDetails.tsx:            <button onClick={() => setIsShareModalOpen(false)} className="absolute top-4 right-4 text-steel hover:text-white">
+src/pages/EventDetails.tsx:                className="w-full py-4 rounded-2xl font-mono font-black text-[10px] uppercase tracking-[0.2em] text-white bg-inverse/5 hover:bg-inverse/10 transition-all flex items-center justify-center gap-3 border border-inverse/10"
+src/pages/EventDetails.tsx:                    <h4 className="text-sm font-display font-black uppercase italic tracking-tight text-white truncate">{event.title}</h4>
+src/pages/EventDetails.tsx:                className="w-full bg-asphalt/50 border border-inverse/10 rounded-2xl p-4 text-white placeholder:text-steel focus:outline-none focus:border-primary/50 transition-colors resize-none h-24 mb-6"
+src/pages/Events.tsx:              activeTab === 'all' ? 'bg-primary text-asphalt shadow-lg shadow-primary/20' : 'text-steel hover:text-white'
+src/pages/Events.tsx:              activeTab === 'my' ? 'bg-primary text-asphalt shadow-lg shadow-primary/20' : 'text-steel hover:text-white'
+src/pages/Events.tsx:              className={`p-2.5 rounded-xl transition-all ${viewMode === 'list' ? 'bg-primary text-asphalt shadow-lg' : 'text-steel hover:text-white'}`}
+src/pages/Events.tsx:              className={`p-2.5 rounded-xl transition-all ${viewMode === 'grid' ? 'bg-primary text-asphalt shadow-lg' : 'text-steel hover:text-white'}`}
+src/pages/Events.tsx:                className="absolute top-8 right-8 p-2 text-steel hover:text-white transition-colors"
+src/pages/Events.tsx:                            <Plus className="w-8 h-8 text-white" />
+src/pages/Events.tsx:                            <span className="text-white">
+src/pages/Events.tsx:                                className="w-full bg-carbon border border-inverse/5 rounded-xl pl-10 pr-4 py-2 text-xs text-white focus:outline-none focus:border-primary transition-all"
+src/pages/Events.tsx:                                    <span className="text-[10px] font-mono font-black uppercase tracking-widest text-white">
+src/pages/Events.tsx:              : 'bg-inverse/5 text-white border-inverse/10 hover:bg-inverse/10'
+src/pages/ResetPasswordPage.tsx:        <h1 className="text-2xl font-bold text-white mb-6">Reset Password</h1>
+src/pages/ResetPasswordPage.tsx:              className="w-full bg-zinc-800 text-white p-2 rounded border border-zinc-700 focus:border-primary outline-none"
+src/pages/ResetPasswordPage.tsx:              className="w-full bg-zinc-800 text-white p-2 rounded border border-zinc-700 focus:border-primary outline-none"
+src/pages/AmbassadorDashboard.tsx:        <p className="text-white">Please log in to view the Ambassador Dashboard.</p>
+src/pages/AmbassadorDashboard.tsx:          <h1 className="text-3xl font-display font-black uppercase italic text-white mb-4">Ambassador Network</h1>
+src/pages/AmbassadorDashboard.tsx:                className="bg-inverse/10 text-white px-6 py-2 rounded-full font-bold hover:bg-inverse/20 transition-colors"
+src/pages/AmbassadorDashboard.tsx:                    className="w-full bg-black/50 border border-inverse/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary transition-all"
+src/pages/AmbassadorDashboard.tsx:                    className="w-full bg-black/50 border border-inverse/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary transition-all"
+src/pages/AmbassadorDashboard.tsx:                  className="w-full bg-black/50 border border-inverse/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary transition-all h-32 resize-none"
+src/pages/AmbassadorDashboard.tsx:                  className="w-full bg-black/50 border border-inverse/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary transition-all h-24 resize-none"
+src/pages/AmbassadorDashboard.tsx:                  className="flex-1 px-6 py-3 rounded-full bg-inverse/5 text-white font-bold hover:bg-inverse/10 transition-colors"
+src/pages/AmbassadorDashboard.tsx:          <h1 className="text-3xl font-display font-black uppercase italic text-white flex items-center gap-2">
+src/pages/AmbassadorDashboard.tsx:              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+src/pages/AmbassadorDashboard.tsx:                className="flex items-center gap-2 text-sm bg-inverse/10 hover:bg-inverse/20 text-white px-4 py-2 rounded-full transition-colors"
+src/pages/AmbassadorDashboard.tsx:                      <h3 className="font-bold text-white mb-1">{stamp.name}</h3>
+src/pages/AmbassadorDashboard.tsx:              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+src/pages/AmbassadorDashboard.tsx:                className="flex items-center gap-2 text-sm bg-inverse/10 hover:bg-inverse/20 text-white px-4 py-2 rounded-full transition-colors"
+src/pages/AmbassadorDashboard.tsx:                        <h3 className="font-bold text-white text-sm">{event.title}</h3>
+src/pages/AmbassadorDashboard.tsx:              <div className="text-3xl font-display font-black text-white">{ambassador.reputation_score * 3}</div>
+src/pages/AmbassadorDashboard.tsx:              <div className="text-3xl font-display font-black text-white">{stamps.length}</div>
+src/pages/AmbassadorDashboard.tsx:              <div className="text-3xl font-display font-black text-white">{ambassador.reputation_score}</div>
+src/pages/AmbassadorDashboard.tsx:              <h3 className="font-bold text-white mb-2">Scan to Collect</h3>
+src/pages/AmbassadorDashboard.tsx:            <h2 className="text-lg font-bold text-white mb-4">Quick Actions</h2>
+src/pages/AmbassadorDashboard.tsx:                <h3 className="text-xl font-bold text-white mb-6">Create Your MotoClub</h3>
+src/pages/AmbassadorDashboard.tsx:                    <button type="button" onClick={() => setShowCreateClub(false)} className="flex-1 px-6 py-3 rounded-full bg-inverse/5 text-white font-bold">Cancel</button>
+src/pages/AmbassadorDashboard.tsx:              <h3 className="font-bold text-white mb-2">Route Checkpoint QR</h3>
+src/pages/AmbassadorDashboard.tsx:            <h2 className="text-xl font-bold text-white mb-6">Host an Event</h2>
+src/pages/AmbassadorDashboard.tsx:                  className="w-full bg-black/50 border border-inverse/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-primary"
+src/pages/AmbassadorDashboard.tsx:                  className="w-full bg-black/50 border border-inverse/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-primary h-24 resize-none"
+src/pages/AmbassadorDashboard.tsx:                    className="w-full bg-black/50 border border-inverse/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-primary"
+src/pages/AmbassadorDashboard.tsx:                    className="w-full bg-black/50 border border-inverse/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-primary"
+src/pages/AmbassadorDashboard.tsx:                  className="w-full bg-black/50 border border-inverse/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-primary"
+src/pages/AmbassadorDashboard.tsx:                  className="w-full bg-black/50 border border-inverse/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-primary"
+src/pages/AmbassadorDashboard.tsx:                  className="flex-1 px-4 py-2 rounded-xl bg-inverse/5 text-white hover:bg-inverse/10 transition-colors"
+src/pages/AmbassadorDashboard.tsx:            <h2 className="text-xl font-bold text-white mb-6">Create Route Checkpoint</h2>
+src/pages/AmbassadorDashboard.tsx:                  className="w-full bg-black/50 border border-inverse/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-primary"
+src/pages/AmbassadorDashboard.tsx:                  className="w-full bg-black/50 border border-inverse/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-primary"
+src/pages/AmbassadorDashboard.tsx:                  className="flex-1 px-4 py-2 rounded-xl bg-inverse/5 text-white hover:bg-inverse/10 transition-colors"
+src/pages/AmbassadorDashboard.tsx:            <h2 className="text-xl font-bold text-white mb-6">Create Passport Stamp</h2>
+src/pages/AmbassadorDashboard.tsx:                  className="w-full bg-black/50 border border-inverse/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-primary"
+src/pages/AmbassadorDashboard.tsx:                  className="w-full bg-black/50 border border-inverse/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-primary h-24 resize-none"
+src/pages/AmbassadorDashboard.tsx:                    className="w-full bg-black/50 border border-inverse/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-primary"
+src/pages/AmbassadorDashboard.tsx:                    className="w-full bg-black/50 border border-inverse/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-primary"
+src/pages/AmbassadorDashboard.tsx:                  className="flex-1 px-4 py-2 rounded-xl bg-inverse/5 text-white hover:bg-inverse/10 transition-colors"
+src/pages/SubmitPhoto.tsx:    <div className="min-h-[calc(100dvh-5rem)] bg-asphalt text-white font-sans p-8 pb-28">
+src/pages/SubmitPhoto.tsx:                      className="w-full bg-carbon border-2 border-black p-4 text-white focus:border-primary outline-none appearance-none transition-colors"
+src/pages/SubmitPhoto.tsx:                    className="w-full bg-carbon border-2 border-black p-4 text-white focus:border-primary outline-none min-h-[120px] transition-colors"
+src/pages/SubmitPhoto.tsx:                      className="w-full bg-carbon border-2 border-black p-4 text-white focus:border-primary outline-none appearance-none transition-colors"
+src/pages/NotificationsPage.tsx:            <h1 className="text-4xl sm:text-5xl font-display font-black uppercase italic tracking-tighter text-white mb-2">
+src/pages/NotificationsPage.tsx:                          className="flex items-center gap-2 text-[10px] font-mono font-black uppercase tracking-widest text-primary hover:text-white transition-colors"
+src/pages/NotificationsPage.tsx:                <h3 className="text-xl font-display font-black uppercase italic tracking-tight text-white mb-2">All Caught Up</h3>
+src/pages/Profile.tsx:                    <span className="text-white text-base font-bold">{data.followers_count || 0}</span>
+src/pages/Profile.tsx:                    <span className="text-white text-base font-bold">{data.following_count || 0}</span>
+src/pages/Profile.tsx:                    <span className="text-xs font-bold text-white">{passportStamps.length} <span className="text-[10px] text-steel font-mono uppercase tracking-widest">Stamps</span></span>
+src/pages/Profile.tsx:                    <span className="text-xs font-bold text-white">{badges.length} <span className="text-[10px] text-steel font-mono uppercase tracking-widest">Badges</span></span>
+src/pages/Profile.tsx:                                  className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/80 rounded-full text-white transition-colors"
+src/pages/Profile.tsx:                                    <ImageIcon className="w-8 h-8 text-white" />
+src/pages/Profile.tsx:                            className="w-full bg-asphalt border border-inverse/10 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-primary transition-all"
+src/pages/Profile.tsx:                            className="w-full bg-asphalt border border-inverse/10 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-primary transition-all appearance-none"
+src/pages/Profile.tsx:                            className="w-full bg-asphalt border border-inverse/10 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-primary transition-all"
+src/pages/Profile.tsx:                            className="w-full bg-asphalt border border-inverse/10 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-primary transition-all"
+src/pages/Profile.tsx:                          className="w-full bg-asphalt border border-inverse/10 rounded-xl p-4 text-white focus:outline-none focus:border-primary transition-all resize-none"
+src/pages/Profile.tsx:                              className="absolute top-2 right-2 p-1.5 bg-black/60 backdrop-blur-md rounded-lg text-white hover:bg-red-500 transition-colors"
+src/pages/Profile.tsx:                          <button className="text-steel hover:text-white transition-colors p-2 hover:bg-inverse/5 rounded-lg">
+src/pages/Profile.tsx:                                <h4 className="text-2xl sm:text-3xl font-display font-black uppercase italic tracking-tight text-white group-hover/card:text-primary transition-colors duration-500 mb-4 line-clamp-1">
+src/pages/Profile.tsx:                              : 'text-steel hover:text-white hover:bg-inverse/5 border border-transparent'
+src/pages/Profile.tsx:                        <button className="flex items-center gap-3 text-steel hover:text-white transition-all group/btn ml-auto">
+src/pages/Profile.tsx:                              <span className="text-white font-bold">{stamp.ambassador_name || t('profile.platform')}</span>
+src/pages/Profile.tsx:                        <h3 className="text-sm font-bold text-white mb-1">{badge.name}</h3>
+src/pages/Profile.tsx:                          className="w-full bg-asphalt border border-inverse/10 rounded-2xl py-4 px-6 text-sm text-white focus:outline-none focus:border-primary/50 transition-all"
+src/pages/Profile.tsx:                          className="w-full bg-asphalt border border-inverse/10 rounded-2xl py-4 px-6 text-sm text-white focus:outline-none focus:border-primary/50 transition-all" 
+src/pages/Profile.tsx:                          className="w-full bg-asphalt border border-inverse/10 rounded-2xl py-4 px-6 text-sm text-white focus:outline-none focus:border-primary/50 transition-all" 
+src/pages/Profile.tsx:                          className="w-full bg-asphalt border border-inverse/10 rounded-2xl py-4 px-6 text-sm text-white focus:outline-none focus:border-primary/50 transition-all resize-none" 
+src/pages/Profile.tsx:                    <div className="font-mono text-xl text-white tracking-[0.2em] bg-asphalt px-4 py-2 rounded-lg border border-inverse/10 select-all">
+src/pages/Profile.tsx:                          <span className="text-steel group-hover:text-white transition-colors">+{data.profile.phone || '1 (555) 0123-4567'}</span>
+src/pages/Profile.tsx:                className="absolute top-4 right-4 p-2 bg-asphalt/50 hover:bg-engine rounded-full text-steel hover:text-white transition-colors z-10"
+src/pages/Profile.tsx:                <h2 className="text-3xl font-display font-black uppercase italic tracking-tight text-white mb-2">
+src/pages/Profile.tsx:                    <span className="text-sm font-bold text-white">{new Date(selectedBadge.awarded_date).toLocaleDateString(t('locale'))}</span>
+src/pages/Profile.tsx:                : 'bg-inverse/5 text-white border-inverse/10 hover:bg-inverse/10'
+src/pages/Profile.tsx:        <Link to={`/events/${event.id}`} className="p-3 text-engine hover:text-white transition-all transform group-hover:translate-x-1">
+src/pages/ContestPage.tsx:    <div className="min-h-[calc(100dvh-5rem)] bg-asphalt text-white font-sans pb-28">
+src/pages/ContestPage.tsx:                  : 'bg-transparent text-steel border-steel/20 hover:border-primary hover:text-white'
+src/pages/ContestPage.tsx:                  <p className="text-sm font-bold text-white leading-tight">
+src/pages/ContestPage.tsx:                  <div className="absolute top-4 left-4 bg-black text-white font-mono font-black px-3 py-1 text-xl">
+src/pages/ContestPage.tsx:                <button onClick={() => setIsUploadModalOpen(false)} className="text-steel hover:text-white">
+src/pages/ContestPage.tsx:                      <p className="font-mono text-xs uppercase tracking-widest text-steel group-hover:text-white transition-colors">
+src/pages/ContestPage.tsx:                      className="w-full bg-engine border-2 border-black p-4 text-white focus:border-primary outline-none min-h-[100px]"
+src/pages/ContestPage.tsx:                      className="w-full bg-engine border-2 border-black p-4 text-white focus:border-primary outline-none appearance-none"
+src/pages/ContestPage.tsx:                    className="flex-1 bg-engine text-white font-black uppercase tracking-widest py-4 border-2 border-black hover:bg-white hover:text-black transition-colors"
+src/pages/AdminLogin.tsx:          <h2 className="text-4xl font-display font-black uppercase italic tracking-tighter mb-2 text-white">{t('admin.login.title')}</h2>
+src/pages/RoadsDiscovery.tsx:      <Route className="w-4 h-4 text-white" />
+src/pages/RoadsDiscovery.tsx:      'dealership': { color: '#3b82f6', icon: <Building2 className="w-4 h-4 text-white" /> },
+src/pages/RoadsDiscovery.tsx:      'gear_shop': { color: '#10b981', icon: <ShoppingBag className="w-4 h-4 text-white" /> },
+src/pages/RoadsDiscovery.tsx:      'parts_store': { color: '#eab308', icon: <Settings className="w-4 h-4 text-white" /> },
+src/pages/RoadsDiscovery.tsx:      'workshop': { color: '#f97316', icon: <Wrench className="w-4 h-4 text-white" /> },
+src/pages/RoadsDiscovery.tsx:      'biker_cafe': { color: '#a8a29e', icon: <Coffee className="w-4 h-4 text-white" /> },
+src/pages/RoadsDiscovery.tsx:      'biker_bar': { color: '#ef4444', icon: <Beer className="w-4 h-4 text-white" /> },
+src/pages/RoadsDiscovery.tsx:      'gas_station': { color: '#f59e0b', icon: <Fuel className="w-4 h-4 text-white" /> },
+src/pages/RoadsDiscovery.tsx:      'parking': { color: '#64748b', icon: <MapPin className="w-4 h-4 text-white" /> },
+src/pages/RoadsDiscovery.tsx:      'viewpoint': { color: '#ec4899', icon: <Camera className="w-4 h-4 text-white" /> },
+src/pages/RoadsDiscovery.tsx:      'mountain_pass': { color: '#8b5cf6', icon: <Mountain className="w-4 h-4 text-white" /> },
+src/pages/RoadsDiscovery.tsx:      'rest_stop': { color: '#14b8a6', icon: <Info className="w-4 h-4 text-white" /> },
+src/pages/RoadsDiscovery.tsx:      'other': { color: '#94a3b8', icon: <MapPin className="w-4 h-4 text-white" /> }
+src/pages/RoadsDiscovery.tsx:            <label className="cursor-pointer bg-carbon hover:bg-engine text-white p-2 rounded-xl border border-inverse/10 transition-colors flex items-center gap-2" title={t('roads.import.btn')}>
+src/pages/RoadsDiscovery.tsx:                className="w-full bg-carbon border border-inverse/10 rounded-xl py-2 pl-10 pr-4 text-sm text-white focus:outline-none focus:border-primary transition-colors"
+src/pages/RoadsDiscovery.tsx:                      : 'bg-engine text-steel hover:bg-carbon hover:text-white'
+src/pages/RoadsDiscovery.tsx:                <h3 className="font-bold text-sm text-white leading-tight pr-4">{route.name}</h3>
+src/pages/RoadsDiscovery.tsx:                className="w-6 h-6 flex items-center justify-center rounded-full bg-carbon text-steel hover:text-white hover:bg-engine transition-colors"
+src/pages/RoadsDiscovery.tsx:                  <div className="text-xs font-bold text-white mb-0">{metric.value}</div>
+src/pages/RoadsDiscovery.tsx:                  className="flex-1 bg-carbon hover:bg-engine text-white font-mono uppercase tracking-widest text-[10px] py-2 rounded-lg border border-inverse/10 transition-colors flex items-center justify-center gap-1"
+src/pages/RoadsDiscovery.tsx:                  className="flex-1 bg-carbon hover:bg-engine text-white font-mono uppercase tracking-widest text-[10px] py-2 rounded-lg border border-inverse/10 transition-colors disabled:opacity-50"
+src/pages/RoadsDiscovery.tsx:                  className="flex-1 bg-carbon hover:bg-engine text-white font-mono uppercase tracking-widest text-[10px] py-2 rounded-lg border border-inverse/10 transition-colors flex items-center justify-center gap-1"
+src/pages/RoadsDiscovery.tsx:                  className="flex-1 bg-carbon hover:bg-engine text-white font-mono uppercase tracking-widest text-[10px] py-2 rounded-lg border border-inverse/10 transition-colors flex items-center justify-center gap-1"
+src/pages/RoadsDiscovery.tsx:                        className="flex-1 bg-asphalt text-white text-[10px] font-mono font-bold uppercase tracking-widest py-2 rounded-lg hover:bg-primary hover:text-asphalt transition-all"
+src/pages/RoadsDiscovery.tsx:                      className="w-full bg-asphalt text-white text-[10px] font-mono font-bold uppercase tracking-widest py-2 rounded-lg hover:bg-primary hover:text-asphalt transition-all shadow-lg"

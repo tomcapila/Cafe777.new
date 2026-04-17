@@ -155,10 +155,10 @@ export default function ScannerPage() {
               animate={{ scale: 1, opacity: 1 }}
               className="py-12 flex flex-col items-center justify-center text-center"
             >
-              <div className="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center mb-6 border border-emerald-500/30">
-                <ShieldCheck className="w-10 h-10 text-emerald-500" />
+              <div className="w-20 h-20 bg-success/20 rounded-full flex items-center justify-center mb-6 border border-success/30">
+                <ShieldCheck className="w-10 h-10 text-success" />
               </div>
-              <h3 className="text-2xl font-display font-black uppercase italic text-emerald-500 mb-2">{t('common.success')}</h3>
+              <h3 className="text-2xl font-display font-black uppercase italic text-success mb-2">{t('common.success')}</h3>
               <p className="text-chrome">{message}</p>
             </motion.div>
           )}
@@ -169,10 +169,10 @@ export default function ScannerPage() {
               animate={{ scale: 1, opacity: 1 }}
               className="py-12 flex flex-col items-center justify-center text-center"
             >
-              <div className="w-20 h-20 bg-red-500/20 rounded-full flex items-center justify-center mb-6 border border-red-500/30">
-                <AlertTriangle className="w-10 h-10 text-red-500" />
+              <div className="w-20 h-20 bg-error/20 rounded-full flex items-center justify-center mb-6 border border-error/30">
+                <AlertTriangle className="w-10 h-10 text-error" />
               </div>
-              <h3 className="text-2xl font-display font-black uppercase italic text-red-500 mb-2">{t('common.error')}</h3>
+              <h3 className="text-2xl font-display font-black uppercase italic text-error mb-2">{t('common.error')}</h3>
               <p className="text-chrome">{message}</p>
             </motion.div>
           )}

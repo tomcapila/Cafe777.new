@@ -1,8 +1,9 @@
 import { fetchWithAuth } from '../utils/api';
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Bike, Bell, Search, Languages, ShieldAlert, MessageSquare } from 'lucide-react';
+import { Bike, Bell, Search, Languages, ShieldAlert, MessageSquare, Moon, Sun } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useTheme } from '../contexts/ThemeContext';
 import SideMenu from './SideMenu';
 import UniversalSearch from './UniversalSearch';
 
@@ -17,6 +18,7 @@ const MotorcycleMenuIcon = ({ className }: { className?: string }) => (
 export default function Header() {
   const navigate = useNavigate();
   const { language, setLanguage, t } = useLanguage();
+  const { theme, toggleTheme } = useTheme();
   const [user, setUser] = useState<any>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
@@ -100,11 +102,11 @@ export default function Header() {
   };
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-asphalt/90 backdrop-blur-xl border-b border-white/5 h-20 px-4">
+    <header className="fixed top-0 left-0 right-0 z-50 bg-engine/90 backdrop-blur-xl border-b border-inverse/5 h-20 px-4">
       <div className="max-w-7xl mx-auto h-full flex items-center justify-between gap-4">
         <Link to="/" className="flex items-center gap-2 shrink-0">
           <div className="bg-primary p-2 rounded-xl border border-primary/20 shadow-[0_0_15px_rgba(255,85,0,0.2)]">
-            <Bike className="w-5 h-5 text-asphalt fill-asphalt" />
+            <Bike className="w-5 h-5 text-inverse fill-inverse" />
           </div>
           <span className="font-display font-black text-xl tracking-tighter uppercase italic text-chrome hidden sm:inline">Café777</span>
         </Link>
@@ -115,6 +117,13 @@ export default function Header() {
 
         <div className="flex items-center gap-2 shrink-0">
           <button 
+            onClick={toggleTheme}
+            className="p-2.5 text-steel hover:text-primary transition-colors"
+            title="Toggle Theme"
+          >
+            {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          </button>
+          <button 
             onClick={() => setLanguage(language === 'en' ? 'pt' : 'en')}
             className="p-2.5 text-steel hover:text-primary transition-colors"
           >
@@ -124,7 +133,7 @@ export default function Header() {
           {!user && (
             <Link 
               to="/login" 
-              className="px-4 py-2 bg-primary text-asphalt font-mono text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-accent transition-all shadow-lg shadow-primary/20"
+              className="px-4 py-2 bg-primary text-inverse font-mono text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-accent transition-all shadow-lg shadow-primary/20"
             >
               {t('nav.login') || 'Login'}
             </Link>
@@ -135,7 +144,7 @@ export default function Header() {
               <Link to="/messages" className="p-2.5 text-steel hover:text-primary relative transition-colors">
                 <MessageSquare className="w-5 h-5" />
                 {unreadMessagesCount > 0 && (
-                  <span className="absolute top-2 right-2 w-4 h-4 bg-primary text-asphalt text-[10px] font-bold rounded-full flex items-center justify-center">
+                  <span className="absolute top-2 right-2 w-4 h-4 bg-primary text-inverse text-[10px] font-bold rounded-full flex items-center justify-center">
                     {unreadMessagesCount}
                   </span>
                 )}
@@ -143,7 +152,7 @@ export default function Header() {
               <Link to="/notifications" className="p-2.5 text-steel hover:text-primary relative transition-colors">
                 <Bell className="w-5 h-5" />
                 {unreadCount > 0 && (
-                  <span className="absolute top-2 right-2 w-4 h-4 bg-primary text-asphalt text-[10px] font-bold rounded-full flex items-center justify-center">
+                  <span className="absolute top-2 right-2 w-4 h-4 bg-primary text-inverse text-[10px] font-bold rounded-full flex items-center justify-center">
                     {unreadCount}
                   </span>
                 )}
