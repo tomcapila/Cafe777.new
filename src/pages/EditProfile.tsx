@@ -242,7 +242,7 @@ export default function EditProfile() {
                 <button
                   type="button"
                   onClick={() => coverInputRef.current?.click()}
-                  className="absolute bottom-4 right-4 p-3 bg-primary text-inverse rounded-xl shadow-xl hover:bg-inverse hover:text-inverse transition-all hover:scale-110"
+                  className="absolute bottom-4 right-4 p-3 bg-primary text-white rounded-xl shadow-xl hover:bg-inverse hover:text-primary transition-all hover:scale-110"
                 >
                   <Upload className="w-5 h-5" />
                 </button>

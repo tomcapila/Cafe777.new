@@ -685,7 +685,7 @@ export default function MapView() {
                         href={getDirectionsUrl(place)}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex-1 text-center bg-primary text-inverse text-[10px] font-mono font-bold uppercase tracking-widest py-2.5 rounded-xl hover:bg-inverse hover:text-inverse transition-all"
+                        className="flex-1 text-center bg-primary text-inverse text-[10px] font-mono font-bold uppercase tracking-widest py-2.5 rounded-xl hover:bg-inverse hover:text-primary transition-all"
                       >
                         {t('discover.directions')}
                       </a>
@@ -739,7 +739,7 @@ export default function MapView() {
                   <p className="text-[11px] text-steel mb-4 line-clamp-2 leading-relaxed font-light">{route.details}</p>
                   <div className="flex gap-2">
                     <button 
-                      className="flex-1 text-center bg-primary text-inverse text-[10px] font-mono font-bold uppercase tracking-widest py-2.5 rounded-xl hover:bg-inverse hover:text-inverse transition-all"
+                      className="flex-1 text-center bg-primary text-inverse text-[10px] font-mono font-bold uppercase tracking-widest py-2.5 rounded-xl hover:bg-inverse hover:text-primary transition-all"
                     >
                       {t('discover.startRide')}
                     </button>

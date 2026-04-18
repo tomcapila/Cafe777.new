@@ -294,7 +294,7 @@ export default function ContestPage() {
             )}
             <button 
               onClick={() => setIsUploadModalOpen(true)}
-              className="group relative bg-primary text-inverse font-black uppercase tracking-widest py-6 px-12 text-xl hover:bg-inverse hover:text-inverse transition-all duration-300"
+              className="group relative bg-primary text-white font-black uppercase tracking-widest py-6 px-12 text-xl hover:bg-inverse hover:text-primary transition-all duration-300"
             >
               <span className="relative z-10 flex items-center gap-3">
                 {t('contest.submit')} <ChevronRight className="w-6 h-6 group-hover:translate-x-2 transition-transform" />
@@ -425,7 +425,7 @@ export default function ContestPage() {
                     </div>
                     <button 
                       onClick={() => handleVote(selectedSubmission.id)}
-                      className="bg-primary text-inverse font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-inverse hover:text-inverse transition-colors border-2 border-inverse"
+                      className="bg-primary text-white font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-inverse hover:text-primary transition-colors border-2 border-inverse"
                     >
                       <ThumbsUp className="w-5 h-5" /> {t('contest.vote')}
                     </button>
@@ -464,7 +464,7 @@ export default function ContestPage() {
                       />
                       <button 
                         onClick={() => handleAddComment(selectedSubmission.id)}
-                        className="bg-primary text-inverse font-black uppercase px-6 hover:bg-inverse hover:text-inverse transition-colors border-2 border-inverse"
+                        className="bg-primary text-white font-black uppercase px-6 hover:bg-inverse hover:text-primary transition-colors border-2 border-inverse"
                       >
                         {t('common.post')}
                       </button>
@@ -553,14 +553,14 @@ export default function ContestPage() {
                 <div className="flex gap-4 pt-4">
                   <button 
                     onClick={() => setIsUploadModalOpen(false)}
-                    className="flex-1 bg-engine text-chrome font-black uppercase tracking-widest py-4 border-2 border-inverse hover:bg-inverse hover:text-inverse transition-colors"
+                    className="flex-1 bg-engine text-chrome font-black uppercase tracking-widest py-4 border-2 border-inverse hover:bg-inverse hover:text-primary transition-colors"
                   >
                     {t('common.cancel')}
                   </button>
                   <button 
                     onClick={handleUpload}
                     disabled={!uploadFile}
-                    className="flex-1 bg-primary text-inverse font-black uppercase tracking-widest py-4 border-2 border-inverse hover:bg-inverse hover:text-inverse transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex-1 bg-primary text-white font-black uppercase tracking-widest py-4 border-2 border-inverse hover:bg-inverse hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {t('contest.submit')}
                   </button>

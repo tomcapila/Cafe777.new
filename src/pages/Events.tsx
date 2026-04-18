@@ -778,7 +778,7 @@ function EventListItem({ event, t, isAdmin, handleRSVP, handlePromote, viewMode 
           onClick={() => handleRSVP(event.id)}
           className={`w-full py-3 rounded-2xl font-display font-black uppercase italic tracking-widest text-xs transition-all border ${
             event.has_rsvpd 
-              ? 'bg-primary text-inverse border-primary hover:bg-oil shadow-lg shadow-primary/20' 
+              ? 'bg-primary text-white border-primary hover:bg-oil hover:text-primary shadow-lg shadow-primary/20' 
               : 'bg-inverse/5 text-chrome border-inverse/10 hover:bg-inverse/10'
           }`}
         >

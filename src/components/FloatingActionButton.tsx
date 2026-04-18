@@ -35,7 +35,7 @@ export default function FloatingActionButton() {
                 <span className="bg-oil border border-inverse/10 px-3 py-1.5 rounded-xl text-[10px] font-mono font-black uppercase tracking-widest text-chrome opacity-0 group-hover:opacity-100 transition-opacity shadow-2xl">
                   {action.label}
                 </span>
-                <div className={`${action.color} p-3 rounded-2xl text-chrome shadow-xl shadow-inverse/50 hover:scale-110 transition-transform`}>
+                <div className={`${action.color} p-3 rounded-2xl text-white shadow-xl shadow-inverse/50 hover:scale-110 transition-transform`}>
                   <action.icon className="w-5 h-5" />
                 </div>
               </motion.button>

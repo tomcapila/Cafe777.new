@@ -44,7 +44,7 @@ export default function Home() {
           >
             <Link 
               to="/onboarding" 
-              className="w-full sm:w-auto px-8 py-4 bg-primary text-inverse font-display font-black uppercase italic tracking-widest text-sm rounded-none hover:bg-inverse hover:text-inverse transition-all shadow-[0_0_30px_rgba(255,85,0,0.3)] hover:shadow-[0_0_40px_rgba(255,255,255,0.4)] skew-x-[-10deg]"
+              className="w-full sm:w-auto px-8 py-4 bg-primary text-white font-display font-black uppercase italic tracking-widest text-sm rounded-none hover:bg-inverse hover:text-primary transition-all shadow-[0_0_30px_rgba(104,10,8,0.3)] hover:shadow-[0_0_40px_rgba(255,255,255,0.4)] skew-x-[-10deg]"
             >
               <span className="block skew-x-[10deg]">{t('home.hero.cta.join')}</span>
             </Link>
@@ -183,7 +183,7 @@ export default function Home() {
           </p>
           <Link 
             to="/onboarding" 
-            className="inline-block px-10 py-5 bg-primary text-inverse font-display font-black uppercase italic tracking-widest text-lg rounded-none hover:bg-inverse hover:text-inverse transition-all shadow-[0_0_40px_rgba(255,85,0,0.4)] hover:shadow-[0_0_60px_rgba(255,255,255,0.5)] skew-x-[-10deg]"
+            className="inline-block px-10 py-5 bg-primary text-inverse font-display font-black uppercase italic tracking-widest text-lg rounded-none hover:bg-inverse hover:text-primary transition-all shadow-[0_0_40px_rgba(255,85,0,0.4)] hover:shadow-[0_0_60px_rgba(255,255,255,0.5)] skew-x-[-10deg]"
           >
             <span className="block skew-x-[10deg]">{t('home.cta.btn')}</span>
           </Link>

@@ -390,7 +390,7 @@ export default function AmbassadorDashboard() {
               {!isApplying ? (
                 <button 
                   onClick={() => setIsApplying(true)}
-                  className="bg-primary text-inverse px-8 py-3 rounded-full font-bold hover:bg-inverse hover:text-inverse transition-colors"
+                  className="bg-primary text-white px-8 py-3 rounded-full font-bold hover:bg-inverse hover:text-primary transition-colors"
                 >
                   {t('ambassador.applyNow')}
                 </button>

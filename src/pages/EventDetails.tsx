@@ -637,7 +637,7 @@ export default function EventDetails() {
                     {contestSettings.enabled && (
                       <button 
                         onClick={() => handlePromotePhoto(photo.id)}
-                        className="p-2 bg-primary text-inverse rounded-full hover:bg-inverse hover:text-inverse transition-colors"
+                        className="p-2 bg-primary text-white rounded-full hover:bg-inverse hover:text-primary transition-colors"
                         title={t('event.details.promoteToContest')}
                       >
                         <Trophy className="w-4 h-4" />

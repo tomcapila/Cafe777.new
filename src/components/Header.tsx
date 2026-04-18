@@ -105,8 +105,8 @@ export default function Header() {
     <header className="fixed top-0 left-0 right-0 z-50 bg-engine/90 backdrop-blur-xl border-b border-inverse/5 h-20 px-4">
       <div className="max-w-7xl mx-auto h-full flex items-center justify-between gap-4">
         <Link to="/" className="flex items-center gap-2 shrink-0">
-          <div className="bg-primary p-2 rounded-xl border border-primary/20 shadow-[0_0_15px_rgba(255,85,0,0.2)]">
-            <Bike className="w-5 h-5 text-inverse fill-inverse" />
+          <div className="bg-[#680a08] p-2 rounded-xl border border-[#680a08]/20 shadow-[0_0_15px_rgba(104,10,8,0.2)]">
+            <Bike className="w-5 h-5 text-white fill-white" />
           </div>
           <span className="font-display font-black text-xl tracking-tighter uppercase italic text-chrome hidden sm:inline">Café777</span>
         </Link>
@@ -133,7 +133,7 @@ export default function Header() {
           {!user && (
             <Link 
               to="/login" 
-              className="px-4 py-2 bg-primary text-inverse font-mono text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-accent transition-all shadow-lg shadow-primary/20"
+              className="px-4 py-2 bg-primary text-white font-mono text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-accent transition-all shadow-lg shadow-primary/20"
             >
               {t('nav.login') || 'Login'}
             </Link>

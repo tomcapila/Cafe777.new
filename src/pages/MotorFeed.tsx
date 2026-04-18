@@ -862,7 +862,7 @@ export default function MotorFeed() {
                 <button
                   type="submit"
                   disabled={isSubmitting || (!postContent.trim() && !postImage)}
-                  className="w-full bg-primary text-inverse font-display font-black uppercase italic text-xl py-4 rounded-2xl shadow-xl shadow-primary/20 hover:bg-inverse hover:text-inverse transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
+                  className="w-full bg-primary text-white font-display font-black uppercase italic text-xl py-4 rounded-2xl shadow-xl shadow-primary/20 hover:bg-inverse hover:text-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
                 >
                   <span className="flex items-center justify-center gap-2">
                     {isSubmitting ? t('feed.create.posting') : t('feed.create.button')}

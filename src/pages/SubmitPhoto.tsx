@@ -176,7 +176,7 @@ export default function SubmitPhoto() {
               <button
                 type="submit"
                 disabled={isSubmitting || !photo}
-                className="group relative w-full bg-primary text-inverse font-black uppercase tracking-widest py-6 text-xl hover:bg-inverse hover:text-inverse transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="group relative w-full bg-primary text-white font-black uppercase tracking-widest py-6 text-xl hover:bg-inverse hover:text-primary transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span className="relative z-10 flex items-center justify-center gap-3">
                   {isSubmitting ? 'Submitting...' : 'Submit Entry'} <ChevronRight className="w-6 h-6 group-hover:translate-x-2 transition-transform" />
@@ -200,7 +200,7 @@ export default function SubmitPhoto() {
                 >
                   <img src={preview} alt="Preview" className="w-full h-full object-cover" />
                   <div className="absolute inset-0 bg-engine/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <p className="bg-inverse text-inverse font-black uppercase tracking-widest px-6 py-3 border-2 border-inverse">Change Photo</p>
+                    <p className="bg-inverse text-primary font-black uppercase tracking-widest px-6 py-3 border-2 border-primary">Change Photo</p>
                   </div>
                 </motion.div>
               ) : (

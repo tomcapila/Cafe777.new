@@ -32,7 +32,7 @@
     --carbon: #DACCB7; /* Beige/Sand for cards */
     --engine: #EAE0D3; /* Lighter beige for panels */
     --oil: #FFFFFF; /* White for cards */
-    --inverse: #000000; /* Black for borders/subtle bg */
+    --inverse: #FFFFFF; /* White for better contrast on primary red */
     --error: #DC2626; /* Red */
     --success: #10B981; /* Emerald */
     --info: #3B82F6; /* Blue */
@@ -86,7 +86,7 @@
   }
 
   .btn-primary {
-    @apply px-6 py-3 bg-primary text-inverse font-display font-bold rounded-xl hover:bg-accent transition-all active:scale-95;
+    @apply px-6 py-3 bg-primary text-white font-display font-bold rounded-xl hover:bg-accent transition-all active:scale-95;
     box-shadow: 0 0 20px var(--shadow-primary);
   }
 

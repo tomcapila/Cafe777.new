@@ -902,7 +902,7 @@ export default function Admin() {
                     </tr>
                   ) : (
                     filteredUsers.map((user) => (
-                      <tr key={user.id} className="hover:bg-inverse hover:text-inverse/[0.02] transition-colors group">
+                      <tr key={user.id} className="hover:bg-inverse transition-colors group">
                         <td className="p-6">
                           <div className="flex items-center gap-4">
                             <img 
@@ -1067,7 +1067,7 @@ export default function Admin() {
                     </tr>
                   ) : (
                     filteredEvents.map((event) => (
-                      <tr key={event.id} className="hover:bg-inverse hover:text-inverse/[0.02] transition-colors group">
+                      <tr key={event.id} className="hover:bg-inverse transition-colors group">
                         <td className="p-6">
                           <div>
                             <div className="font-display font-black uppercase italic text-lg tracking-tight text-chrome group-hover:text-primary transition-colors leading-none mb-1">{event.title}</div>
@@ -1180,7 +1180,7 @@ export default function Admin() {
     {submissions
       .filter(sub => selectedContestFilter === 'all' || sub.contest_id?.toString() === selectedContestFilter)
       .map((sub) => (
-      <tr key={sub.id} className="hover:bg-inverse hover:text-inverse/[0.02] transition-colors">
+      <tr key={sub.id} className="hover:bg-inverse transition-colors">
         <td className="p-6">
           <img src={sub.photo_url} alt="" className="w-16 h-16 rounded-xl object-cover" />
         </td>
@@ -1295,7 +1295,7 @@ export default function Admin() {
                     </tr>
                   ) : (
                     eventPhotos.map((photo) => (
-                      <tr key={photo.id} className="hover:bg-inverse hover:text-inverse/[0.02] transition-colors">
+                      <tr key={photo.id} className="hover:bg-inverse transition-colors">
                         <td className="p-6">
                           <img src={photo.image_url} alt="" className="w-24 h-24 rounded-xl object-cover" referrerPolicy="no-referrer" />
                         </td>
@@ -1539,7 +1539,7 @@ export default function Admin() {
                     </tr>
                   ) : (
                     contests.map((contest) => (
-                      <tr key={contest.id} className="hover:bg-inverse hover:text-inverse/[0.02] transition-colors group">
+                      <tr key={contest.id} className="hover:bg-inverse transition-colors group">
                         <td className="p-6">
                           <div className="flex items-start gap-4">
                             {contest.prize_badge_icon && (
