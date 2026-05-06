@@ -9,6 +9,7 @@ import { useFeatureAccess } from '../hooks/useFeatureAccess';
 import { useNotification } from '../contexts/NotificationContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import PremiumBadge from '../components/PremiumBadge';
+import LocationAutocomplete from '../components/LocationAutocomplete';
 
 export default function MotoClubsHub() {
   const [loading, setLoading] = useState(true);
@@ -18,7 +19,7 @@ export default function MotoClubsHub() {
   const [ambassadorStatus, setAmbassadorStatus] = useState<string | null>(null);
   const [isAmbassador, setIsAmbassador] = useState(false);
   const [isCreatingClub, setIsCreatingClub] = useState(false);
-  const [newClubData, setNewClubData] = useState({ name: '', description: '', chapter_label: 'Chapter' });
+  const [newClubData, setNewClubData] = useState({ name: '', description: '', chapter_label: 'Chapter', external_link: '' });
   const [activeTab, setActiveTab] = useState<'discover' | 'my_clubs'>('discover');
   const [selectedClubId, setSelectedClubId] = useState<number | null>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -54,17 +55,17 @@ export default function MotoClubsHub() {
     try {
       setLoading(true);
       const [myRes, allRes, ambassadorRes, appStatusRes] = await Promise.all([
-        fetchWithAuth('/api/clubs/my'),
+        currentUser ? fetchWithAuth('/api/clubs/my') : Promise.resolve(null),
         fetchWithAuth('/api/clubs'),
         currentUser ? fetchWithAuth(`/api/ambassadors/${currentUser.id}`) : Promise.resolve(null),
         currentUser ? fetchWithAuth(`/api/ambassadors/${currentUser.id}/application-status`) : Promise.resolve(null)
       ]);
       
-      if (myRes.ok && allRes.ok) {
-        const myData = await myRes.json();
+      if (allRes.ok) {
+        const myData = myRes && myRes.ok ? await myRes.json() : { ownedClubs: [], memberships: [] };
         const allData = await allRes.json();
-        setOwnedClubs(myData.ownedClubs);
-        setMemberships(myData.memberships);
+        setOwnedClubs(myData.ownedClubs || []);
+        setMemberships(myData.memberships || []);
         setAllClubs(allData);
         
         if (ambassadorRes && ambassadorRes.ok) {
@@ -90,6 +91,10 @@ export default function MotoClubsHub() {
   };
 
   const handleApply = async (clubId: number) => {
+    if (!currentUser) {
+      showNotification('error', 'Please login before trying to access this feature');
+      return;
+    }
     try {
       const res = await fetchWithAuth(`/api/clubs/${clubId}/apply`, {
         method: 'POST',
@@ -142,7 +147,7 @@ export default function MotoClubsHub() {
       if (res.ok) {
         showNotification('success', 'MotoClub created successfully!');
         setIsCreatingClub(false);
-        setNewClubData({ name: '', description: '', chapter_label: 'Chapter' });
+        setNewClubData({ name: '', description: '', chapter_label: 'Chapter', external_link: '' });
         fetchData();
       } else {
         const data = await res.json();
@@ -196,8 +201,19 @@ export default function MotoClubsHub() {
           </div>
         </div>
       </div>
-      <p className="text-sm text-steel font-light mb-6 flex-1 line-clamp-3">{club.description}</p>
+      <p className="text-sm text-steel font-light mb-4 flex-1 line-clamp-3">{club.description}</p>
       
+      {club.website && (
+        <a 
+          href={club.website} 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="text-[10px] font-mono text-primary hover:text-primary/80 transition-colors uppercase tracking-widest block mb-4 truncate"
+        >
+          {club.website}
+        </a>
+      )}
+
       {isMember ? (
         <div className="text-center py-2 px-4 rounded-xl text-xs font-mono uppercase tracking-widest border border-inverse/5 bg-engine/50 text-steel">
           Status: <span className={membership.status === 'approved' ? 'text-primary' : 'text-accent'}>{membership.status}</span>
@@ -422,6 +438,16 @@ export default function MotoClubsHub() {
                     placeholder="e.g. Chapter, Wing, Division"
                   />
                 </div>
+                <div>
+                  <label className="block text-[10px] font-mono uppercase tracking-widest text-steel mb-2">External Link (Optional)</label>
+                  <input
+                    type="url"
+                    value={newClubData.external_link}
+                    onChange={e => setNewClubData({ ...newClubData, external_link: e.target.value })}
+                    className="w-full bg-engine/50 border border-inverse/10 rounded-xl px-4 py-3 text-chrome focus:outline-none focus:border-primary transition-colors"
+                    placeholder="https://..."
+                  />
+                </div>
                 <button type="submit" className="w-full btn-primary py-4 font-display font-black uppercase italic tracking-widest">
                   Create MotoClub
                 </button>
@@ -485,9 +511,15 @@ function ClubManager({ clubId, isOwner, membershipId, onLeave, onChat }: { clubI
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status })
       });
-      if (res.ok) fetchClubData();
+      if (res.ok) {
+        fetchClubData();
+      } else {
+        const data = await res.json();
+        showNotification('error', data.error || 'Failed to update member status');
+      }
     } catch (err) {
       console.error(err);
+      showNotification('error', 'An error occurred while updating member');
     }
   };
 
@@ -498,9 +530,15 @@ function ClubManager({ clubId, isOwner, membershipId, onLeave, onChat }: { clubI
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role_id: roleId })
       });
-      if (res.ok) fetchClubData();
+      if (res.ok) {
+        fetchClubData();
+      } else {
+        const data = await res.json();
+        showNotification('error', data.error || 'Failed to assign role');
+      }
     } catch (err) {
       console.error(err);
+      showNotification('error', 'An error occurred while assigning role');
     }
   };
 
@@ -511,9 +549,15 @@ function ClubManager({ clubId, isOwner, membershipId, onLeave, onChat }: { clubI
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chapter_id: chapterId })
       });
-      if (res.ok) fetchClubData();
+      if (res.ok) {
+        fetchClubData();
+      } else {
+        const data = await res.json();
+        showNotification('error', data.error || 'Failed to assign chapter');
+      }
     } catch (err) {
       console.error(err);
+      showNotification('error', 'An error occurred while assigning chapter');
     }
   };
 
@@ -941,6 +985,7 @@ function RoleManager({ clubId, roles, onUpdate }: { clubId: number, roles: any[]
   const [localRoles, setLocalRoles] = useState(roles);
 
   const { t } = useLanguage();
+  const { showNotification } = useNotification();
 
   useEffect(() => {
     setLocalRoles(roles);
@@ -953,14 +998,20 @@ function RoleManager({ clubId, roles, onUpdate }: { clubId: number, roles: any[]
         id: role.id,
         hierarchy_order: index
       }));
-      await fetchWithAuth(`/api/clubs/${clubId}/roles/reorder`, {
+      const res = await fetchWithAuth(`/api/clubs/${clubId}/roles/reorder`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ roles: rolesToUpdate })
       });
-      onUpdate();
+      if (res.ok) {
+        onUpdate();
+      } else {
+        const data = await res.json();
+        showNotification('error', data.error || 'Failed to reorder roles');
+      }
     } catch (err) {
       console.error('Failed to reorder roles', err);
+      showNotification('error', 'An error occurred while reordering roles');
     }
   };
 
@@ -976,9 +1027,13 @@ function RoleManager({ clubId, roles, onUpdate }: { clubId: number, roles: any[]
         setFormData({ name: '', description: '' });
         setIsAdding(false);
         onUpdate();
+      } else {
+        const data = await res.json();
+        showNotification('error', data.error || 'Failed to create role');
       }
     } catch (err) {
       console.error(err);
+      showNotification('error', 'An error occurred while creating role');
     }
   };
 
@@ -988,9 +1043,15 @@ function RoleManager({ clubId, roles, onUpdate }: { clubId: number, roles: any[]
       const res = await fetchWithAuth(`/api/clubs/${clubId}/roles/${roleId}`, {
         method: 'DELETE'
       });
-      if (res.ok) onUpdate();
+      if (res.ok) {
+        onUpdate();
+      } else {
+        const data = await res.json();
+        showNotification('error', data.error || 'Failed to delete role');
+      }
     } catch (err) {
       console.error(err);
+      showNotification('error', 'An error occurred while deleting role');
     }
   };
 
@@ -1055,6 +1116,7 @@ function ChapterManager({ clubId, chapters, onUpdate, chapterLabel }: { clubId: 
   const [isAdding, setIsAdding] = useState(false);
   const [formData, setFormData] = useState({ name: '', city: '', country: '', description: '' });
   const { t } = useLanguage();
+  const { showNotification } = useNotification();
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1068,9 +1130,13 @@ function ChapterManager({ clubId, chapters, onUpdate, chapterLabel }: { clubId: 
         setFormData({ name: '', city: '', country: '', description: '' });
         setIsAdding(false);
         onUpdate();
+      } else {
+        const data = await res.json();
+        showNotification('error', data.error || 'Failed to create chapter');
       }
     } catch (err) {
       console.error(err);
+      showNotification('error', 'An error occurred while creating chapter');
     }
   };
 
@@ -1080,9 +1146,15 @@ function ChapterManager({ clubId, chapters, onUpdate, chapterLabel }: { clubId: 
       const res = await fetchWithAuth(`/api/clubs/${clubId}/chapters/${chapterId}`, {
         method: 'DELETE'
       });
-      if (res.ok) onUpdate();
+      if (res.ok) {
+        onUpdate();
+      } else {
+        const data = await res.json();
+        showNotification('error', data.error || 'Failed to delete chapter');
+      }
     } catch (err) {
       console.error(err);
+      showNotification('error', 'An error occurred while deleting chapter');
     }
   };
 
@@ -1107,6 +1179,15 @@ function ChapterManager({ clubId, chapters, onUpdate, chapterLabel }: { clubId: 
               <LocationAutocomplete 
                 value={formData.city || ''} 
                 onChange={val => setFormData({...formData, city: val})} 
+                onSelectDetails={pred => {
+                  if (pred && pred.address) {
+                    setFormData({
+                      ...formData, 
+                      city: pred.address.city || pred.title,
+                      country: pred.address.countryName || formData.country
+                    })
+                  }
+                }}
                 placeholder="Search city/location..."
               />
             </div>

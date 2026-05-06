@@ -101,12 +101,11 @@ const Gauge = ({ value, max, label, unit, color, id }: GaugeProps) => {
                     x={Math.sin(angle) * (innerRadius - 22)}
                     y={-Math.cos(angle) * (innerRadius - 22)}
                     fill="currentColor"
-                    className="text-chrome"
+                    className="text-chrome font-mono font-bold"
                     fontSize="8"
                     textAnchor="middle"
                     alignmentBaseline="middle"
                     opacity="0.5"
-                    className="font-mono font-bold"
                   >
                     {Math.round(tick)}
                   </text>
@@ -202,8 +201,8 @@ export default function Gauges() {
         <div className="relative bg-oil/40 backdrop-blur-sm border border-inverse/5 p-8 rounded-2xl flex flex-col items-center">
           <Gauge 
             id="riders"
-            value={stats.riders} 
-            max={Math.max(100, stats.riders * 1.2)} 
+            value={stats.riders || 0} 
+            max={Math.max(100, (stats.riders || 0) * 1.2)} 
             label={t('home.momentum.riders')} 
             unit="RIDERS" 
             color="#ff5500" 
@@ -216,8 +215,8 @@ export default function Gauges() {
         <div className="relative bg-oil/40 backdrop-blur-sm border border-inverse/5 p-8 rounded-2xl flex flex-col items-center">
           <Gauge 
             id="ecosystems"
-            value={stats.ecosystems} 
-            max={Math.max(50, stats.ecosystems * 1.2)} 
+            value={stats.ecosystems || 0} 
+            max={Math.max(50, (stats.ecosystems || 0) * 1.2)} 
             label={t('home.momentum.ecosystems')} 
             unit="PARTNERS" 
             color="#00ffcc" 

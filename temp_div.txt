@@ -1,0 +1,11 @@
+src/pages/RoadsDiscovery.tsx:373:      const step = Math.max(1, Math.floor(polyline.length / 8));
+src/pages/Discover.tsx:380:      const step = Math.ceil(simplifiedPoints.length / 500);
+src/pages/Onboarding.tsx:291:          animate={{ width: `${((step - 1) / (totalSteps - 1)) * 100}%` }}
+src/pages/Onboarding.tsx:546:            {/* STEP 5: Interests / Services */}
+src/pages/AmbassadorDashboard.tsx:440:                    <option value="motoclub">MotoClub / Group</option>
+src/pages/AmbassadorDashboard.tsx:441:                    <option value="business">Business / Shop</option>
+src/pages/Profile.tsx:2247:            {/* Header / Summary */}
+src/components/Gauges.tsx:23:  const startAngle = -135 * (Math.PI / 180);
+src/components/Gauges.tsx:24:  const endAngle = 135 * (Math.PI / 180);
+src/components/Gauges.tsx:31:  const rotationDegrees = (currentAngle * 180) / Math.PI;
+src/components/Gauges.tsx:34:  const ticks = d3.range(0, max + 1, max / 10);

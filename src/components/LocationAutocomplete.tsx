@@ -1,32 +1,47 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useMapsLibrary } from '@vis.gl/react-google-maps';
 import { MapPin } from 'lucide-react';
 
 interface LocationAutocompleteProps {
   value?: string;
   defaultValue?: string;
   onChange?: (value: string) => void;
+  onSelectDetails?: (details: any) => void;
   placeholder?: string;
   types?: string[];
   name?: string;
   className?: string;
 }
 
-export default function LocationAutocomplete({ value, defaultValue, onChange, placeholder = "Search location...", types = ['geocode'], name, className }: LocationAutocompleteProps) {
-  const placesLib = useMapsLibrary('places');
+const HERE_API_KEY = "BNecDxcWcrUQ5X1SzghrH2OMxssFG8pgDA6-D9MrlDk";
+
+export default function LocationAutocomplete({ value, defaultValue, onChange, onSelectDetails, placeholder = "Search location...", types, name, className }: LocationAutocompleteProps) {
   const [inputValue, setInputValue] = useState(value || defaultValue || '');
-  const [predictions, setPredictions] = useState<google.maps.places.AutocompletePrediction[]>([]);
+  const [predictions, setPredictions] = useState<any[]>([]);
   const [isOpen, setIsOpen] = useState(false);
+  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
   
-  const autocompleteService = useRef<google.maps.places.AutocompleteService | null>(null);
-  const sessionToken = useRef<google.maps.places.AutocompleteSessionToken | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!placesLib) return;
-    autocompleteService.current = new placesLib.AutocompleteService();
-    sessionToken.current = new placesLib.AutocompleteSessionToken();
-  }, [placesLib]);
+    // Get user location for more precise HERE Maps autosuggest
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          });
+        },
+        (error) => {
+          console.warn("Geolocation warning:", error);
+          // Default to a central location if denied
+          setUserLocation({ lat: 0, lng: 0 });
+        }
+      );
+    } else {
+      setUserLocation({ lat: 0, lng: 0 });
+    }
+  }, []);
 
   useEffect(() => {
     if (value !== undefined) {
@@ -44,45 +59,64 @@ export default function LocationAutocomplete({ value, defaultValue, onChange, pl
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    setInputValue(val);
-    if (onChange) onChange(val); // Update parent with raw text
-
-    if (!val.trim() || !autocompleteService.current) {
+  const fetchHereAutosuggest = async (query: string) => {
+    if (!query.trim() || query.length < 3) {
       setPredictions([]);
       setIsOpen(false);
       return;
     }
-
-    autocompleteService.current.getPlacePredictions(
-      {
-        input: val,
-        sessionToken: sessionToken.current || undefined,
-        types: types,
-      },
-      (results, status) => {
-        if (placesLib && status === placesLib.PlacesServiceStatus.OK && results) {
-          setPredictions(results);
-          setIsOpen(true);
-        } else {
-          setPredictions([]);
-          setIsOpen(false);
-        }
+    
+    // We need at parameter for autosuggest
+    const atParam = userLocation ? `at=${userLocation.lat},${userLocation.lng}` : 'at=0,0';
+    
+    try {
+      const token = localStorage.getItem('token');
+      const resp = await fetch(`/api/places/autocomplete?${atParam}&q=${encodeURIComponent(query)}&lang=en-US`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        setPredictions(data.items || []);
+        setIsOpen(true);
+      } else {
+        setPredictions([]);
+        setIsOpen(false);
       }
-    );
+    } catch (err) {
+      console.error("HERE Autosuggest error", err);
+      setPredictions([]);
+    }
+  }
+
+  // Debounce the autosuggest fetching
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(() => {
+      if (inputValue && inputValue !== value) {
+        fetchHereAutosuggest(inputValue);
+      }
+    }, 300);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [inputValue]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setInputValue(val);
+    if (onChange) onChange(val); // Update parent with raw text
+    
+    if (!val.trim()) {
+      setPredictions([]);
+      setIsOpen(false);
+    }
   };
 
-  const handleSelectPrediction = (prediction: google.maps.places.AutocompletePrediction) => {
-    setInputValue(prediction.description);
-    if (onChange) onChange(prediction.description);
+  const handleSelectPrediction = (prediction: any) => {
+    const title = prediction.title;
+    setInputValue(title);
+    if (onChange) onChange(title);
+    if (onSelectDetails) onSelectDetails(prediction);
     setIsOpen(false);
     setPredictions([]);
-    
-    // Refresh session token after a selection
-    if (placesLib) {
-      sessionToken.current = new placesLib.AutocompleteSessionToken();
-    }
   };
 
   return (
@@ -103,13 +137,16 @@ export default function LocationAutocomplete({ value, defaultValue, onChange, pl
       
       {isOpen && predictions.length > 0 && (
         <ul className="absolute z-50 w-full mt-1 bg-engine border border-inverse/10 rounded-xl shadow-lg overflow-hidden max-h-60 overflow-y-auto">
-          {predictions.map((prediction) => (
+          {predictions.map((prediction, i) => (
             <li
-              key={prediction.place_id}
+              key={prediction.id || i}
               onClick={() => handleSelectPrediction(prediction)}
               className="px-4 py-3 hover:bg-engine cursor-pointer text-sm text-chrome border-b border-inverse/5 last:border-0"
             >
-              {prediction.description}
+              {prediction.title}
+              {prediction.address && prediction.address.label && prediction.address.label !== prediction.title && (
+                 <div className="text-[10px] text-steel mt-0.5">{prediction.address.label}</div>
+              )}
             </li>
           ))}
         </ul>
@@ -117,3 +154,4 @@ export default function LocationAutocomplete({ value, defaultValue, onChange, pl
     </div>
   );
 }
+

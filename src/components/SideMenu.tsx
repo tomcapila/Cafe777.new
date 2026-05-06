@@ -29,7 +29,7 @@ export default function SideMenu({ isOpen, onClose, user, onLogout }: SideMenuPr
       const fetchData = async () => {
         try {
           // Fetch unread messages
-          const chatsRes = await fetchWithAuth('/api/chats');
+          const chatsRes = await fetchWithAuth('/api/conversations');
           if (chatsRes.ok) {
             const contentType = chatsRes.headers.get('content-type');
             if (contentType && contentType.includes('application/json')) {
@@ -203,6 +203,12 @@ export default function SideMenu({ isOpen, onClose, user, onLogout }: SideMenuPr
               {/* SETTINGS SECTION */}
               <div className="space-y-2">
                 <h3 className="text-[10px] font-mono font-bold uppercase tracking-widest text-steel mb-4 px-3">{t('menu.settings')}</h3>
+                <Link to="/about" onClick={handleInteraction} className="flex items-center gap-4 text-chrome hover:text-primary transition-colors p-3 rounded-xl hover:bg-inverse/5 group">
+                  <div className="w-5 h-5 flex items-center justify-center text-steel group-hover:text-primary transition-colors">
+                    <span className="font-serif italic font-bold">i</span>
+                  </div>
+                  <span className="font-bold">{t('menu.about') || 'About CAFE777'}</span>
+                </Link>
                 <Link to="/notifications" onClick={handleInteraction} className="flex items-center gap-4 text-chrome hover:text-primary transition-colors p-3 rounded-xl hover:bg-inverse/5 group">
                   <Bell className="w-5 h-5 text-steel group-hover:text-primary transition-colors" /> 
                   <span className="font-bold">{t('menu.notifications')}</span>

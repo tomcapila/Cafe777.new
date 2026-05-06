@@ -1,0 +1,287 @@
+45:    try {
+166:try {
+216:      try {
+668:    country TEXT,
+800:try {
+804:try {
+807:try {
+810:try {
+813:try {
+818:try {
+836:try {
+848:try {
+860:try { db.prepare("ALTER TABLE contests ADD COLUMN type TEXT CHECK(type IN ('weekly', 'monthly', 'special'))").run(); } catch (e) {}
+861:try { db.prepare("ALTER TABLE contests ADD COLUMN voting_start_date DATETIME").run(); } catch (e) {}
+863:try {
+867:try {
+870:try {
+874:try {
+889:try {
+894:try {
+899:try {
+904:try {
+909:try {
+915:try {
+918:try {
+922:try {
+925:try {
+928:try {
+931:try {
+934:try {
+937:try {
+941:try {
+945:try {
+948:try {
+952:try {
+956:try {
+960:try {
+963:try {
+966:try {
+969:try {
+972:try {
+977:try {
+980:try {
+983:try {
+986:try {
+989:try {
+992:try {
+995:try {
+998:try {
+1001:try {
+1004:try {
+1007:try {
+1012:try {
+1032:try {
+1248:  try {
+1279:    try {
+1290:  try {
+1359:    message: { error: "Too many requests, please try again later." }
+1370:    message: { error: "Too many authentication attempts, please try again in an hour." }
+1404:    try {
+1424:    try {
+1432:      // Try SQLite first as it's faster and works without permissions in this environment
+1437:        try {
+1463:      try {
+1548:    try {
+1625:    try {
+1627:      // Try Firestore first
+1628:      try {
+1643:          try {
+1705:    try {
+1788:    try {
+1816:      try {
+1838:      try {
+1853:    try {
+1891:      try {
+1909:    try {
+1952:      try {
+1990:    try {
+2041:    try {
+2053:    try {
+2091:    try {
+2118:    try {
+2140:    try {
+2173:    try {
+2204:    try {
+2230:    try {
+2231:      // Try SQLite first
+2239:      // Otherwise try Firestore
+2240:      try {
+2261:    try {
+2275:      try {
+2289:    try {
+2303:    try {
+2315:      try {
+2333:    try {
+2343:      try {
+2360:    try {
+2364:      try {
+2380:    try {
+2410:    try {
+2452:        try {
+2489:    try {
+2504:      try {
+2528:    try {
+2547:    try {
+2549:      try {
+2584:      try {
+2622:            lat: p.geometry.location.lat,
+2623:            lng: p.geometry.location.lng,
+2640:            try {
+2658:        try {
+2681:            try {
+2768:      try {
+2816:      try {
+2859:      try {
+2891:    try {
+2920:    try {
+2935:    try {
+2992:    try {
+3024:    try {
+3044:    try {
+3064:    try {
+3085:    try {
+3102:    try {
+3127:      try {
+3152:    try {
+3168:      try {
+3182:    try {
+3191:      try {
+3208:    try {
+3220:    try {
+3235:    try {
+3248:    try {
+3274:      try {
+3330:    try {
+3340:      try {
+3359:    try {
+3377:    try {
+3395:    try {
+3417:      try {
+3442:    try {
+3493:      try {
+3525:    try {
+3531:        // Try fallback
+3543:    try {
+3567:    try {
+3578:    try {
+3599:      try {
+3630:    try {
+3696:      try {
+3723:    try {
+3724:      // Try SQLite first
+3736:      try {
+3766:    try {
+3768:      // Try SQLite first as primary source of truth for profile data
+3929:      try {
+4019:    try {
+4020:      // Try Firestore first
+4070:    try {
+4108:    try {
+4155:    try {
+4176:    try {
+4219:      try {
+4252:    try {
+4260:        try {
+4288:        try {
+4309:      try {
+4320:    try {
+4334:      try {
+4348:    try {
+4363:    try {
+4390:    try {
+4406:      try {
+4422:    try {
+4445:      try {
+4459:    try {
+4475:      try {
+4490:    try {
+4514:      try {
+4520:    try {
+4573:      try {
+4579:    try {
+4619:    try {
+4654:      try {
+4677:    try {
+4703:      try {
+4726:    try {
+4759:    try {
+4771:      try {
+4806:            try {
+4843:            try {
+4868:    try {
+4884:        try {
+4896:        try {
+4909:    try {
+4918:    try {
+4924:        try {
+4979:    try {
+4996:    try {
+5034:    try {
+5050:    try {
+5066:    try {
+5082:    try {
+5115:    try {
+5136:    try {
+5147:    try {
+5161:      try {
+5172:    try {
+5197:          service: last_service || "Initial Entry",
+5205:        try {
+5211:      try {
+5228:      try {
+5235:    try {
+5257:      try {
+5271:    try {
+5290:      try {
+5306:    try {
+5328:      try {
+5344:      try {
+5352:    // Ensure the authenticated user matches the username they are trying to post as
+5357:    try {
+5418:    try {
+5422:        // Try Firestore fallback for lookup
+5423:        try {
+5443:      try {
+5489:      try {
+5550:    try {
+5565:    try {
+5579:    try {
+5580:      // 1. Try SQLite first
+5601:      try {
+5661:    try {
+5691:    try {
+5721:      try {
+5738:    try {
+5759:      try {
+5776:    try {
+5794:        try {
+5816:    try {
+5835:      try {
+5850:    try {
+5868:    try {
+5893:    try {
+5911:    try {
+5930:    try {
+5950:    try {
+5957:      // Create a new user entry for the club (ecosystem type)
+5964:      // Create ecosystem entry
+5976:    const { name, city, country, description } = req.body;
+5978:    try {
+5984:      const info = db.prepare("INSERT INTO club_chapters (club_id, name, city, country, description) VALUES (?, ?, ?, ?, ?)")
+5985:        .run(clubId, name, city, country, description);
+6000:    try {
+6016:    try {
+6034:      try {
+6049:    try {
+6078:    try {
+6109:      try {
+6128:    try {
+6149:      try {
+6166:    try {
+6167:      // Try SQLite first
+6185:      try {
+6230:    try {
+6258:    try {
+6279:    try {
+6301:    try {
+6316:    try {
+6357:      try {
+6377:    try {
+6402:    try {
+6427:    try {
+6445:    try {
+6460:    try {
+6473:    try {
+6484:    try {
+6516:    try {
+6603:    try {
+6675:    try {
+6709:    try {
+6743:    try {
+6757:    try {
+6771:    try {
+6786:    try {
+6801:    try {
+6814:    try {
+6833:    try {

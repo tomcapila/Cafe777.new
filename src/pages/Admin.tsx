@@ -1,7 +1,7 @@
 import { fetchWithAuth } from '../utils/api';
 import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ShieldAlert, Trash2, Ban, CheckCircle, Search, UserX, Settings, Users, Calendar, Star, ShieldCheck, XCircle, Camera, MapPin, Activity, Heart, Wrench, Mountain, ToggleLeft, ToggleRight, Trophy, Plus, Edit2, Shield, Image, Upload } from 'lucide-react';
+import { ShieldAlert, Trash2, Ban, CheckCircle, Search, UserX, Settings, Users, Calendar, Star, ShieldCheck, XCircle, Camera, MapPin, Activity, Heart, Wrench, Mountain, ToggleLeft, ToggleRight, Trophy, Plus, Edit2, Shield, Image, Upload, AlertCircle } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useFeatureFlags } from '../contexts/FeatureFlagContext';
 import { useNotification } from '../contexts/NotificationContext';
@@ -52,6 +52,7 @@ export default function Admin() {
   const [placesCategoryFilter, setPlacesCategoryFilter] = useState('all');
   const [selectedPlaces, setSelectedPlaces] = useState<string[]>([]);
   const [isMassActionLoading, setIsMassActionLoading] = useState(false);
+  const [editingPlace, setEditingPlace] = useState<any | null>(null);
 
   const handleAwardBadge = async () => {
     if (!awardingBadgeId || !selectedUserIdToAward) return;
@@ -561,6 +562,30 @@ export default function Admin() {
     }
   };
 
+  const handleUpdatePlace = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPlace) return;
+    try {
+      const res = await fetchWithAuth(`/api/admin/places/${editingPlace.place_id}`, {
+        method: 'PUT',
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-admin-role': currentUser.role
+        },
+        body: JSON.stringify(editingPlace),
+      });
+      if (res.ok) {
+        showNotification('success', 'Place updated successfully');
+        setEditingPlace(null);
+        fetchPlacesControl();
+      } else {
+        showNotification('error', 'Failed to update place');
+      }
+    } catch (err) {
+      console.error(err);
+      showNotification('error', 'Update failed');
+    }
+  };
   const handleRoleChange = async (id: number, newRole: string) => {
     try {
       const res = await fetchWithAuth(`/api/admin/users/${id}/role`, {
@@ -1916,8 +1941,8 @@ export default function Admin() {
                     className="bg-inverse/5 border border-inverse/10 rounded-xl px-4 py-2 text-sm text-chrome focus:border-primary/50 outline-none transition-all"
                   >
                     <option value="all">All Categories</option>
-                    {Array.from(new Set(placesControl.map(p => p.category))).filter(Boolean).map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
+                    {keywordsConfig.map(kw => (
+                      <option key={kw.id} value={kw.category_name}>{kw.category_name}</option>
                     ))}
                   </select>
                   <label className="bg-primary/10 text-primary hover:bg-primary/20 px-4 py-2 rounded-xl text-sm font-bold cursor-pointer transition-all flex items-center gap-2">
@@ -2065,7 +2090,15 @@ export default function Admin() {
                           className="mt-1 w-4 h-4 rounded border-inverse/10 text-primary focus:ring-primary bg-oil"
                         />
                         <div>
-                          <h4 className="font-bold text-chrome">{place.name}</h4>
+                          <h4 className="font-bold text-chrome flex items-center gap-2">
+                            {place.name}
+                            {place.needs_revision ? (
+                              <span className="flex items-center gap-1 text-[10px] bg-error/20 text-error px-2 py-0.5 rounded-full animate-pulse">
+                                <AlertCircle className="w-3 h-3" />
+                                Needs Revision
+                              </span>
+                            ) : null}
+                          </h4>
                           <p className="text-sm text-steel">{place.category} • {place.rating}★ ({place.reviews})</p>
                           {place.full_address && (
                             <p className="text-[10px] text-steel/60 mt-1 italic">{place.full_address}</p>
@@ -2073,6 +2106,12 @@ export default function Admin() {
                         </div>
                       </div>
                       <div className="flex gap-2">
+                        <button
+                          onClick={() => setEditingPlace(place)}
+                          className="px-3 py-1 bg-primary/10 text-primary hover:bg-primary/20 rounded-lg text-xs font-bold transition-all"
+                        >
+                          Edit
+                        </button>
                         <button
                           onClick={async () => {
                             try {
@@ -2082,8 +2121,7 @@ export default function Admin() {
                                 body: JSON.stringify({
                                   is_approved: !place.is_approved,
                                   is_hidden: place.is_hidden,
-                                  custom_category: place.custom_category,
-                                  priority_score: place.priority_score
+                                  needs_revision: place.needs_revision
                                 })
                               });
                               if (res.ok) fetchPlacesControl();
@@ -2104,8 +2142,7 @@ export default function Admin() {
                                 body: JSON.stringify({
                                   is_approved: place.is_approved,
                                   is_hidden: !place.is_hidden,
-                                  custom_category: place.custom_category,
-                                  priority_score: place.priority_score
+                                  needs_revision: place.needs_revision
                                 })
                               });
                               if (res.ok) fetchPlacesControl();
@@ -2119,60 +2156,57 @@ export default function Admin() {
                         </button>
                       </div>
                     </div>
-                    <div className="flex gap-4 mt-4">
+                    <div className="flex flex-col md:flex-row gap-4 mt-4">
                       <div className="flex-1">
-                        <label className="text-[10px] uppercase tracking-widest text-steel block mb-1">Custom Category</label>
-                        <input
-                          type="text"
-                          defaultValue={place.custom_category || ''}
-                          onBlur={async (e) => {
-                            if (e.target.value !== place.custom_category) {
-                              try {
-                                const res = await fetchWithAuth(`/api/admin/places/${place.place_id}/control`, {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({
-                                    is_approved: place.is_approved,
-                                    is_hidden: place.is_hidden,
-                                    custom_category: e.target.value,
-                                    priority_score: place.priority_score
-                                  })
-                                });
-                                if (res.ok) fetchPlacesControl();
-                              } catch (err) {
-                                console.error(err);
-                              }
+                        <label className="text-[10px] uppercase tracking-widest text-steel block mb-1">Assigned Category</label>
+                        <select
+                          value={place.category || ''}
+                          onChange={async (e) => {
+                            try {
+                              // We need to update the category in places_cache, as that's where it's stored.
+                              // Or we could have an override in places_control.
+                              // For now, let's assume we update the cache category.
+                              const res = await fetchWithAuth(`/api/admin/places/${place.place_id}/category`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ category: e.target.value })
+                              });
+                              if (res.ok) fetchPlacesControl();
+                            } catch (err) {
+                              console.error(err);
                             }
                           }}
                           className="w-full bg-oil border border-inverse/10 rounded-lg px-3 py-1 text-sm text-chrome"
-                        />
+                        >
+                          <option value="">Select Category</option>
+                          {keywordsConfig.map(kw => (
+                            <option key={kw.id} value={kw.category_name}>{kw.category_name}</option>
+                          ))}
+                        </select>
                       </div>
-                      <div className="w-24">
-                        <label className="text-[10px] uppercase tracking-widest text-steel block mb-1">Priority</label>
-                        <input
-                          type="number"
-                          defaultValue={place.priority_score || 0}
-                          onBlur={async (e) => {
-                            if (parseInt(e.target.value) !== place.priority_score) {
-                              try {
-                                const res = await fetchWithAuth(`/api/admin/places/${place.place_id}/control`, {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({
-                                    is_approved: place.is_approved,
-                                    is_hidden: place.is_hidden,
-                                    custom_category: place.custom_category,
-                                    priority_score: parseInt(e.target.value)
-                                  })
-                                });
-                                if (res.ok) fetchPlacesControl();
-                              } catch (err) {
-                                console.error(err);
-                              }
+                      <div className="flex items-end pb-1">
+                        <button
+                          onClick={async () => {
+                            try {
+                              const res = await fetchWithAuth(`/api/admin/places/${place.place_id}/control`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  is_approved: place.is_approved,
+                                  is_hidden: place.is_hidden,
+                                  needs_revision: !place.needs_revision
+                                })
+                              });
+                              if (res.ok) fetchPlacesControl();
+                            } catch (err) {
+                              console.error(err);
                             }
                           }}
-                          className="w-full bg-oil border border-inverse/10 rounded-lg px-3 py-1 text-sm text-chrome"
-                        />
+                          className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${place.needs_revision ? 'bg-error text-inverse' : 'bg-inverse/10 text-steel hover:bg-inverse/20'}`}
+                        >
+                          <AlertCircle className="w-4 h-4" />
+                          {place.needs_revision ? 'Revision Required' : 'Mark for Revision'}
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -2180,6 +2214,145 @@ export default function Admin() {
               </div>
             </div>
           </div>
+
+          {/* Edit Place Modal */}
+          {editingPlace && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[2000] flex items-center justify-center p-4">
+              <div className="bg-oil border border-inverse/10 rounded-2xl p-6 w-full max-w-xl space-y-4 max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-2xl font-display font-black uppercase italic text-chrome">Edit Place</h3>
+                  <button onClick={() => setEditingPlace(null)} className="text-steel hover:text-chrome">
+                    <XCircle className="w-6 h-6" />
+                  </button>
+                </div>
+                
+                <form onSubmit={handleUpdatePlace} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2">
+                      <label className="text-[10px] uppercase tracking-widest text-steel block mb-1">Place Name</label>
+                      <input
+                        type="text"
+                        value={editingPlace.name}
+                        onChange={e => setEditingPlace({ ...editingPlace, name: e.target.value })}
+                        className="w-full bg-oil border border-inverse/10 rounded-xl px-4 py-2 text-chrome focus:border-primary/50 outline-none"
+                        required
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="text-[10px] uppercase tracking-widest text-steel block mb-1">Latitude</label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={editingPlace.lat}
+                        onChange={e => setEditingPlace({ ...editingPlace, lat: e.target.value })}
+                        className="w-full bg-oil border border-inverse/10 rounded-xl px-4 py-2 text-chrome focus:border-primary/50 outline-none"
+                        required
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="text-[10px] uppercase tracking-widest text-steel block mb-1">Longitude</label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={editingPlace.lng}
+                        onChange={e => setEditingPlace({ ...editingPlace, lng: e.target.value })}
+                        className="w-full bg-oil border border-inverse/10 rounded-xl px-4 py-2 text-chrome focus:border-primary/50 outline-none"
+                        required
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="text-[10px] uppercase tracking-widest text-steel block mb-1">Category</label>
+                      <select
+                        value={editingPlace.category}
+                        onChange={e => setEditingPlace({ ...editingPlace, category: e.target.value })}
+                        className="w-full bg-oil border border-inverse/10 rounded-xl px-4 py-2 text-chrome focus:border-primary/50 outline-none"
+                        required
+                      >
+                        <option value="">Select Category</option>
+                        {keywordsConfig.map(kw => (
+                          <option key={kw.id} value={kw.category_name}>{kw.category_name}</option>
+                        ))}
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] uppercase tracking-widest text-steel block mb-1">Rating</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="5"
+                        value={editingPlace.rating}
+                        onChange={e => setEditingPlace({ ...editingPlace, rating: e.target.value })}
+                        className="w-full bg-oil border border-inverse/10 rounded-xl px-4 py-2 text-chrome focus:border-primary/50 outline-none"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-4 mt-2">
+                       <label className="flex items-center gap-2 cursor-pointer group">
+                         <input
+                           type="checkbox"
+                           checked={editingPlace.is_approved}
+                           onChange={e => setEditingPlace({ ...editingPlace, is_approved: e.target.checked })}
+                           className="w-4 h-4 rounded border-inverse/10 text-success focus:ring-success bg-oil"
+                         />
+                         <span className="text-[10px] uppercase tracking-widest text-steel group-hover:text-success transition-colors">Approved</span>
+                       </label>
+                       
+                       <label className="flex items-center gap-2 cursor-pointer group">
+                         <input
+                           type="checkbox"
+                           checked={editingPlace.is_hidden}
+                           onChange={e => setEditingPlace({ ...editingPlace, is_hidden: e.target.checked })}
+                           className="w-4 h-4 rounded border-inverse/10 text-error focus:ring-error bg-oil"
+                         />
+                         <span className="text-[10px] uppercase tracking-widest text-steel group-hover:text-error transition-colors">Hidden</span>
+                       </label>
+
+                       <label className="flex items-center gap-2 cursor-pointer group">
+                         <input
+                           type="checkbox"
+                           checked={editingPlace.needs_revision}
+                           onChange={e => setEditingPlace({ ...editingPlace, needs_revision: e.target.checked })}
+                           className="w-4 h-4 rounded border-inverse/10 text-accent focus:ring-accent bg-oil"
+                         />
+                         <span className="text-[10px] uppercase tracking-widest text-steel group-hover:text-accent transition-colors">Needs Revision</span>
+                       </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] uppercase tracking-widest text-steel block mb-1">Full Address</label>
+                    <textarea
+                      value={editingPlace.full_address || ''}
+                      onChange={e => setEditingPlace({ ...editingPlace, full_address: e.target.value })}
+                      className="w-full bg-oil border border-inverse/10 rounded-xl px-4 py-2 text-chrome focus:border-primary/50 outline-none h-20 resize-none"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-4 border-t border-inverse/10">
+                    <button
+                      type="button"
+                      onClick={() => setEditingPlace(null)}
+                      className="px-6 py-2 border border-inverse/10 rounded-xl text-steel font-bold hover:bg-inverse/5 transition-all"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-8 py-2 bg-primary text-inverse rounded-xl font-bold hover:bg-primary/90 shadow-xl shadow-primary/20 transition-all"
+                    >
+                      Save Changes
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
         </div>
     ) : activeTab === 'badges' ? (
         <div className="space-y-8">
@@ -2447,9 +2620,9 @@ export default function Admin() {
                   <div className="flex items-center justify-between p-6 bg-engine rounded-2xl border border-inverse/5 hover:border-primary/20 transition-all group/label">
                     <div className="flex flex-col gap-1">
                       <span className="text-sm font-medium text-chrome group-hover/label:text-chrome transition-colors uppercase">
-                        Google Maps API
+                        HERE Maps API
                       </span>
-                      <span className="text-[10px] font-mono text-steel uppercase tracking-widest">Enable Google Places Search</span>
+                      <span className="text-[10px] font-mono text-steel uppercase tracking-widest">Enable HERE Autosuggest</span>
                     </div>
                     <button 
                       onClick={async () => {

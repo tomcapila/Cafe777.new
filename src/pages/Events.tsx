@@ -42,6 +42,9 @@ export default function Events() {
     location: '',
     image_url: '',
     category: 'road_trip',
+    price: '',
+    price_starting_from: false,
+    external_link: '',
     participation_stamp_id: null as number | null,
   });
   const [stamps, setStamps] = useState<any[]>([]);
@@ -155,7 +158,7 @@ export default function Events() {
       });
       if (res.ok) {
         setShowModal(false);
-        setEventData({ title: '', description: '', date: '', time: '', location: '', image_url: '', category: 'road_trip', participation_stamp_id: null });
+        setEventData({ title: '', description: '', date: '', time: '', location: '', image_url: '', category: 'road_trip', price: '', external_link: '', participation_stamp_id: null });
         setStampSearchTerm('');
         setIsStampSelectorOpen(false);
         fetchEvents();
@@ -481,10 +484,8 @@ export default function Events() {
                   <div className="space-y-2">
                     <label className="text-[10px] font-mono font-bold text-steel uppercase tracking-widest ml-1">{t('event.field.time')}</label>
                     <input
-                      type="text"
+                      type="time"
                       required
-                      autoCapitalize="sentences"
-                      placeholder={t('event.modal.timePlaceholder')}
                       value={eventData.time || ''}
                       onChange={(e) => setEventData({...eventData, time: e.target.value})}
                       className="input-field"
@@ -500,7 +501,41 @@ export default function Events() {
                     placeholder={t('event.modal.locationPlaceholder')}
                   />
                 </div>
-                
+
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between ml-1">
+                      <label className="text-[10px] font-mono font-bold text-steel uppercase tracking-widest">{t('event.field.price') || 'Price'}</label>
+                      <label className="flex items-center gap-1.5 cursor-pointer group">
+                        <input
+                          type="checkbox"
+                          checked={eventData.price_starting_from}
+                          onChange={(e) => setEventData({...eventData, price_starting_from: e.target.checked})}
+                          className="w-3.5 h-3.5 rounded border-inverse/10 bg-engine/50 text-primary focus:ring-0 focus:ring-offset-0 transition-all cursor-pointer"
+                        />
+                        <span className="text-[9px] font-mono font-bold text-steel group-hover:text-chrome transition-colors uppercase tracking-wider">{t('event.field.priceStartingFrom') || 'Starting from'}</span>
+                      </label>
+                    </div>
+                    <input
+                      type="text"
+                      placeholder={t('event.modal.pricePlaceholder') || 'Free, $20, etc.'}
+                      value={eventData.price || ''}
+                      onChange={(e) => setEventData({...eventData, price: e.target.value})}
+                      className="input-field"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-mono font-bold text-steel uppercase tracking-widest ml-1">{t('event.field.externalLink') || 'External Link'}</label>
+                    <input
+                      type="url"
+                      placeholder={t('event.modal.externalLinkPlaceholder') || 'https://...'}
+                      value={eventData.external_link || ''}
+                      onChange={(e) => setEventData({...eventData, external_link: e.target.value})}
+                      className="input-field"
+                    />
+                  </div>
+                </div>
+
                 <div className="space-y-4">
                   <label className="text-[10px] font-mono font-black text-steel uppercase tracking-widest ml-1">{t('event.field.coverImage')}</label>
                   <div className="flex items-center gap-6">
@@ -752,12 +787,10 @@ function EventListItem({ event, t, isAdmin, handleRSVP, handlePromote, viewMode 
             <MapPin className="w-4 h-4 text-engine" />
             {event.location}
           </div>
-          {event.rsvp_count > 0 && (
-            <div className="flex items-center gap-2 text-primary font-bold bg-primary/5 px-3 py-1 rounded-full border border-primary/10 shadow-sm shadow-primary/5">
-              <Users className="w-4 h-4" />
-              {event.rsvp_count} {t('event.details.ridersAttending')}
-            </div>
-          )}
+          <div className="flex items-center gap-2 text-primary font-bold bg-primary/5 px-3 py-1 rounded-full border border-primary/10 shadow-sm shadow-primary/5">
+            <Users className="w-4 h-4" />
+            {event.rsvp_count + 1} { (event.rsvp_count + 1) === 1 ? t('event.details.riderAttending') : t('event.details.ridersAttending') }
+          </div>
           {event.participation_badge_name && (
             <div className="flex items-center gap-2 text-primary font-bold">
               <ShieldCheck className="w-4 h-4" />

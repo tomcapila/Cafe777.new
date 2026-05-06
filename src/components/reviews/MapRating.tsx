@@ -32,7 +32,7 @@ export default function MapRating({ type, id, onClick, refreshTrigger = 0 }: Map
       <Star className={`w-3 h-3 ${summary.total_reviews > 0 ? 'fill-current' : 'text-steel'}`} />
       <span className="text-[10px] font-mono font-bold text-chrome">
         {summary.total_reviews > 0 
-          ? `${summary.average_rating.toFixed(1)} (${summary.total_reviews})` 
+          ? `${(summary.average_rating || 0).toFixed(1)} (${summary.total_reviews})` 
           : t('review.leave')}
       </span>
     </button>

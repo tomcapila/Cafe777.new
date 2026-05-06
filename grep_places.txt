@@ -1,0 +1,67 @@
+23:  const [activeTab, setActiveTab] = useState<'users' | 'events' | 'submissions' | 'event_photos' | 'settings' | 'badges' | 'contests' | 'ambassadors' | 'places'>(
+32:  const [placesControl, setPlacesControl] = useState<any[]>([]);
+51:  const [placesSearchTerm, setPlacesSearchTerm] = useState('');
+52:  const [placesCategoryFilter, setPlacesCategoryFilter] = useState('all');
+53:  const [selectedPlaces, setSelectedPlaces] = useState<string[]>([]);
+133:    if (tab && ['users', 'events', 'submissions', 'event_photos', 'settings', 'badges', 'contests', 'ambassadors', 'places'].includes(tab)) {
+372:  const fetchPlacesControl = async () => {
+375:      const res = await fetchWithAuth('/api/admin/places');
+378:        setPlacesControl(data);
+402:          fetchPlacesControl()
+410:  const filteredPlacesControl = placesControl.filter(place => {
+411:    const matchesSearch = place.name.toLowerCase().includes(placesSearchTerm.toLowerCase());
+412:    const matchesCategory = placesCategoryFilter === 'all' || place.category === placesCategoryFilter;
+858:            onClick={() => handleTabChange('places')}
+860:              activeTab === 'places' ? 'bg-primary text-inverse shadow-xl shadow-primary/20' : 'text-steel hover:text-chrome'
+864:            Places
+1692:    ) : activeTab === 'places' ? (
+1695:            <h2 className="text-2xl font-display font-black uppercase italic text-chrome">Places Control</h2>
+1898:            {/* Places Control */}
+1901:                <h3 className="text-lg font-bold text-chrome">Places Control</h3>
+1907:                      placeholder="Search places..."
+1908:                      value={placesSearchTerm}
+1909:                      onChange={(e) => setPlacesSearchTerm(e.target.value)}
+1914:                    value={placesCategoryFilter}
+1915:                    onChange={(e) => setPlacesCategoryFilter(e.target.value)}
+1936:                          const places = JSON.parse(text);
+1938:                          const res = await fetchWithAuth('/api/admin/places/bulk-import', {
+1941:                            body: JSON.stringify({ places })
+1945:                            showNotification('success', `Successfully imported ${places.length} places`);
+1946:                            fetchPlacesControl();
+1948:                            showNotification('error', 'Failed to import places');
+1962:              {selectedPlaces.length > 0 && (
+1964:                  <span className="text-sm font-bold text-primary">{selectedPlaces.length} places selected</span>
+1971:                          await Promise.all(selectedPlaces.map(id => 
+1972:                            fetchWithAuth(`/api/admin/places/${id}/control`, {
+1978:                          showNotification('success', `Approved ${selectedPlaces.length} places`);
+1979:                          setSelectedPlaces([]);
+1980:                          await fetchPlacesControl();
+1997:                          await Promise.all(selectedPlaces.map(id => 
+1998:                            fetchWithAuth(`/api/admin/places/${id}/control`, {
+2004:                          showNotification('success', `Hidden ${selectedPlaces.length} places`);
+2005:                          setSelectedPlaces([]);
+2006:                          await fetchPlacesControl();
+2019:                      onClick={() => setSelectedPlaces([])}
+2028:              {placesControl.length > 0 && (
+2032:                    checked={filteredPlacesControl.length > 0 && filteredPlacesControl.every(p => selectedPlaces.includes(p.place_id))}
+2035:                        const newSelected = [...new Set([...selectedPlaces, ...filteredPlacesControl.map(p => p.place_id)])];
+2036:                        setSelectedPlaces(newSelected);
+2038:                        const filteredIds = filteredPlacesControl.map(p => p.place_id);
+2039:                        setSelectedPlaces(selectedPlaces.filter(id => !filteredIds.includes(id)));
+2045:                    {filteredPlacesControl.length > 0 && filteredPlacesControl.every(p => selectedPlaces.includes(p.place_id)) ? 'Deselect All Filtered' : 'Select All Filtered'}
+2051:                {filteredPlacesControl.map(place => (
+2052:                  <div key={place.place_id} className={`bg-inverse/5 rounded-xl p-4 transition-all border ${selectedPlaces.includes(place.place_id) ? 'border-primary/50 bg-primary/5' : 'border-transparent'}`}>
+2057:                          checked={selectedPlaces.includes(place.place_id)}
+2060:                              setSelectedPlaces(prev => [...prev, place.place_id]);
+2062:                              setSelectedPlaces(prev => prev.filter(id => id !== place.place_id));
+2087:                              const res = await fetchWithAuth(`/api/admin/places/${place.place_id}/control`, {
+2096:                              if (res.ok) fetchPlacesControl();
+2108:                              const res = await fetchWithAuth(`/api/admin/places/${place.place_id}/control`, {
+2117:                              if (res.ok) fetchPlacesControl();
+2135:                              // We need to update the category in places_cache, as that's where it's stored.
+2136:                              // Or we could have an override in places_control.
+2138:                              const res = await fetchWithAuth(`/api/admin/places/${place.place_id}/category`, {
+2143:                              if (res.ok) fetchPlacesControl();
+2160:                              const res = await fetchWithAuth(`/api/admin/places/${place.place_id}/control`, {
+2169:                              if (res.ok) fetchPlacesControl();
+2455:                      <span className="text-[10px] font-mono text-steel uppercase tracking-widest">Enable Google Places Search</span>

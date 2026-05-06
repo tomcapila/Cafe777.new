@@ -19,7 +19,7 @@ export default function NotificationsPage() {
 
   const fetchNotifications = async (userId: number) => {
     try {
-      const res = await fetchWithAuth(`/api/notifications?user_id=${userId}`);
+      const res = await fetchWithAuth(`/api/user-alerts?user_id=${userId}`);
       if (res.ok) {
         const data = await res.json();
         setNotifications(data);
@@ -33,7 +33,7 @@ export default function NotificationsPage() {
 
   const markAsRead = async (id: number) => {
     try {
-      await fetchWithAuth(`/api/notifications/${id}/read`, { method: 'POST' });
+      await fetchWithAuth(`/api/user-alerts/${id}/read`, { method: 'POST' });
       fetchNotifications(currentUser.id);
     } catch (err: any) {
       if (err.name !== 'AbortError' && !err.message?.includes('NetworkError') && !err.message?.includes('Failed to fetch')) {

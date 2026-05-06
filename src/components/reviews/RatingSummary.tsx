@@ -23,10 +23,10 @@ export default function RatingSummary({ target_type, target_id, refreshTrigger =
   return (
     <div className="glass-card p-6 flex items-center justify-between">
       <div>
-        <h3 className="text-2xl font-bold">{summary.average_rating.toFixed(1)}</h3>
+        <h3 className="text-2xl font-bold">{(summary.average_rating || 0).toFixed(1)}</h3>
         <div className="flex items-center gap-1">
           {[1, 2, 3, 4, 5].map(i => (
-            <Star key={i} className={`w-5 h-5 ${i <= Math.round(summary.average_rating) ? 'fill-warning text-warning' : 'text-steel'}`} />
+            <Star key={i} className={`w-5 h-5 ${i <= Math.round(summary.average_rating || 0) ? 'fill-warning text-warning' : 'text-steel'}`} />
           ))}
         </div>
         <p className="text-steel">{summary.total_reviews} {t('review.title')}</p>

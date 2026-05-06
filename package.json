@@ -6,9 +6,9 @@
   "scripts": {
     "dev": "tsx server.ts",
     "start": "node dist/server.js",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=esm --outfile=dist/server.js --external:express --external:better-sqlite3 --external:multer --external:qrcode --external:jsonwebtoken --external:bcryptjs --external:mailersend --external:google-auth-library --external:vite",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=esm --outfile=dist/server.js --external:express --external:better-sqlite3 --external:multer --external:qrcode --external:jsonwebtoken --external:bcryptjs --external:mailersend --external:google-auth-library --external:vite --external:firebase-admin",
     "preview": "vite preview",
-    "clean": "rm -rf dist",
+    "test-routes": "node ./test_routes.cjs",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
@@ -32,6 +32,7 @@
     "express": "^4.21.2",
     "express-rate-limit": "^8.3.2",
     "firebase": "^12.11.0",
+    "firebase-admin": "^13.8.0",
     "framer-motion": "^12.34.3",
     "google-auth-library": "^10.6.2",
     "helmet": "^8.1.0",

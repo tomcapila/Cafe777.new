@@ -21,6 +21,7 @@ interface OnboardingData {
   bio: string;
   location: string;
   motorcycle: string;
+  bloodType?: string;
   businessName: string;
   businessType: string;
   interests: string[];
@@ -51,13 +52,89 @@ export default function Onboarding() {
   const location = useLocation();
   const { t } = useLanguage();
   
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   
   // Check if user came from Google OAuth
   const isGoogleAuth = location.state?.fromGoogleAuth;
   const googleData = location.state?.googleData;
+
+  const handleCustomGoogleLogin = () => {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    if (!clientId || clientId === "your-google-client-id.apps.googleusercontent.com") {
+      setError('Missing Google Client ID. Please configure VITE_GOOGLE_CLIENT_ID in AI Studio Config/Secrets.');
+      return;
+    }
+    
+    const redirectUri = window.location.origin + '/auth/callback';
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=id_token&scope=openid%20email%20profile&nonce=random_nonce_${Date.now()}`;
+    
+    window.open(authUrl, 'google_oauth', 'width=500,height=600');
+  };
+
+  const handleGoogleResponse = async (response: any) => {
+    setLoading(true);
+    setError('');
+    try {
+      const referralCode = new URLSearchParams(window.location.search).get('ref');
+      const res = await fetch('/api/auth/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          credential: response.credential,
+          referralCode
+        }),
+      });
+
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await res.text();
+        console.error("Non-JSON response from Google Auth:", text);
+        throw new Error(`Server returned an error: ${res.statusText}. Check console.`);
+      }
+
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Google registration failed');
+
+      localStorage.setItem('user', JSON.stringify(result.user));
+      localStorage.setItem('token', result.token);
+      window.dispatchEvent(new Event('auth-change'));
+      
+      if (result.isNewUser) {
+        // Since we are already in onboarding, we can just jump to step 1 but set googleData
+        setData(prev => ({
+          ...prev,
+          username: result.googleData.username || prev.username,
+          email: result.googleData.email || prev.email,
+          fullName: result.googleData.name || prev.fullName
+        }));
+        // We set location.state artificially so useEffect will trigger correctly on step 2
+        window.history.replaceState({ 
+          fromGoogleAuth: true,
+          googleData: result.googleData
+        }, '');
+        setStep(1); // Proceed to profile type selection
+      } else {
+        navigate(`/profile/${result.user.username}`);
+      }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const handleMessage = (e: MessageEvent) => {
+      if (!e.origin.includes('localhost') && !e.origin.endsWith('.run.app')) return;
+      if (e.data?.type === 'OAUTH_AUTH_SUCCESS' && e.data?.credential) {
+        handleGoogleResponse({ credential: e.data.credential });
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
 
   const [data, setData] = useState<OnboardingData>({
     type: null,
@@ -68,11 +145,12 @@ export default function Onboarding() {
     bio: '',
     location: '',
     motorcycle: '',
+    bloodType: '',
     businessName: '',
     businessType: '',
     interests: [],
     services: [],
-    referralCode: ''
+    referralCode: new URLSearchParams(window.location.search).get('ref') || ''
   });
 
   const totalSteps = data.type === 'rider' ? 5 : 5;
@@ -95,19 +173,19 @@ export default function Onboarding() {
       
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(data.email)) {
-        setError("Invalid email format");
+        setError(t('onboarding.invalidEmail'));
         return;
       }
 
       const usernameRegex = /^[a-zA-Z0-9_]{3,30}$/;
       if (!usernameRegex.test(data.username)) {
-        setError("Username must be 3-30 characters and contain only letters, numbers, and underscores");
+        setError(t('onboarding.invalidUsername'));
         return;
       }
 
       const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
       if (!passwordRegex.test(data.password)) {
-        setError("Password must contain at least 8 characters, one uppercase letter, one lowercase letter, one number and one special character");
+        setError(t('onboarding.invalidPassword'));
         return;
       }
     }
@@ -117,7 +195,7 @@ export default function Onboarding() {
         return;
       }
       if (data.fullName.length < 2) {
-        setError("Full name must be at least 2 characters");
+        setError(t('onboarding.invalidFullName'));
         return;
       }
     }
@@ -127,13 +205,13 @@ export default function Onboarding() {
         return;
       }
     }
-    if (step === 4 && data.type === 'rider' && !isGoogleAuth) {
+    if (step === 4 && data.type === 'rider') {
       if (!data.motorcycle) {
         setError(t('onboarding.errorMotorcycle'));
         return;
       }
     }
-    if (step === 5 && !isGoogleAuth) {
+    if (step === 5) {
       if (data.type === 'rider' && data.interests.length === 0) {
         setError(t('onboarding.errorInterest'));
         return;
@@ -248,10 +326,17 @@ export default function Onboarding() {
         }));
         window.dispatchEvent(new Event('auth-change'));
       } else if (isGoogleAuth) {
-        const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+        let currentUser = {};
+        try {
+          const stored = localStorage.getItem('user');
+          if (stored) currentUser = JSON.parse(stored);
+        } catch (e) {
+          console.error("Corrupted localStorage user:", e);
+        }
+        
         localStorage.setItem('user', JSON.stringify({
           ...currentUser,
-          username: result.username || currentUser.username,
+          username: result.username || (currentUser as any).username,
           type: data.type,
           status: 'active'
         }));
@@ -315,6 +400,7 @@ export default function Onboarding() {
             CAFE<span className="text-primary">777</span>
           </h1>
           <p className="text-steel">
+            {step === 0 && t('onboarding.step0Desc') || 'Choose how you want to join Cafe777'}
             {step === 1 && t('onboarding.step1Desc')}
             {step === 2 && t('onboarding.step2Desc')}
             {step === 3 && t('onboarding.step3Desc')}
@@ -325,7 +411,7 @@ export default function Onboarding() {
           </p>
         </div>
 
-        {renderStepIndicator()}
+        {step > 0 && renderStepIndicator()}
 
         {error && (
           <div className="mb-6 p-4 bg-error/10 border border-error/50 rounded-xl text-error text-sm text-center">
@@ -335,6 +421,48 @@ export default function Onboarding() {
 
         <div className="bg-oil/80 backdrop-blur-xl border border-inverse/10 rounded-3xl p-6 shadow-2xl">
           <AnimatePresence mode="wait">
+            {/* STEP 0: Registration Method */}
+            {step === 0 && (
+              <motion.div
+                key="step0"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="space-y-4"
+              >
+                <button
+                  type="button"
+                  onClick={handleCustomGoogleLogin}
+                  disabled={loading}
+                  className="w-full flex items-center justify-center gap-3 px-4 py-4 border border-inverse/20 bg-engine shadow-sm rounded-2xl hover:bg-inverse/5 hover:border-primary/50 transition-all text-inverse font-bold"
+                >
+                  <svg viewBox="0 0 24 24" className="w-5 h-5">
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                  </svg>
+                  <span>{loading ? t('onboarding.processing') : t('onboarding.regWithGoogle')}</span>
+                </button>
+
+                <div className="relative flex items-center py-2">
+                  <div className="flex-grow border-t border-inverse/10"></div>
+                  <span className="flex-shrink-0 mx-4 text-steel text-[10px] uppercase tracking-widest font-mono">or</span>
+                  <div className="flex-grow border-t border-inverse/10"></div>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => setStep(1)}
+                  className="w-full flex items-center justify-center gap-3 px-4 py-4 bg-primary text-inverse border border-primary/20 shadow-sm rounded-2xl hover:bg-primary/90 transition-all font-bold"
+                >
+                  <User className="w-5 h-5 text-inverse/70" />
+                  <span>{t('onboarding.regWithEmail')}</span>
+                </button>
+              </motion.div>
+            )}
+
             {/* STEP 1: Profile Type */}
             {step === 1 && (
               <motion.div
@@ -491,17 +619,37 @@ export default function Onboarding() {
                 className="space-y-4"
               >
                 {data.type === 'rider' ? (
-                  <div>
-                    <label className="block text-xs font-bold text-steel uppercase tracking-wider mb-2">{t('profile.motorcycle') || 'Current Motorcycle'}</label>
-                    <input
-                      type="text"
-                      autoCapitalize="sentences"
-                      value={data.motorcycle || ''}
-                      onChange={(e) => setData({ ...data, motorcycle: e.target.value })}
-                      className="w-full bg-oil/50 border border-inverse/10 rounded-xl px-4 py-3 text-chrome focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
-                      placeholder={t('onboarding.motorcyclePlaceholder')}
-                    />
-                    <p className="text-xs text-steel mt-2">{t('onboarding.motorcycleHint')}</p>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-steel uppercase tracking-wider mb-2">{t('profile.motorcycle') || 'Current Motorcycle'}</label>
+                      <input
+                        type="text"
+                        autoCapitalize="sentences"
+                        value={data.motorcycle || ''}
+                        onChange={(e) => setData({ ...data, motorcycle: e.target.value })}
+                        className="w-full bg-oil/50 border border-inverse/10 rounded-xl px-4 py-3 text-chrome focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+                        placeholder={t('onboarding.motorcyclePlaceholder')}
+                      />
+                      <p className="text-xs text-steel mt-2">{t('onboarding.motorcycleHint')}</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-steel uppercase tracking-wider mb-2">{t('profile.bloodType') || 'Blood Type (Optional)'}</label>
+                      <select
+                        value={data.bloodType || ''}
+                        onChange={(e) => setData({ ...data, bloodType: e.target.value })}
+                        className="w-full bg-oil/50 border border-inverse/10 rounded-xl px-4 py-3 text-chrome focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors appearance-none"
+                      >
+                        <option value="">{t('onboarding.selectBloodType') || 'Select Blood Type'}</option>
+                        <option value="A+">A+</option>
+                        <option value="A-">A-</option>
+                        <option value="B+">B+</option>
+                        <option value="B-">B-</option>
+                        <option value="AB+">AB+</option>
+                        <option value="AB-">AB-</option>
+                        <option value="O+">O+</option>
+                        <option value="O-">O-</option>
+                      </select>
+                    </div>
                   </div>
                 ) : (
                   <>

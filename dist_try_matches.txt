@@ -1,0 +1,379 @@
+169:        try {
+743:        try {
+1618:var assertDirectiveValueEntryIsValid = (directiveName, directiveValueEntry) => {
+1619:  if (SHOULD_BE_QUOTED.has(directiveValueEntry) || directiveValueEntry.startsWith("nonce-") || directiveValueEntry.startsWith("sha256-") || directiveValueEntry.startsWith("sha384-") || directiveValueEntry.startsWith("sha512-")) {
+1620:    throw new Error(`Content-Security-Policy received an invalid directive value for ${JSON.stringify(directiveName)}. ${JSON.stringify(directiveValueEntry)} should be quoted`);
+1666:      assertDirectiveValueEntryIsValid(directiveName, element);
+1692:        assertDirectiveValueEntryIsValid(directiveName, newElement);
+2362:var setRetryAfterHeader = (response, info, windowMs) => {
+2365:  response.setHeader("Retry-After", resetSeconds.toString());
+2770:        try {
+2848:    message: "Too many requests, please try again later.",
+2914:  try {
+2940:      try {
+3038:          setRetryAfterHeader(response, info, config2.windowMs);
+3184:  globalRegistry: () => globalRegistry,
+3254:  registry: () => registry,
+3383:  $ZodRegistry: () => $ZodRegistry,
+3551:  globalRegistry: () => globalRegistry,
+3563:  registry: () => registry,
+3864:  try {
+5402:      try {
+5418:      try {
+5468:    try {
+5570:    try {
+5597:    try {
+5625:  try {
+5676:  try {
+5728:      try {
+5756:      try {
+5777:      try {
+5886:      try {
+6593:          const retryResult = def.keyType._zod.run({ value: Number(key), issues: [] }, ctx);
+6594:          if (retryResult instanceof Promise) {
+6597:          if (retryResult.issues.length === 0) {
+6598:            keyResult = retryResult;
+9092:  const typeEntry = (t) => t ? TypeNames[t] : void 0;
+9094:    const e = typeEntry(t);
+9101:    const e = typeEntry(t);
+9227:        const nounEntry = FormatDictionary[_issue.format];
+9228:        const noun = nounEntry?.label ?? _issue.format;
+9229:        const gender = nounEntry?.gender ?? "m";
+11654:    regex: "regulj\xE4rt uttryck",
+12855:var $ZodRegistry = class {
+12895:function registry() {
+12896:  return new $ZodRegistry();
+12898:(_a = globalThis).__zod_globalRegistry ?? (_a.__zod_globalRegistry = registry());
+12899:var globalRegistry = globalThis.__zod_globalRegistry;
+13850:      const existing = globalRegistry.get(inst) ?? {};
+13851:      globalRegistry.add(inst, { ...existing, description });
+13863:      const existing = globalRegistry.get(inst) ?? {};
+13864:      globalRegistry.add(inst, { ...existing, ...metadata });
+13949:    metadataRegistry: params?.metadata ?? globalRegistry,
+14003:  const meta3 = ctx.metadataRegistry.get(schema);
+14021:  for (const entry of ctx.seen.entries()) {
+14022:    const id = ctx.metadataRegistry.get(entry[0])?.id;
+14025:      if (existing && existing !== entry[0]) {
+14028:      idToSchema.set(id, entry[0]);
+14031:  const makeURI = (entry) => {
+14034:      const externalId = ctx.external.registry.get(entry[0])?.id;
+14039:      const id = entry[1].defId ?? entry[1].schema.id ?? `schema${ctx.counter++}`;
+14040:      entry[1].defId = id;
+14043:    if (entry[1] === root) {
+14048:    const defId = entry[1].schema.id ?? `__schema${ctx.counter++}`;
+14051:  const extractToDef = (entry) => {
+14052:    if (entry[1].schema.$ref) {
+14055:    const seen = entry[1];
+14056:    const { ref, defId } = makeURI(entry);
+14067:    for (const entry of ctx.seen.entries()) {
+14068:      const seen = entry[1];
+14076:  for (const entry of ctx.seen.entries()) {
+14077:    const seen = entry[1];
+14078:    if (schema === entry[0]) {
+14079:      extractToDef(entry);
+14083:      const ext = ctx.external.registry.get(entry[0])?.id;
+14084:      if (schema !== entry[0] && ext) {
+14085:        extractToDef(entry);
+14089:    const id = ctx.metadataRegistry.get(entry[0])?.id;
+14091:      extractToDef(entry);
+14095:      extractToDef(entry);
+14100:        extractToDef(entry);
+14172:  for (const entry of [...ctx.seen.entries()].reverse()) {
+14173:    flattenRef(entry[0]);
+14186:    const id = ctx.external.registry.get(schema)?.id;
+14193:  for (const entry of ctx.seen.entries()) {
+14194:    const seen = entry[1];
+14209:  try {
+14728:  try {
+14810:    const registry2 = input;
+14813:    for (const entry of registry2._idmap.entries()) {
+14814:      const [_, schema] = entry;
+14819:      registry: registry2,
+14824:    for (const entry of registry2._idmap.entries()) {
+14825:      const [key, schema] = entry;
+14846:  get metadataRegistry() {
+14847:    return this.ctx.metadataRegistry;
+15281:    globalRegistry.add(cl, { description });
+15286:      return globalRegistry.get(inst)?.description;
+15292:      return globalRegistry.get(inst);
+15295:    globalRegistry.add(cl, args[0]);
+16777:    ctx.registry.add(baseSchema, extraMeta);
+16793:    registry: params?.registry ?? globalRegistry
+16908:  try {
+16919:    console.error("OSM fetch failed, retrying...", e);
+16920:    const retryController = new AbortController();
+16921:    const retryTimeoutId = setTimeout(() => retryController.abort(), 2e4);
+16922:    try {
+16927:        signal: retryController.signal
+16930:      clearTimeout(retryTimeoutId);
+17007:    try {
+17112:try {
+17154:      try {
+17602:    country TEXT,
+17732:try {
+17736:try {
+17740:try {
+17744:try {
+17748:try {
+17752:try {
+17767:try {
+17777:try {
+17787:try {
+17791:try {
+17795:try {
+17800:try {
+17805:try {
+17818:try {
+17822:try {
+17826:try {
+17830:try {
+17834:try {
+17838:try {
+17842:try {
+17846:try {
+17850:try {
+17854:try {
+17858:try {
+17862:try {
+17866:try {
+17870:try {
+17874:try {
+17878:try {
+17882:try {
+17886:try {
+17890:try {
+17894:try {
+17898:try {
+17902:try {
+17906:try {
+17910:try {
+17914:try {
+17918:try {
+17922:try {
+17926:try {
+17930:try {
+17934:try {
+17938:try {
+17942:try {
+17946:try {
+17950:try {
+17954:try {
+17973:try {
+18146:  try {
+18166:    try {
+18175:  try {
+18232:    message: { error: "Too many requests, please try again later." }
+18243:    message: { error: "Too many authentication attempts, please try again in an hour." }
+18272:    try {
+18288:    try {
+18297:        try {
+18319:      try {
+18390:    try {
+18450:    try {
+18452:      try {
+18465:          try {
+18512:    try {
+18578:    try {
+18600:      try {
+18620:      try {
+18632:    try {
+18657:      try {
+18673:    try {
+18705:      try {
+18736:    try {
+18777:    try {
+18786:    try {
+18818:    try {
+18840:    try {
+18859:    try {
+18885:    try {
+18907:    try {
+18927:    try {
+18932:      try {
+18949:    try {
+18959:      try {
+18971:    try {
+18983:    try {
+18992:      try {
+19006:    try {
+19014:      try {
+19027:    try {
+19029:      try {
+19042:    try {
+19066:    try {
+19098:        try {
+19137:    try {
+19148:      try {
+19170:    try {
+19183:    try {
+19185:      try {
+19214:      try {
+19243:            lat: p.geometry.location.lat,
+19244:            lng: p.geometry.location.lng,
+19258:            try {
+19274:        try {
+19294:            try {
+19369:      try {
+19405:      try {
+19435:      try {
+19459:    try {
+19482:    try {
+19494:    try {
+19539:    try {
+19566:    try {
+19583:    try {
+19600:    try {
+19619:    try {
+19633:    try {
+19655:      try {
+19679:    try {
+19692:      try {
+19705:    try {
+19712:      try {
+19728:    try {
+19739:    try {
+19753:    try {
+19765:    try {
+19790:      try {
+19832:    try {
+19838:      try {
+19854:    try {
+19868:    try {
+19883:    try {
+19899:      try {
+19921:    try {
+19963:      try {
+19992:    try {
+20008:    try {
+20025:    try {
+20035:    try {
+20052:      try {
+20075:    try {
+20122:      try {
+20147:    try {
+20156:      try {
+20184:    try {
+20307:      try {
+20385:    try {
+20425:    try {
+20452:    try {
+20494:    try {
+20512:    try {
+20547:      try {
+20577:    try {
+20582:        try {
+20605:        try {
+20627:      try {
+20636:    try {
+20647:      try {
+20659:    try {
+20670:    try {
+20690:    try {
+20701:      try {
+20716:    try {
+20732:      try {
+20745:    try {
+20756:      try {
+20770:    try {
+20793:      try {
+20799:    try {
+20841:      try {
+20847:    try {
+20880:    try {
+20909:      try {
+20927:    try {
+20949:      try {
+20977:    try {
+21005:    try {
+21013:      try {
+21044:            try {
+21074:            try {
+21094:    try {
+21105:        try {
+21117:        try {
+21130:    try {
+21138:    try {
+21143:        try {
+21183:    try {
+21198:    try {
+21235:    try {
+21250:    try {
+21265:    try {
+21279:    try {
+21302:    try {
+21322:    try {
+21332:    try {
+21344:      try {
+21353:    try {
+21375:          service: last_service || "Initial Entry",
+21381:        try {
+21386:      try {
+21401:      try {
+21407:    try {
+21424:      try {
+21436:    try {
+21450:      try {
+21464:    try {
+21482:      try {
+21496:      try {
+21506:    try {
+21556:    try {
+21559:        try {
+21576:      try {
+21615:      try {
+21669:    try {
+21683:    try {
+21696:    try {
+21713:      try {
+21764:    try {
+21789:    try {
+21809:      try {
+21823:    try {
+21836:      try {
+21850:    try {
+21863:        try {
+21893:    try {
+21906:      try {
+21919:    try {
+21933:    try {
+21954:    try {
+21968:    try {
+21984:    try {
+21999:    try {
+22017:    const { name, city, country, description } = req.body;
+22018:    try {
+22023:      const info = db.prepare("INSERT INTO club_chapters (club_id, name, city, country, description) VALUES (?, ?, ?, ?, ?)").run(clubId, name, city, country, description);
+22035:    try {
+22047:    try {
+22062:      try {
+22076:    try {
+22103:    try {
+22128:      try {
+22149:    try {
+22165:      try {
+22184:    try {
+22199:      try {
+22241:    try {
+22262:    try {
+22281:    try {
+22300:    try {
+22312:    try {
+22346:      try {
+22364:    try {
+22385:    try {
+22409:    try {
+22423:    try {
+22434:    try {
+22446:    try {
+22455:    try {
+22484:    try {
+22561:    try {
+22626:    try {
+22656:    try {
+22683:    try {
+22695:    try {
+22707:    try {
+22719:    try {
+22733:    try {
+22745:    try {
+22762:    try {

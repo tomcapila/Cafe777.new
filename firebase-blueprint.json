@@ -2,14 +2,34 @@
   "entities": {
     "User": {
       "title": "User",
-      "description": "Represents a user in the system.",
+      "description": "Represents a user (rider or ecosystem) in the system.",
       "type": "object",
       "properties": {
-        "uid": { "type": "string", "description": "Firebase Auth UID" },
-        "displayName": { "type": "string", "description": "User display name" },
-        "photoURL": { "type": "string", "description": "User profile photo URL" }
+        "uid": { "type": "string", "description": "Auto-increment ID or String ID" },
+        "username": { "type": "string" },
+        "email": { "type": "string" },
+        "password": { "type": "string" },
+        "google_id": { "type": "string" },
+        "type": { "type": "string", "enum": ["rider", "ecosystem"] },
+        "status": { "type": "string", "enum": ["active", "banned", "pending"] },
+        "role": { "type": "string", "enum": ["user", "admin", "moderator"] },
+        "plan": { "type": "string", "enum": ["freemium", "premium"] },
+        "fullName": { "type": "string" },
+        "location": { "type": "string" },
+        "bio": { "type": "string" },
+        "profile_picture_url": { "type": "string" },
+        "cover_photo_url": { "type": "string" },
+        "reputation": { "type": "number" },
+        "motorcycle": { "type": "string" },
+        "businessName": { "type": "string" },
+        "businessType": { "type": "string" },
+        "interests": { "type": "array", "items": { "type": "string" } },
+        "services": { "type": "array", "items": { "type": "string" } },
+        "referral_code": { "type": "string" },
+        "referred_by": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" }
       },
-      "required": ["uid", "displayName"]
+      "required": ["username", "email", "type"]
     },
     "Chat": {
       "title": "Chat",

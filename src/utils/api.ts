@@ -9,6 +9,12 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}) {
   const response = await fetch(url, {
     ...options,
     headers,
+  }).catch(err => {
+    // Suppress console.error for expected polling network drops (e.g. server idle shutdown or restart)
+    if (err.name !== 'AbortError' && !err.message?.includes('NetworkError') && !err.message?.includes('Failed to fetch')) {
+      console.error(`fetchWithAuth strictly failed on network level for URL: ${url}`, err);
+    }
+    throw err;
   });
 
   if (response.status === 401) {

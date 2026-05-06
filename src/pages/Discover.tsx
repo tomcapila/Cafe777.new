@@ -3,7 +3,8 @@ import React, { useEffect, useState, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { Building2, MapPin, Wrench, ShoppingBag, Coffee, Beer, Users, Route, Flag, Settings, Shield, Star, Award, ChevronUp, ChevronDown, Search, Filter, Upload, X } from 'lucide-react';
+import * as LucideIcons from 'lucide-react';
+import { Building2, MapPin, Wrench, ShoppingBag, Coffee, Beer, Users, Route, Flag, Settings, Shield, Star, Award, ChevronUp, ChevronDown, Search, Filter, Upload, X, AlertCircle } from 'lucide-react';
 import { renderToString } from 'react-dom/server';
 import { useLanguage } from '../contexts/LanguageContext';
 import RecommendButton from '../components/RecommendButton';
@@ -22,31 +23,14 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-const categoryConfig: Record<string, { color: string, icon: any }> = {
-  dealership: { color: '#3b82f6', icon: <Building2 className="w-4 h-4 text-chrome" /> },
-  gear_shop: { color: '#10b981', icon: <ShoppingBag className="w-4 h-4 text-chrome" /> },
-  parts_store: { color: '#eab308', icon: <Settings className="w-4 h-4 text-chrome" /> },
-  repair: { color: '#f97316', icon: <Wrench className="w-4 h-4 text-chrome" /> },
-  meeting_spot: { color: '#8b5cf6', icon: <Users className="w-4 h-4 text-chrome" /> },
-  ride_spot: { color: '#ec4899', icon: <MapPin className="w-4 h-4 text-chrome" /> },
-  biker_cafe: { color: '#a8a29e', icon: <Coffee className="w-4 h-4 text-chrome" /> },
-  biker_bar: { color: '#ef4444', icon: <Beer className="w-4 h-4 text-chrome" /> },
-  ride_stop: { color: '#14b8a6', icon: <Flag className="w-4 h-4 text-chrome" /> },
-  motoclub: { color: '#52525b', icon: <Shield className="w-4 h-4 text-chrome" /> },
-  barbershop: { color: '#f43f5e', icon: <Building2 className="w-4 h-4 text-chrome" /> },
-  band: { color: '#8b5cf6', icon: <Users className="w-4 h-4 text-chrome" /> },
-  other: { color: '#a8a29e', icon: <MapPin className="w-4 h-4 text-chrome" /> },
-  ride_route: { color: '#06b6d4', icon: <Route className="w-4 h-4 text-chrome" /> },
-  passport_stamp: { color: '#f59e0b', icon: <Award className="w-4 h-4 text-chrome" /> },
-  ambassador: { color: '#8b5cf6', icon: <Star className="w-4 h-4 text-chrome" /> },
-};
+  // Replaced with dynamic categories
 
 // Memoized icon creator to prevent constant re-renders and Leaflet internal errors
 const iconCache: Record<string, L.DivIcon> = {};
-const getCustomIcon = (category: string) => {
+const getCustomIcon = (category: string, configMap: Record<string, any>) => {
   if (iconCache[category]) return iconCache[category];
 
-  const config = categoryConfig[category] || { color: '#f97316', icon: <MapPin className="w-4 h-4 text-chrome" /> };
+  const config = configMap[category] || { color: '#f97316', icon: <MapPin className="w-4 h-4 text-chrome" /> };
   const iconHtml = renderToString(
     <div style={{ backgroundColor: config.color }} className="w-8 h-8 rounded-full flex items-center justify-center shadow-lg border-2 border-inverse">
       {config.icon}
@@ -112,12 +96,6 @@ export default function MapView() {
 
   const mockRoutes = [];
 
-  const filterGroupsPitStop = {
-    'discover.groups.ecosystems': ['dealership', 'gear_shop', 'parts_store', 'repair', 'barbershop', 'other', 'meeting_spot', 'biker_cafe', 'biker_bar', 'band'],
-    'discover.groups.community': ['motoclub', 'ambassador'],
-    'discover.groups.events': ['passport_stamp']
-  };
-
   const filterGroupsRide = {
     'discover.groups.routes': ['ride_route'],
     'discover.groups.spots': ['ride_spot', 'ride_stop']
@@ -128,12 +106,65 @@ export default function MapView() {
   const [ecosystems, setEcosystems] = useState<any[]>([]);
   const [ambassadors, setAmbassadors] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  const [dynamicCategories, setDynamicCategories] = useState<any[]>([]);
+  const [categoryConfig, setCategoryConfig] = useState<Record<string, { color: string, icon: any }>>({
+    motoclub: { color: '#52525b', icon: <LucideIcons.Shield className="w-4 h-4 text-chrome" /> },
+    ambassador: { color: '#8b5cf6', icon: <LucideIcons.Star className="w-4 h-4 text-chrome" /> },
+    passport_stamp: { color: '#f59e0b', icon: <LucideIcons.Award className="w-4 h-4 text-chrome" /> },
+    ride_route: { color: '#06b6d4', icon: <LucideIcons.Route className="w-4 h-4 text-chrome" /> },
+    ride_spot: { color: '#ec4899', icon: <LucideIcons.MapPin className="w-4 h-4 text-chrome" /> },
+    ride_stop: { color: '#14b8a6', icon: <LucideIcons.Flag className="w-4 h-4 text-chrome" /> },
+    other: { color: '#a8a29e', icon: <LucideIcons.MapPin className="w-4 h-4 text-chrome" /> },
+  });
+
+  const [filterGroupsPitStop, setFilterGroupsPitStop] = useState({
+    'discover.groups.ecosystems': ['other'],
+    'discover.groups.community': ['motoclub', 'ambassador'],
+    'discover.groups.events': ['passport_stamp']
+  });
+
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setLoading(false);
-    }, 15000);
-    return () => clearTimeout(timer);
+    fetch('/api/keywords')
+      .then(res => res.json())
+      .then((data: any[]) => {
+        setDynamicCategories(data);
+        const newConfig = { ...categoryConfig };
+        const ecosystemKeys: string[] = [];
+        data.forEach(kw => {
+          const cat = kw.category_name;
+          ecosystemKeys.push(cat);
+          const rawIcon = kw.icon || 'MapPin';
+          const IconComp = (LucideIcons as any)[rawIcon] || LucideIcons.MapPin;
+          newConfig[cat] = {
+            color: '#3b82f6', // Use primary or random color? 
+            icon: <IconComp className="w-4 h-4 text-chrome" />
+          };
+          if(cat === 'dealership') newConfig[cat].color = '#3b82f6';
+          if(cat === 'gear_shop') newConfig[cat].color = '#10b981';
+          if(cat === 'parts_store') newConfig[cat].color = '#eab308';
+          if(cat === 'repair') newConfig[cat].color = '#f97316';
+          if(cat === 'meeting_spot') newConfig[cat].color = '#8b5cf6';
+          if(cat === 'biker_cafe') newConfig[cat].color = '#a8a29e';
+          if(cat === 'biker_bar') newConfig[cat].color = '#ef4444';
+          if(cat === 'barbershop') newConfig[cat].color = '#f43f5e';
+          if(cat === 'band') newConfig[cat].color = '#8b5cf6';
+        });
+        
+        setCategoryConfig(newConfig);
+        setFilterGroupsPitStop(prev => ({
+          ...prev,
+          'discover.groups.ecosystems': [...ecosystemKeys, 'other']
+        }));
+        setActiveFilters(prev => {
+          // Add the newly fetched categories to active filters if not already present
+          const toAdd = ecosystemKeys.filter(k => !prev.includes(k));
+          return [...prev, ...toAdd];
+        });
+      })
+      .catch(console.error);
   }, []);
+
   const [mapCenter, setMapCenter] = useState<[number, number]>([-19.9167, -43.9345]);
   const [mapZoom, setMapZoom] = useState(12);
   const [mapMode, setMapMode] = useState<'pit_stop' | 'ride'>('pit_stop');
@@ -254,30 +285,49 @@ export default function MapView() {
           try {
             const response = await fetch('/api/places/advanced-search', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+              },
               body: JSON.stringify({
                 mode: 'near_me',
                 lat,
                 lng
               })
             });
+
             if (response.ok) {
-              const uniquePlaces = await response.json();
-              const mappedPlaces = uniquePlaces.map((p: any) => ({
-                id: `ext_${p.place_id}`,
-                name: p.name,
-                category: p.category || 'other',
-                lat: p.lat,
-                lng: p.lng,
-                city: p.city || '',
-                details: p.source_keyword || '',
-                rating: p.rating,
-                isExternal: true,
-                place_id: p.place_id
-              }));
-              setExternalPlaces(mappedPlaces);
+              const text = await response.text();
+              if (!text) {
+                console.warn("Empty response from near_me search");
+                return;
+              }
+              try {
+                const uniquePlaces = JSON.parse(text);
+                const mappedPlaces = uniquePlaces.map((p: any) => ({
+                  id: `ext_${p.place_id}`,
+                  name: p.name,
+                  category: p.category || 'other',
+                  lat: p.lat,
+                  lng: p.lng,
+                  city: p.city || '',
+                  details: p.source_keyword || '',
+                  rating: p.rating,
+                  isExternal: true,
+                  place_id: p.place_id
+                }));
+                setExternalPlaces(mappedPlaces);
+              } catch (parseErr) {
+                console.error("Failed to parse near_me search JSON:", parseErr, "Response text starts with:", text.substring(0, 200));
+              }
             } else {
-              const errorData = await response.json().catch(() => ({}));
+              const text = await response.text();
+              let errorData = { error: 'Unknown error' };
+              try {
+                errorData = JSON.parse(text);
+              } catch (e) {
+                console.error("Could not parse error response as JSON:", text);
+              }
               console.error("Near Me search failed:", errorData.error || 'Unknown error');
             }
           } catch (err) {
@@ -338,7 +388,10 @@ export default function MapView() {
     try {
       const response = await fetch('/api/places/advanced-search', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         body: JSON.stringify({
           mode: 'route',
           polyline: simplifiedPoints
@@ -346,26 +399,39 @@ export default function MapView() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const text = await response.text();
+        let errorData = { error: 'Search failed' };
+        try {
+          errorData = JSON.parse(text);
+        } catch (e) {}
         throw new Error(errorData.error || 'Search failed');
       }
-      const uniquePlaces = await response.json();
       
-      const mappedPlaces = uniquePlaces.map((p: any) => ({
-        id: `ext_${p.place_id}`,
-        name: p.name,
-        category: p.category || 'other',
-        lat: p.lat,
-        lng: p.lng,
-        city: p.city || '',
-        details: p.source_keyword || '',
-        rating: p.rating,
-        isExternal: true,
-        place_id: p.place_id
-      }));
+      const text = await response.text();
+      if (!text) throw new Error('Empty response from server');
       
-      setExternalPlaces(mappedPlaces);
-      showNotification('success', t('discover.searchSuccess') || `Found ${mappedPlaces.length} places along route`);
+      try {
+        const uniquePlaces = JSON.parse(text);
+        
+        const mappedPlaces = uniquePlaces.map((p: any) => ({
+          id: `ext_${p.place_id}`,
+          name: p.name,
+          category: p.category || 'other',
+          lat: p.lat,
+          lng: p.lng,
+          city: p.city || '',
+          details: p.source_keyword || '',
+          rating: p.rating,
+          isExternal: true,
+          place_id: p.place_id
+        }));
+        
+        setExternalPlaces(mappedPlaces);
+        showNotification('success', t('discover.searchSuccess') || `Found ${mappedPlaces.length} places along route`);
+      } catch (parseErr) {
+        console.error("Failed to parse search results along route:", parseErr);
+        throw new Error('Invalid response from server');
+      }
     } catch (error) {
       console.error("Error fetching external places:", error);
       showNotification('error', t('discover.searchError') || 'Failed to fetch nearby places');
@@ -417,7 +483,10 @@ export default function MapView() {
       
       const response = await fetch('/api/places/advanced-search', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         body: JSON.stringify({
           mode: 'viewport',
           bounds: {
@@ -430,27 +499,40 @@ export default function MapView() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const text = await response.text();
+        let errorData = { error: 'Search failed' };
+        try {
+          errorData = JSON.parse(text);
+        } catch (e) {}
         throw new Error(errorData.error || 'Search failed');
       }
-      const uniquePlaces = await response.json();
-      
-      const mappedPlaces = uniquePlaces.map((p: any) => ({
-        id: `ext_${p.place_id}`,
-        name: p.name,
-        category: p.category || 'other',
-        lat: p.lat,
-        lng: p.lng,
-        city: p.city || '',
-        details: p.source_keyword || '',
-        rating: p.rating,
-        isExternal: true,
-        place_id: p.place_id
-      }));
-      
-      setExternalPlaces(mappedPlaces);
-      setShowSearchArea(false);
-      showNotification('success', t('discover.searchSuccess') || `Found ${mappedPlaces.length} places`);
+
+      const text = await response.text();
+      if (!text) throw new Error('Empty response from server');
+
+      try {
+        const uniquePlaces = JSON.parse(text);
+        
+        const mappedPlaces = uniquePlaces.map((p: any) => ({
+          id: `ext_${p.place_id}`,
+          name: p.name,
+          category: p.category || 'other',
+          lat: p.lat,
+          lng: p.lng,
+          city: p.city || '',
+          details: p.source_keyword || '',
+          rating: p.rating,
+          isExternal: true,
+          place_id: p.place_id
+        }));
+        
+        setExternalPlaces(mappedPlaces);
+        setShowSearchArea(false);
+        showNotification('success', t('discover.searchSuccess') || `Found ${mappedPlaces.length} places`);
+      } catch (parseErr) {
+        console.error("Failed to parse viewport search JSON:", parseErr);
+        throw new Error('Invalid response from server');
+      }
     } catch (error) {
       console.error("Error fetching external places:", error);
       showNotification('error', t('discover.searchError') || 'Failed to fetch nearby places');
@@ -483,13 +565,34 @@ export default function MapView() {
   };
 
   const filteredPlaces = React.useMemo(() => [
-    ...ecosystems.map(e => ({ ...e, name: e.company_name, category: normalizeCategory(e.service_category), id: e.user_id.toString(), isInternal: true })),
-    ...ambassadors.map(a => ({ ...a, name: a.display_name, category: 'ambassador', id: `amb_${a.user_id}`, isInternal: true })),
-    ...mapData.map(d => ({ ...d, id: d.name, category: normalizeCategory(d.category), isInternal: true })),
-    ...externalPlaces,
-    ...(mapMode === 'ride' ? mockRoutes.map(r => ({ ...r, lat: r.points[0][0], lng: r.points[0][1] })) : []),
-    ...(mapMode === 'ride' ? uploadedRoutes.map(r => ({ ...r, lat: r.points[0][0], lng: r.points[0][1] })) : [])
-  ].filter(p => activeFilters.includes(p.category)), [ecosystems, ambassadors, mapData, externalPlaces, mapMode, mockRoutes, uploadedRoutes, activeFilters]);
+    ...ecosystems.map(e => ({ 
+      ...e, 
+      name: e.company_name || e.display_name || t('category.' + normalizeCategory(e.service_category)), 
+      category: normalizeCategory(e.service_category), 
+      id: e.user_id.toString(), 
+      isInternal: true 
+    })),
+    ...ambassadors.map(a => ({ 
+      ...a, 
+      name: a.display_name || a.name || t('category.ambassador'), 
+      category: 'ambassador', 
+      id: `amb_${a.user_id}`, 
+      isInternal: true 
+    })),
+    ...mapData.map(d => ({ 
+      ...d, 
+      name: d.name || t('category.' + normalizeCategory(d.category)),
+      id: d.name, 
+      category: normalizeCategory(d.category), 
+      isInternal: true 
+    })),
+    ...externalPlaces.map(p => ({
+      ...p,
+      name: p.name || t('category.' + p.category)
+    })),
+    ...(mapMode === 'ride' ? mockRoutes.map(r => ({ ...r, name: r.name || t('category.' + r.category), lat: r.points[0][0], lng: r.points[0][1] })) : []),
+    ...(mapMode === 'ride' ? uploadedRoutes.map(r => ({ ...r, name: r.name || t('category.' + r.category), lat: r.points[0][0], lng: r.points[0][1] })) : [])
+  ].filter(p => activeFilters.includes(p.category)), [ecosystems, ambassadors, mapData, externalPlaces, mapMode, mockRoutes, uploadedRoutes, activeFilters, t]);
 
   if (loading) {
     return (
@@ -640,12 +743,17 @@ export default function MapView() {
             <Marker 
               key={place.id} 
               position={[place.lat, place.lng]} 
-              icon={getCustomIcon(place.category)}
+              icon={getCustomIcon(place.category, categoryConfig)}
               ref={(r) => { markerRefs.current[place.id] = r; }}
             >
               <Popup className="custom-popup">
                 <div className="p-2 min-w-[200px]">
-                  <h3 className="font-display font-black uppercase italic text-inverse leading-none tracking-tight mb-1">{place.name}</h3>
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <h3 className="font-display font-black uppercase italic text-inverse leading-none tracking-tight">{place.name}</h3>
+                    {place.needs_revision && (
+                      <AlertCircle className="w-4 h-4 text-error shrink-0 animate-pulse" title="Needs Revision" />
+                    )}
+                  </div>
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-[10px] font-mono font-black text-primary uppercase tracking-widest">
                       {t('category.' + place.category)}
@@ -926,6 +1034,9 @@ export default function MapView() {
                           <h4 className="font-display font-black uppercase italic tracking-tight text-chrome group-hover:text-primary transition-colors truncate cursor-pointer">
                             {place.name}
                           </h4>
+                          {place.needs_revision && (
+                            <AlertCircle className="w-3 h-3 text-error animate-pulse shrink-0" />
+                          )}
                           {place.isExternal ? (
                             <span className="text-[8px] font-mono font-bold bg-inverse/10 text-chrome px-1.5 py-0.5 rounded uppercase shrink-0">Google</span>
                           ) : (

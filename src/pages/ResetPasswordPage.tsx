@@ -3,7 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Lock, Loader2 } from 'lucide-react';
 
+import { useLanguage } from '../contexts/LanguageContext';
+
 export default function ResetPasswordPage() {
+  const { t } = useLanguage();
   const { token } = useParams();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -16,7 +19,7 @@ export default function ResetPasswordPage() {
     setError('');
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
+      setError(t('resetPassword.mismatch'));
       return;
     }
 
@@ -31,7 +34,7 @@ export default function ResetPasswordPage() {
 
       if (!res.ok) throw new Error(data.error || 'Failed to reset password');
       
-      alert('Password reset successfully. Please log in.');
+      alert(t('resetPassword.success'));
       navigate('/login');
     } catch (err: any) {
       setError(err.message);
@@ -47,25 +50,27 @@ export default function ResetPasswordPage() {
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-md bg-oil p-8 rounded-lg shadow-xl"
       >
-        <h1 className="text-2xl font-bold text-chrome mb-6">Reset Password</h1>
+        <h1 className="text-2xl font-bold text-chrome mb-6">{t('resetPassword.title')}</h1>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-steel mb-1">New Password</label>
+            <label className="block text-sm font-medium text-steel mb-1">{t('resetPassword.newPassword')}</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full bg-engine text-chrome p-2 rounded border border-inverse/10 focus:border-primary outline-none"
+              placeholder="••••••••"
               required
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-steel mb-1">Confirm Password</label>
+            <label className="block text-sm font-medium text-steel mb-1">{t('resetPassword.confirmPassword')}</label>
             <input
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               className="w-full bg-engine text-chrome p-2 rounded border border-inverse/10 focus:border-primary outline-none"
+              placeholder="••••••••"
               required
             />
           </div>
@@ -75,7 +80,7 @@ export default function ResetPasswordPage() {
             className="w-full bg-primary text-inverse p-2 rounded font-bold hover:bg-primary/90 disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {loading ? <Loader2 className="animate-spin" size={16} /> : <Lock size={16} />}
-            Reset Password
+            {t('resetPassword.submit')}
           </button>
         </form>
         {error && <p className="mt-4 text-error text-sm">{error}</p>}

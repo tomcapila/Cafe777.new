@@ -14,7 +14,10 @@ export function useFeatureAccess() {
   useEffect(() => {
     async function fetchAccess() {
       try {
-        const res = await fetch('/api/feature-access');
+        const res = await fetch('/api/f-access').catch(err => {
+          console.error('Network-level fail on /api/f-access', err);
+          throw err;
+        });
         if (res.ok) {
           const contentType = res.headers.get('content-type');
           if (contentType && contentType.includes('application/json')) {

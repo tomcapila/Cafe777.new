@@ -1,11 +1,20 @@
 import express from "express";
 import helmet from "helmet";
+import fs from "fs";
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error("Unhandled Rejection at:", promise, "reason:", reason);
+  fs.appendFileSync('crash2.log', `REJECTION: ${reason}\n`);
+});
+process.on('uncaughtException', (error) => {
+  console.error("Uncaught Exception:", error);
+  fs.appendFileSync('crash2.log', `EXCEPTION: ${error.stack}\n`);
+});
 import { rateLimit } from "express-rate-limit";
 import { createServer as createViteServer } from "vite";
 import { z } from "zod";
 import Database from "better-sqlite3";
 import path from "path";
-import fs from "fs";
 import multer from "multer";
 import { fileURLToPath } from "url";
 import QRCode from 'qrcode';
@@ -15,9 +24,121 @@ import bcrypt from 'bcryptjs';
 import { MailerSend, EmailParams, Sender, Recipient } from "mailersend";
 import { OAuth2Client } from 'google-auth-library';
 import { fetchOSMPlaces } from './src/services/osmService.ts';
+import admin from "firebase-admin";
+import { getFirestore } from "firebase-admin/firestore";
+import firebaseConfig from "./firebase-applet-config.json" assert { type: "json" };
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Initialize Firebase Admin
+if (!admin.apps.length) {
+  let credential;
+  const serviceAccountPath = path.resolve(__dirname, 'serviceAccountKey.json');
+  
+  if (fs.existsSync(serviceAccountPath)) {
+    console.log("Firebase Admin initializing with serviceAccountKey.json");
+    const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
+    credential = admin.credential.cert(serviceAccount);
+  } else if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+    console.log("Firebase Admin initializing with FIREBASE_SERVICE_ACCOUNT_KEY secret");
+    try {
+      const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+      credential = admin.credential.cert(serviceAccount);
+    } catch (e) {
+      console.error("Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY JSON:", e);
+      credential = admin.credential.applicationDefault();
+    }
+  } else {
+    console.log("Firebase Admin initializing with applicationDefault() (may lack permissions if unconfigured)");
+    credential = admin.credential.applicationDefault();
+  }
+
+  admin.initializeApp({
+    credential,
+    projectId: firebaseConfig.projectId,
+    storageBucket: firebaseConfig.storageBucket
+  });
+}
+
+const firestore = getFirestore(admin.app(), firebaseConfig.firestoreDatabaseId);
+const bucket = admin.storage().bucket();
+console.log(`Firestore initialized for database: ${firebaseConfig.firestoreDatabaseId}`);
+
+// Firestore Helpers to mimic some SQLite behaviors
+const collections = {
+  users: firestore.collection("users"),
+  riders: firestore.collection("riders"),
+  motorcycles: firestore.collection("motorcycles"),
+  ecosystems: firestore.collection("ecosystems"),
+  posts: firestore.collection("posts"),
+  post_likes: firestore.collection("post_likes"),
+  followers: firestore.collection("followers"),
+  events: firestore.collection("events"),
+  contests: firestore.collection("contests"),
+  submissions: firestore.collection("submissions"),
+  votes: firestore.collection("votes"),
+  notifications: firestore.collection("notifications"),
+  event_rsvps: firestore.collection("event_rsvps"),
+  chats: firestore.collection("chats"),
+  messages: firestore.collection("messages"),
+  keywords_config: firestore.collection("keywords_config"),
+  places_cache: firestore.collection("places_cache"),
+  places_control: firestore.collection("places_control"),
+  event_photos: firestore.collection("event_photos"),
+  settings: firestore.collection("settings"),
+  ambassadors: firestore.collection("ambassadors"),
+  invite_links: firestore.collection("invite_links"),
+  passport_stamps: firestore.collection("passport_stamps"),
+  user_passport_stamps: firestore.collection("user_passport_stamps"),
+  badges: firestore.collection("badges"),
+  user_badges: firestore.collection("user_badges"),
+  maintenance_logs: firestore.collection("maintenance_logs"),
+  comments: firestore.collection("comments"),
+  checkins: firestore.collection("checkins"),
+  ambassador_posts: firestore.collection("ambassador_posts"),
+  social_walls: firestore.collection("social_walls"),
+  recommendations: firestore.collection("recommendations"),
+  discovered_routes: firestore.collection("discovered_routes"),
+  rating_summaries: firestore.collection("rating_summaries"),
+  reviews: firestore.collection("reviews"),
+  review_verifications: firestore.collection("review_verifications"),
+  checkpoints: firestore.collection("checkpoints"),
+  user_route_progress: firestore.collection("user_route_progress"),
+  club_roles: firestore.collection("club_roles"),
+  club_chapters: firestore.collection("club_chapters"),
+  club_memberships: firestore.collection("club_memberships"),
+  ambassador_applications: firestore.collection("ambassador_applications"),
+};
+
+// Generic counter for pseudo-incrementing IDs if needed (though random IDs are preferred in Firestore)
+async function getNextId(collectionName: string) {
+  const counterRef = firestore.collection("_counters").doc(collectionName);
+  return firestore.runTransaction(async (transaction) => {
+    const doc = await transaction.get(counterRef);
+    const newId = (doc.exists ? doc.data()?.count || 0 : 0) + 1;
+    transaction.set(counterRef, { count: newId });
+    return newId;
+  });
+}
+
+async function ensureSqliteUserExists(userId: number | string) {
+  const parsedId = isNaN(Number(userId)) ? userId : Number(userId);
+  const userExists = db.prepare("SELECT 1 FROM users WHERE id = ?").get(parsedId);
+  if (!userExists) {
+    try {
+      const userDoc = await collections.users.doc(userId.toString()).get();
+      if (userDoc.exists) {
+        const u = userDoc.data() as any;
+        db.prepare(`INSERT INTO users (id, username, email, type, status, role, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`).run(parsedId, u.username || `user_${parsedId}`, u.email || `user${parsedId}@example.com`, u.type || 'rider', 'active', 'user', new Date().toISOString());
+      } else {
+        db.prepare(`INSERT INTO users (id, username, email, type, status, role, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`).run(parsedId, `user_${parsedId}`, `user${parsedId}@example.com`, 'rider', 'active', 'user', new Date().toISOString());
+      }
+    } catch(e) {
+      console.error("Error setting up missing sqlite user:", e);
+    }
+  }
+}
 
 const JWT_SECRET = process.env.JWT_SECRET || 'cafe777-super-secret-key-for-dev';
 console.log(`JWT_SECRET initialized (length: ${JWT_SECRET.length})`);
@@ -34,6 +155,7 @@ const registerSchema = z.object({
   location: z.string().max(200).optional(),
   bio: z.string().max(500).optional(),
   motorcycle: z.string().max(100).optional(),
+  bloodType: z.string().max(5).optional(),
   businessName: z.string().max(100).optional(),
   businessType: z.string().max(50).optional(),
   interests: z.union([z.string(), z.array(z.string())]).optional(),
@@ -71,17 +193,8 @@ try {
 }
 
 // Configure multer
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  },
-});
 const upload = multer({ 
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
   fileFilter: (req, file, cb) => {
     const allowedExtensions = /\.(jpe?g|png|gif|webp|avif|heic|heif|jfif)$/i;
@@ -96,6 +209,45 @@ const upload = multer({
     cb(new Error("Only images are allowed (jpeg, jpg, png, webp, gif, avif, heic)"));
   }
 });
+
+const uploadToFirebase = async (file: any, folder: string = "uploads"): Promise<string> => {
+  if (!file) return "";
+  const originalName = file.originalname || "image.jpg";
+  const safeName = originalName.replace(/[^a-zA-Z0-9.]/g, "_");
+  const fileName = `${Date.now()}-${safeName}`;
+  const firebasePath = `${folder}/${fileName}`;
+  
+  if (!bucket) {
+    throw new Error("Firebase storage bucket is not initialized.");
+  }
+
+  const blob = bucket.file(firebasePath);
+  const blobStream = blob.createWriteStream({
+    metadata: {
+      contentType: file.mimetype
+    },
+    resumable: false
+  });
+
+  return await new Promise<string>((resolve, reject) => {
+    blobStream.on('error', (err) => {
+      console.error("Firebase upload error:", err.message);
+      reject(err);
+    });
+    blobStream.on('finish', async () => {
+      try {
+        await blob.makePublic();
+      } catch (e) {
+        console.warn("Could not make file public (may require Uniform Bucket-Level Access or IAM changes):", e);
+      }
+      // Use the standard download URL format which is more robust for Firebase
+      const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${firebaseConfig.storageBucket}/o/${encodeURIComponent(blob.name)}?alt=media`;
+      resolve(publicUrl);
+    });
+    blobStream.end(file.buffer);
+  });
+};
+
 
 // Initialize Database Schema
 db.exec(`
@@ -134,6 +286,7 @@ db.exec(`
     name TEXT NOT NULL,
     age INTEGER,
     city TEXT,
+    blood_type TEXT,
     FOREIGN KEY(user_id) REFERENCES users(id)
   );
 
@@ -382,6 +535,37 @@ db.exec(`
     value TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS keywords_config (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    category_name TEXT NOT NULL,
+    keywords TEXT NOT NULL,
+    radius INTEGER DEFAULT 5000,
+    icon TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS places_cache (
+    place_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    lat REAL NOT NULL,
+    lng REAL NOT NULL,
+    rating REAL DEFAULT 0,
+    reviews INTEGER DEFAULT 0,
+    category TEXT,
+    source_keyword TEXT,
+    city TEXT,
+    details TEXT,
+    full_address TEXT,
+    source TEXT,
+    last_fetched DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS places_control (
+    place_id TEXT PRIMARY KEY,
+    is_approved INTEGER DEFAULT 0,
+    is_hidden INTEGER DEFAULT 0,
+    needs_revision INTEGER DEFAULT 0
+  );
+
   CREATE TABLE IF NOT EXISTS admin_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     admin_id INTEGER NOT NULL,
@@ -491,12 +675,24 @@ db.exec(`
     FOREIGN KEY(user_id) REFERENCES users(id)
   );
 
+  CREATE TABLE IF NOT EXISTS invite_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT UNIQUE NOT NULL,
+    sponsor_id INTEGER NOT NULL,
+    is_used INTEGER DEFAULT 0,
+    used_by_user_id INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(sponsor_id) REFERENCES ambassadors(user_id) ON DELETE CASCADE,
+    FOREIGN KEY(used_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+  );
+
   CREATE TABLE IF NOT EXISTS club_roles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     club_id INTEGER NOT NULL,
     name TEXT NOT NULL,
     description TEXT,
     permissions TEXT DEFAULT '[]',
+    hierarchy_order INTEGER DEFAULT 0,
     FOREIGN KEY(club_id) REFERENCES users(id)
   );
 
@@ -611,8 +807,7 @@ db.exec(`
     place_id TEXT PRIMARY KEY,
     is_approved INTEGER DEFAULT 0,
     is_hidden INTEGER DEFAULT 0,
-    custom_category TEXT,
-    priority_score INTEGER DEFAULT 0
+    needs_revision INTEGER DEFAULT 0
   );
 
   -- Seed default keywords if empty
@@ -638,6 +833,10 @@ db.exec(`
 `);
 
 // Add columns to existing places_cache table if they don't exist
+try {
+  db.prepare("ALTER TABLE places_control ADD COLUMN needs_revision INTEGER DEFAULT 0").run();
+} catch (e) {}
+
 try {
   db.prepare("ALTER TABLE places_cache ADD COLUMN city TEXT").run();
 } catch (e) { /* Column might already exist */ }
@@ -810,6 +1009,18 @@ try {
   db.exec("ALTER TABLE events ADD COLUMN participation_stamp_id INTEGER REFERENCES passport_stamps(id);");
 } catch (e) {}
 
+try {
+  db.exec("ALTER TABLE events ADD COLUMN price TEXT;");
+} catch (e) {}
+
+try {
+  db.exec("ALTER TABLE events ADD COLUMN external_link TEXT;");
+} catch (e) {}
+
+try {
+  db.exec("ALTER TABLE events ADD COLUMN price_starting_from INTEGER DEFAULT 0;");
+} catch (e) {}
+
 // Insert missing badges
 try {
   db.exec("ALTER TABLE users ADD COLUMN fullName TEXT;");
@@ -843,6 +1054,10 @@ try {
 } catch (e) {}
 try {
   db.exec("ALTER TABLE users ADD COLUMN referralCode TEXT;");
+} catch (e) {}
+
+try {
+  db.exec("ALTER TABLE riders ADD COLUMN blood_type TEXT;");
 } catch (e) {}
 
 // Sync existing data from riders and ecosystems to users table
@@ -932,6 +1147,14 @@ db.transaction(() => {
   // 5. Admin User
   const tad = insertUser.run("test_admin", "admin@test.com", "password123", "rider", "https://picsum.photos/seed/test_admin/200/200", "admin", "active", "TESTADM", null, "premium", 0, "Test Admin", "Seattle", "Administering the platform", null, null, null, null, null, "TESTADM").lastInsertRowid;
   insertRider.run(tad, "Test Admin", 35, "Seattle");
+
+  // 6. Thomaz Capilla - Owner / Admin
+  const tcap = insertUser.run("tomcapilla_owner", "thomaz.capilla@gmail.com", "password123", "rider", "https://picsum.photos/seed/tomcapilla_owner/200/200", "admin", "active", "TOMCAPILLA", null, "premium", 0, "Thomaz Capilla", "Unknown", "Platform Owner", null, null, null, null, null, "TOMCAPILLA").lastInsertRowid;
+  insertRider.run(tcap, "Thomaz Capilla", null, null);
+  
+  // 6b. Thomaz Capila - Owner / Admin (added single L spelling just in case login uses this)
+  const tcap2 = insertUser.run("tomcapila_owner", "thomaz.capila@gmail.com", "password123", "rider", "https://picsum.photos/seed/tomcapila_owner/200/200", "admin", "active", "TOMCAPILA", null, "premium", 0, "Thomaz Capila", "Unknown", "Platform Owner", null, null, null, null, null, "TOMCAPILA").lastInsertRowid;
+  insertRider.run(tcap2, "Thomaz Capila", null, null);
 
   // --- EXISTING MOCK DATA ---
   // Rider 1 (Admin)
@@ -1073,60 +1296,80 @@ db.transaction(() => {
   insertRoute.run("rt_9924", "Hidden Valley Run", 45.2, "easy", 82.4, JSON.stringify(["hidden", "forest"]), JSON.stringify([[40.7128, -74.0060], [40.7200, -74.0100], [40.7300, -74.0200]]), 40.7128, -74.0060, 60, 40, 85, 10, 15);
 })();
 
-const updateAmbassadorReputation = (userId: number) => {
+const updateAmbassadorReputation = async (userId: number | string) => {
   try {
-    const ambassador = db.prepare("SELECT user_id FROM ambassadors WHERE user_id = ?").get(userId) as any;
-    if (!ambassador) return;
+    const ambassadorSnapshot = await collections.ambassadors.doc(userId.toString()).get();
+    if (!ambassadorSnapshot.exists) return;
 
     // 1. Stamps issued
-    const stampsIssued = (db.prepare("SELECT COUNT(*) as count FROM user_passport_stamps WHERE ambassador_id = ?").get(userId) as any).count;
+    const stampsIssuedSnapshot = await collections.user_passport_stamps.where("ambassador_id", "==", userId).get();
+    const stampsIssued = stampsIssuedSnapshot.size;
 
     // 2. Events hosted
-    const eventsHosted = (db.prepare("SELECT COUNT(*) as count FROM events WHERE user_id = ?").get(userId) as any).count;
+    const eventsHostedSnapshot = await collections.events.where("user_id", "==", userId).get();
+    const eventsHosted = eventsHostedSnapshot.size;
 
     // 3. Average rating (if ecosystem)
     let ratingScore = 0;
-    const ecosystem = db.prepare("SELECT user_id FROM ecosystems WHERE user_id = ?").get(userId) as any;
-    if (ecosystem) {
-      const rating = db.prepare("SELECT average_rating FROM rating_summaries WHERE target_type = 'ecosystem' AND target_id = ?").get(ecosystem.user_id) as any;
+    const ecoSnapshot = await collections.ecosystems.doc(userId.toString()).get();
+    if (ecoSnapshot.exists) {
+      const rating = db.prepare("SELECT average_rating FROM rating_summaries WHERE target_type = 'ecosystem' AND target_id = ?").get(userId) as any;
       if (rating) {
         ratingScore = Math.floor(rating.average_rating * 10); // 4.5 -> 45
       }
     }
 
-    // Calculate total reputation
-    // 1 point per stamp issued
-    // 10 points per event hosted
-    // Rating score (up to 50 points)
-    const totalReputation = stampsIssued + (eventsHosted * 10) + ratingScore;
+    // 4. Successful Invites
+    let successfulInvites = 0;
+    try {
+      successfulInvites = db.prepare("SELECT COUNT(*) as count FROM invite_links WHERE sponsor_id = ? AND is_used = 1").get(userId).count;
+    } catch(err) {}
 
-    db.prepare("UPDATE ambassadors SET reputation_score = ? WHERE user_id = ?").run(totalReputation, userId);
+    // Calculate total reputation
+    const totalReputation = stampsIssued + (eventsHosted * 10) + ratingScore + (successfulInvites * 20);
+
+    await collections.ambassadors.doc(userId.toString()).set({
+      reputation_score: totalReputation,
+      updated_at: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+
+    // Dual-write to SQLite
+    try {
+      db.prepare("UPDATE ambassadors SET reputation_score = ? WHERE user_id = ?").run(totalReputation, userId);
+    } catch (sqe) {}
+    
   } catch (err) {
-    console.error("Failed to update ambassador reputation:", err);
+    console.error("Failed to update ambassador reputation in Firestore/SQLite:", err);
   }
 };
 
 // Automation logic
 function checkContests() {
-  // Find contests that ended and don't have a winner
-  const endedContests = db.prepare(`
-    SELECT * FROM contests 
-    WHERE end_date < datetime('now') AND winner_submission_id IS NULL
-  `).all() as any[];
+  try {
+    // Find contests that ended and don't have a winner
+    const endedContests = db.prepare(`
+      SELECT * FROM contests 
+      WHERE end_date < datetime('now') AND winner_submission_id IS NULL
+    `).all() as any[];
 
-  for (const contest of endedContests) {
-    // Select winner
-    const winner = db.prepare(`
-      SELECT submission_id, COUNT(*) as vote_count
-      FROM votes
-      WHERE contest_id = ?
-      GROUP BY submission_id
-      ORDER BY vote_count DESC
-      LIMIT 1
-    `).get(contest.id) as any;
+    for (const contest of endedContests) {
+      // Select winner
+      const winner = db.prepare(`
+        SELECT submission_id, COUNT(*) as vote_count
+        FROM votes
+        WHERE contest_id = ?
+        GROUP BY submission_id
+        ORDER BY vote_count DESC
+        LIMIT 1
+      `).get(contest.id) as any;
 
-    if (winner) {
-      db.prepare("UPDATE contests SET winner_submission_id = ? WHERE id = ?").run(winner.submission_id, contest.id);
+      if (winner) {
+        db.prepare("UPDATE contests SET winner_submission_id = ? WHERE id = ?").run(winner.submission_id, contest.id);
+      }
+    }
+  } catch (error) {
+    if ((error as any).message && !(error as any).message.includes('no such table')) {
+      console.error("Error in checkContests automated task:", error);
     }
   }
 }
@@ -1204,11 +1447,21 @@ async function startServer() {
     next();
   };
 
-  const checkAmbassador = (req: any, res: any, next: any) => {
+  const checkAmbassador = async (req: any, res: any, next: any) => {
     if (!req.user) {
       return res.status(401).json({ error: "Unauthorized" });
     }
-    const ambassador = db.prepare("SELECT user_id FROM ambassadors WHERE user_id = ? AND is_active = 1").get(req.user.id);
+    let ambassador = db.prepare("SELECT user_id FROM ambassadors WHERE user_id = ? AND is_active = 1").get(req.user.id);
+    
+    if (!ambassador) {
+       try {
+         const doc = await collections.ambassadors.doc(req.user.id.toString()).get();
+         if (doc.exists && doc.data()?.is_active) {
+            ambassador = { user_id: req.user.id };
+         }
+       } catch(e) {}
+    }
+
     if (!ambassador && req.user.role !== 'admin' && req.user.role !== 'moderator') {
       return res.status(403).json({ error: "Forbidden: Ambassador access required" });
     }
@@ -1227,7 +1480,7 @@ async function startServer() {
   };
 
   // JWT Authentication middleware
-  const authenticateToken = (req: any, res: any, next: any) => {
+  const authenticateToken = async (req: any, res: any, next: any) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
 
@@ -1236,22 +1489,46 @@ async function startServer() {
       return res.status(401).json({ error: "Unauthorized: Missing token" });
     }
 
-    jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
-      if (err) {
-        return res.status(401).json({ error: `Unauthorized: Invalid or expired token (${err.message})` });
+    try {
+      const user: any = await new Promise((resolve, reject) => {
+        jwt.verify(token, JWT_SECRET, (err: any, decoded: any) => {
+          if (err) reject(err);
+          else resolve(decoded);
+        });
+      });
+
+      // Try SQLite first as it's faster and works without permissions in this environment
+      let dbUser: any = db.prepare("SELECT id, username, role, plan, type FROM users WHERE id = ?").get(user.id) as any;
+
+      if (!dbUser) {
+        // Fallback to Firestore if not found in SQLite
+        try {
+          const firestoreUser = await collections.users.doc(user.id?.toString()).get();
+          if (firestoreUser.exists) {
+            dbUser = { id: user.id, ...firestoreUser.data() };
+            // Auto-migrate to SQLite if found in Firestore but not SQLite
+            await ensureSqliteUserExists(user.id);
+          }
+        } catch (firestoreErr: any) {
+          // Only log if it's not a permission error which we know can happen
+          if (!firestoreErr.message?.includes('PERMISSION_DENIED')) {
+            console.warn(`Firestore user fetch failed in authenticateToken:`, firestoreErr.message);
+          }
+        }
       }
-      // Refresh user data from DB to get latest plan/role
-      const dbUser = db.prepare("SELECT id, username, role, plan, type FROM users WHERE id = ?").get(user.id) as any;
+
       if (!dbUser) {
         return res.status(401).json({ error: "Unauthorized: User no longer exists" });
       }
       req.user = dbUser;
       next();
-    });
+    } catch (err: any) {
+      return res.status(401).json({ error: `Unauthorized: Invalid or expired token (${err.message})` });
+    }
   };
 
   const checkFeatureAccess = (feature: string) => {
-    return (req: any, res: any, next: any) => {
+    return async (req: any, res: any, next: any) => {
       try {
         if (!req.user) return res.status(401).json({ error: "Unauthorized" });
 
@@ -1307,6 +1584,29 @@ async function startServer() {
   };
 
   // API Routes
+  app.get(['/auth/callback', '/auth/callback/'], (req, res) => {
+    res.send(`
+      <html>
+        <head><title>Authenticating...</title></head>
+        <body>
+          <script>
+            const hash = window.location.hash.substring(1);
+            const params = new URLSearchParams(hash);
+            const idToken = params.get('id_token') || new URLSearchParams(window.location.search).get('credential');
+            
+            if (window.opener) {
+              window.opener.postMessage({ type: 'OAUTH_AUTH_SUCCESS', credential: idToken }, '*');
+              window.close();
+            } else {
+              window.location.href = '/login';
+            }
+          </script>
+          <p>Authentication complete. You can close this window.</p>
+        </body>
+      </html>
+    `);
+  });
+
   app.post("/api/auth/google", async (req, res) => {
     const { credential } = req.body;
 
@@ -1332,8 +1632,32 @@ async function startServer() {
       }
 
       // Check if user exists
-      let user = db.prepare("SELECT * FROM users WHERE google_id = ? OR email = ?").get(googleId, email) as any;
+      let user: any = null;
       let isNewUser = false;
+      
+      try {
+        // Try Firestore first to handle SQLite ephemeral storage loss
+        const fsUserSnap = await collections.users.where("google_id", "==", googleId).limit(1).get();
+        if (!fsUserSnap.empty) {
+          user = { id: parseInt(fsUserSnap.docs[0].id), ...fsUserSnap.docs[0].data() };
+        } else {
+          const fsEmailSnap = await collections.users.where("email", "==", email).limit(1).get();
+          if (!fsEmailSnap.empty) {
+            user = { id: parseInt(fsEmailSnap.docs[0].id), ...fsEmailSnap.docs[0].data() };
+          }
+        }
+      } catch (e) {}
+
+      if (!user) {
+        user = db.prepare("SELECT * FROM users WHERE google_id = ? OR email = ?").get(googleId, email) as any;
+      } else {
+        // Hydrate SQLite if needed
+        try {
+          db.prepare("INSERT OR REPLACE INTO users (id, username, email, google_id, role, type, profile_picture_url, status, fullName, referral_code, referralCode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(
+            user.id, user.username, user.email, googleId, user.role || 'user', user.type || 'rider', picture || user.profile_picture_url || null, user.status || 'active', name || user.fullName || null, user.referral_code || null, user.referralCode || null
+          );
+        } catch (e) {}
+      }
 
       if (!user) {
         // Create new user
@@ -1392,7 +1716,44 @@ async function startServer() {
     const { email, password } = validation.data;
     
     try {
-      const user = db.prepare("SELECT * FROM users WHERE email = ?").get(email) as any;
+      let user: any = null;
+      // Try Firestore first
+      try {
+        const firestoreUserSnap = await collections.users.where("email", "==", email).limit(1).get();
+        if (!firestoreUserSnap.empty) {
+          user = { id: firestoreUserSnap.docs[0].id, ...firestoreUserSnap.docs[0].data() };
+        }
+      } catch (fsError: any) {
+        if (!fsError.message?.includes('PERMISSION_DENIED')) {
+          console.error("Firestore user fetch failed, falling back to SQLite:", fsError);
+        }
+      }
+      
+      if (!user) {
+        // Fallback to SQLite
+        user = db.prepare("SELECT * FROM users WHERE email = ?").get(email) as any;
+        if (user) {
+          try {
+            await collections.users.doc(user.id.toString()).set({
+              ...user,
+              interests: user.interests ? user.interests.split(',') : [],
+              services: user.services ? user.services.split(',') : [],
+              created_at: user.created_at || new Date().toISOString()
+            });
+          } catch (migError: any) {
+            if (!migError.message?.includes('PERMISSION_DENIED')) {
+              console.error("Auto-migration to Firestore failed:", migError);
+            }
+          }
+        }
+      } else {
+        // user was found in Firestore, hydrate SQLite
+        try {
+          db.prepare("INSERT OR REPLACE INTO users (id, username, email, password, google_id, role, type, profile_picture_url, status, fullName, referral_code, referralCode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(
+            parseInt(user.id), user.username, user.email, user.password || null, user.google_id || null, user.role || 'user', user.type || 'rider', user.profile_picture_url || null, user.status || 'active', user.fullName || null, user.referral_code || null, user.referralCode || null
+          );
+        } catch (e) {}
+      }
 
       if (!user) {
         return res.status(401).json({ error: "Invalid credentials" });
@@ -1523,89 +1884,194 @@ async function startServer() {
     res.json({ message: "Password updated successfully" });
   });
 
-  app.get("/api/contests/active", (req, res) => {
+  app.get("/api/contests/active", async (req, res) => {
     try {
-      const contests = db.prepare(`
-        SELECT c.*, b.name as prize_badge_name, b.icon as prize_badge_icon
-        FROM contests c 
-        LEFT JOIN badges b ON c.prize_badge_id = b.badge_id
-        WHERE c.status = 'active'
-        AND datetime('now') BETWEEN c.start_date AND c.end_date 
-        ORDER BY c.start_date DESC
-      `).all();
+      const now = new Date().toISOString();
+      const snapshot = await collections.contests
+        .where("status", "==", "active")
+        .orderBy("start_date", "desc")
+        .get();
+      
+      const filteredDocs = snapshot.docs.filter(doc => {
+        const data = doc.data();
+        return now >= data.start_date && now <= data.end_date;
+      });
+
+      const contests = await Promise.all(filteredDocs.map(async (doc) => {
+        const contest = doc.data() as any;
+        let badgeData = { name: null, icon: null };
+        if (contest.prize_badge_id) {
+          const badgeDoc = await collections.badges.doc(contest.prize_badge_id.toString()).get();
+          if (badgeDoc.exists) {
+            const b = badgeDoc.data() as any;
+            badgeData = { name: b.name, icon: b.icon };
+          }
+        }
+        return { id: doc.id, ...contest, prize_badge_name: badgeData.name, prize_badge_icon: badgeData.icon };
+      }));
       res.json(contests);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      console.error("Error fetching active contests from Firestore:", error);
+      // Fallback
+      try {
+        const contests = db.prepare(`
+          SELECT c.*, b.name as prize_badge_name, b.icon as prize_badge_icon
+          FROM contests c 
+          LEFT JOIN badges b ON c.prize_badge_id = b.badge_id
+          WHERE c.status = 'active'
+          AND datetime('now') BETWEEN c.start_date AND c.end_date 
+          ORDER BY c.start_date DESC
+        `).all();
+        res.json(contests);
+      } catch (sqe) {
+        res.status(500).json({ error: error.message });
+      }
     }
   });
 
-  app.post("/api/contests/:id/submissions", authenticateToken, upload.single('photo'), (req: any, res) => {
+  app.post("/api/contests/:id/submissions", authenticateToken, upload.single('photo'), async (req: any, res) => {
     const { user_id, motorcycle_id, description } = req.body;
     const contest_id = req.params.id;
-    const photo_url = (req as any).file ? `/uploads/${(req as any).file.filename}` : null;
+    let photo_url = null;
+
+    if (req.file) {
+      try {
+        photo_url = await uploadToFirebase(req.file, "contest_submissions");
+      } catch (err) {
+        return res.status(500).json({ error: "Failed to upload photo" });
+      }
+    }
 
     if (!user_id || !photo_url) {
       return res.status(400).json({ error: "User ID and photo are required" });
     }
     
-    if (user_id !== req.user.id.toString() && user_id !== req.user.id && req.user.role !== 'admin' && req.user.role !== 'moderator') {
+    if (user_id.toString() !== req.user.id.toString() && req.user.role !== 'admin' && req.user.role !== 'moderator') {
       return res.status(403).json({ error: "Forbidden: You can only submit for yourself" });
     }
 
     try {
-      // Verify contest is active
-      const contest = db.prepare(`
-        SELECT * FROM contests 
-        WHERE id = ? AND status = 'active'
-        AND datetime('now') BETWEEN start_date AND end_date
-      `).get(contest_id) as any;
-
-      if (!contest) {
-        return res.status(404).json({ error: "Active contest not found" });
+      // Verify contest is active in Firestore
+      const contestDoc = await collections.contests.doc(contest_id).get();
+      if (!contestDoc.exists) return res.status(404).json({ error: "Contest not found" });
+      const contest = contestDoc.data() as any;
+      
+      const now = new Date().toISOString();
+      if (contest.status !== 'active' || now < contest.start_date || now > contest.end_date) {
+        return res.status(400).json({ error: "Active contest not found" });
       }
 
-      // Check if user already submitted
-      const existing = db.prepare("SELECT id FROM submissions WHERE contest_id = ? AND user_id = ?").get(contest_id, user_id);
-      if (existing) {
+      // Check if user already submitted in Firestore
+      const existingSnapshot = await collections.submissions
+        .where("contest_id", "==", Number(contest_id))
+        .where("user_id", "==", Number(user_id))
+        .limit(1)
+        .get();
+
+      if (!existingSnapshot.empty) {
         return res.status(400).json({ error: "You have already submitted a photo for this contest" });
       }
 
-      const stmt = db.prepare(`
-        INSERT INTO submissions (contest_id, user_id, motorcycle_id, photo_url, description)
-        VALUES (?, ?, ?, ?, ?)
-      `);
-      stmt.run(contest_id, user_id, motorcycle_id || null, photo_url, description || null);
+      const submissionId = await getNextId("submissions");
+      const submissionData = {
+        id: submissionId,
+        contest_id: Number(contest_id),
+        user_id: Number(user_id),
+        motorcycle_id: motorcycle_id ? Number(motorcycle_id) : null,
+        photo_url,
+        description: description || "",
+        votes_count: 0,
+        approved: 0,
+        created_at: admin.firestore.FieldValue.serverTimestamp()
+      };
 
-      res.status(201).json({ message: "Submission successful" });
+      await collections.submissions.doc(submissionId.toString()).set(submissionData);
+
+      // Dual-write to SQLite
+      try {
+        db.prepare(`
+          INSERT OR REPLACE INTO submissions (id, contest_id, user_id, motorcycle_id, photo_url, description)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(submissionId, Number(contest_id), Number(user_id), motorcycle_id ? Number(motorcycle_id) : null, photo_url, description || null);
+      } catch (sqe) {
+        console.error("SQLite dual-write failed for submission:", sqe);
+      }
+
+      res.status(201).json({ message: "Submission successful", id: submissionId });
     } catch (error: any) {
+      console.error("Error adding submission to Firestore:", error);
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.get("/api/contests/:id/submissions", (req, res) => {
+  app.get("/api/contests/:id/submissions", async (req, res) => {
     const contest_id = req.params.id;
     try {
-      const contest = db.prepare(`
-        SELECT * FROM contests WHERE id = ?
-      `).get(contest_id) as any;
+      const contestDoc = await collections.contests.doc(contest_id).get();
+      if (!contestDoc.exists) return res.status(404).json({ error: "Contest not found" });
+      const contest = { id: contestDoc.id, ...contestDoc.data() as any };
 
-      if (!contest) {
-        return res.status(404).json({ error: "Contest not found" });
-      }
+      const snapshot = await collections.submissions
+        .where("contest_id", "==", parseInt(contest_id))
+        .where("approved", "==", 1)
+        .orderBy("created_at", "desc")
+        .get();
+      
+      const submissions = await Promise.all(snapshot.docs.map(async (doc) => {
+        const sub = doc.data() as any;
+        const userDoc = await collections.users.doc(sub.user_id.toString()).get();
+        const userData = userDoc.exists ? userDoc.data() : {};
+        
+        let motoData = { make: null, model: null, year: null };
+        if (sub.motorcycle_id) {
+          const motoDoc = await collections.motorcycles.doc(sub.motorcycle_id.toString()).get();
+          if (motoDoc.exists) {
+            const m = motoDoc.data() as any;
+            motoData = { make: m.make, model: m.model, year: m.year };
+          }
+        }
 
-      const submissions = db.prepare(`
-        SELECT s.*, u.username, u.profile_picture_url,
-               m.make as moto_make, m.model as moto_model, m.year as moto_year,
-               (SELECT COUNT(*) FROM votes WHERE submission_id = s.id) as vote_count
-        FROM submissions s
-        JOIN users u ON s.user_id = u.id
-        LEFT JOIN motorcycles m ON s.motorcycle_id = m.id
-        WHERE s.contest_id = ? AND s.approved = 1
-      `).all(contest_id);
+        const votesSnapshot = await collections.votes.where("submission_id", "==", parseInt(doc.id)).get();
+        
+        return {
+          id: doc.id,
+          ...sub,
+          username: (userData as any).username,
+          profile_picture_url: (userData as any).profile_picture_url,
+          moto_make: motoData.make,
+          moto_model: motoData.model,
+          moto_year: motoData.year,
+          vote_count: votesSnapshot.size
+        };
+      }));
 
       res.json({ contest, submissions });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      console.error("Error fetching contest submissions from Firestore:", error);
+      // Fallback
+      try {
+        const contest = db.prepare(`
+          SELECT * FROM contests WHERE id = ?
+        `).get(contest_id) as any;
+
+        if (!contest) {
+          return res.status(404).json({ error: "Contest not found" });
+        }
+
+        const submissionsList = db.prepare(`
+          SELECT s.*, u.username, u.profile_picture_url,
+                 m.make as moto_make, m.model as moto_model, m.year as moto_year,
+                 (SELECT COUNT(*) FROM votes WHERE submission_id = s.id) as vote_count
+          FROM submissions s
+          JOIN users u ON s.user_id = u.id
+          LEFT JOIN motorcycles m ON s.motorcycle_id = m.id
+          WHERE s.contest_id = ? AND s.approved = 1
+        `).all(contest_id);
+
+        res.json({ contest, submissions: submissionsList });
+      } catch (sqe) {
+        res.status(500).json({ error: error.message });
+      }
     }
   });
 
@@ -1682,9 +2148,10 @@ async function startServer() {
   });
 
   // --- Chat API Endpoints ---
-
-  app.get("/api/chats", authenticateToken, (req: any, res) => {
+  
+  app.get("/api/conversations", authenticateToken, (req: any, res) => {
     try {
+      console.log("-> /api/conversations HIT, user:", req.user?.id);
       const userId = req.user.id;
       const chats = db.prepare(`
         SELECT c.*, 
@@ -1696,12 +2163,16 @@ async function startServer() {
         ORDER BY c.last_message_timestamp DESC, c.created_at DESC
       `).all(userId, userId) as any[];
 
+      console.log("-> /api/conversations fetched sqlite, count:", chats.length);
+
       // Parse participantIds into an array
       const formattedChats = chats.map(chat => ({
         ...chat,
         participantIds: chat.participantIds ? chat.participantIds.split(',').map(Number) : [],
         unread_count: chat.unread_count || 0
       }));
+
+      console.log("-> /api/conversations formatted chats.");
 
       res.setHeader('Content-Type', 'application/json');
       res.json(formattedChats);
@@ -1711,54 +2182,71 @@ async function startServer() {
     }
   });
 
-  app.post("/api/chats", authenticateToken, (req: any, res) => {
+  app.post("/api/conversations", authenticateToken, async (req: any, res) => {
     const { participantIds, type, title } = req.body;
     if (!participantIds || !Array.isArray(participantIds) || participantIds.length === 0) {
       return res.status(400).json({ error: "Participant IDs are required" });
     }
 
-    const numericParticipantIds = participantIds.map(Number);
+    const numericParticipantIds = Array.from(new Set(participantIds.map(Number)));
     if (!numericParticipantIds.includes(Number(req.user.id))) {
       return res.status(403).json({ error: "Forbidden: You must be a participant to create a chat" });
     }
 
     try {
+      // Ensure users exist in SQLite to satisfy foreign key constraints
+      for (const userId of numericParticipantIds) {
+        await ensureSqliteUserExists(userId);
+      }
+
       const stmt = db.prepare("INSERT INTO chats (type, title) VALUES (?, ?)");
       const info = stmt.run(type || 'one-on-one', title || null);
       const chatId = info.lastInsertRowid;
 
-      const participantStmt = db.prepare("INSERT INTO chat_participants (chat_id, user_id) VALUES (?, ?)");
+      const participantStmt = db.prepare("INSERT OR IGNORE INTO chat_participants (chat_id, user_id) VALUES (?, ?)");
       for (const userId of numericParticipantIds) {
         participantStmt.run(chatId, userId);
       }
 
       res.status(201).json({ id: chatId });
     } catch (error: any) {
+      console.error(error);
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.post("/api/chats/find", authenticateToken, (req: any, res) => {
+  app.post("/api/conversations/find", authenticateToken, (req: any, res) => {
     const { participantIds } = req.body;
     if (!participantIds || !Array.isArray(participantIds) || participantIds.length !== 2) {
       return res.status(400).json({ error: "Exactly two participant IDs are required for one-on-one chat" });
     }
 
-    const numericParticipantIds = participantIds.map(Number);
+    const numericParticipantIds = Array.from(new Set(participantIds.map(Number)));
     if (!numericParticipantIds.includes(Number(req.user.id))) {
       return res.status(403).json({ error: "Forbidden: You must be a participant to find a chat" });
     }
 
     try {
-      // Find a one-on-one chat that has exactly these two participants
-      const chat = db.prepare(`
-        SELECT c.id 
-        FROM chats c
-        WHERE c.type = 'one-on-one'
-          AND (SELECT COUNT(*) FROM chat_participants WHERE chat_id = c.id) = 2
-          AND (SELECT COUNT(*) FROM chat_participants WHERE chat_id = c.id AND user_id IN (?, ?)) = 2
-        LIMIT 1
-      `).get(numericParticipantIds[0], numericParticipantIds[1]) as any;
+      let chat;
+      if (numericParticipantIds.length === 1) {
+        chat = db.prepare(`
+          SELECT c.id 
+          FROM chats c
+          WHERE c.type = 'one-on-one'
+            AND (SELECT COUNT(*) FROM chat_participants WHERE chat_id = c.id) = 1
+            AND (SELECT COUNT(*) FROM chat_participants WHERE chat_id = c.id AND user_id = ?) = 1
+          LIMIT 1
+        `).get(numericParticipantIds[0]) as any;
+      } else {
+        chat = db.prepare(`
+          SELECT c.id 
+          FROM chats c
+          WHERE c.type = 'one-on-one'
+            AND (SELECT COUNT(*) FROM chat_participants WHERE chat_id = c.id) = 2
+            AND (SELECT COUNT(*) FROM chat_participants WHERE chat_id = c.id AND user_id IN (?, ?)) = 2
+          LIMIT 1
+        `).get(numericParticipantIds[0], numericParticipantIds[1]) as any;
+      }
 
       if (chat) {
         res.json({ id: chat.id });
@@ -1770,7 +2258,7 @@ async function startServer() {
     }
   });
 
-  app.get("/api/chats/:id/messages", authenticateToken, (req: any, res) => {
+  app.get("/api/conversations/:id/messages", authenticateToken, (req: any, res) => {
     try {
       const chatId = req.params.id;
       const userId = req.user.id;
@@ -1795,7 +2283,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/chats/:id/messages", authenticateToken, (req: any, res) => {
+  app.post("/api/conversations/:id/messages", authenticateToken, (req: any, res) => {
     const { text } = req.body;
     const chatId = req.params.id;
     const senderId = req.user.id;
@@ -1831,7 +2319,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/chats/:id/read", authenticateToken, (req: any, res) => {
+  app.post("/api/conversations/:id/read", authenticateToken, (req: any, res) => {
     const chatId = req.params.id;
     const userId = req.user.id;
 
@@ -1853,37 +2341,103 @@ async function startServer() {
     }
   });
 
-  app.get("/api/notifications", authenticateToken, (req: any, res) => {
+  app.get("/api/user-alerts", authenticateToken, async (req: any, res) => {
     const { user_id } = req.query;
     if (!user_id) return res.status(400).json({ error: "User ID is required" });
     
-    if (user_id !== req.user.id.toString() && user_id !== req.user.id && req.user.role !== 'admin' && req.user.role !== 'moderator') {
+    if (user_id.toString() !== req.user.id.toString() && req.user.role !== 'admin' && req.user.role !== 'moderator') {
       return res.status(403).json({ error: "Forbidden: You can only view your own notifications" });
     }
 
-    const notifications = db.prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC").all(user_id);
-    res.json(notifications);
+    try {
+      // Try SQLite first
+      const notifications = db.prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC").all(user_id);
+      
+      // If we have local notifications, return them
+      if (notifications.length > 0) {
+        return res.json(notifications);
+      }
+
+      // Otherwise try Firestore
+      try {
+        const snapshot = await collections.notifications
+          .where("user_id", "==", parseInt(user_id as string))
+          .orderBy("created_at", "desc")
+          .get();
+        const firestoreNotifications = snapshot.docs.map(doc => ({ ...doc.data() as any, id: doc.id }));
+        res.json(firestoreNotifications);
+      } catch (err: any) {
+        if (!err.message?.includes('PERMISSION_DENIED')) {
+          console.error("Error fetching notifications from Firestore:", err.message);
+        }
+        res.json([]); // Return empty if both fail
+      }
+    } catch (err : any) {
+      console.error("Error fetching notifications:", err.message);
+      res.status(500).json({ error: "Failed to fetch notifications" });
+    }
   });
 
-  app.post("/api/notifications/:id/read", authenticateToken, (req: any, res) => {
-    const notification = db.prepare("SELECT user_id FROM notifications WHERE id = ?").get(req.params.id) as any;
-    if (!notification) {
-      return res.status(404).json({ error: "Notification not found" });
+  app.post("/api/user-alerts/:id/read", authenticateToken, async (req: any, res) => {
+    const { id } = req.params;
+    try {
+      const notifDoc = await collections.notifications.doc(id).get();
+      if (!notifDoc.exists) {
+        // Fallback check in SQLite if needed, but usually we just return 404
+        return res.status(404).json({ error: "Notification not found" });
+      }
+      const notification = notifDoc.data() as any;
+      if (notification.user_id.toString() !== req.user.id.toString() && req.user.role !== 'admin' && req.user.role !== 'moderator') {
+        return res.status(403).json({ error: "Forbidden: You can only read your own notifications" });
+      }
+      
+      await collections.notifications.doc(id).update({ is_read: 1 });
+      
+      // Dual-write to SQLite
+      try {
+        db.prepare("UPDATE notifications SET is_read = 1 WHERE id = ?").run(id);
+      } catch (sqe) {}
+      
+      res.json({ message: "Notification marked as read" });
+    } catch (err) {
+      console.error("Error updating notification status in Firestore:", err);
+      res.status(500).json({ error: "Failed to update notification" });
     }
-    if (notification.user_id !== req.user.id && req.user.role !== 'admin' && req.user.role !== 'moderator') {
-      return res.status(403).json({ error: "Forbidden: You can only read your own notifications" });
+  });
+
+  // Public: Get keywords config
+  app.get("/api/keywords", async (req, res) => {
+    try {
+      const dbKeywords = db.prepare("SELECT * FROM keywords_config").all();
+      // Ensure keywords is parsed from JSON string if needed
+      const keywords = dbKeywords.map(k => ({
+        ...k,
+        keywords: typeof k.keywords === 'string' ? JSON.parse(k.keywords) : k.keywords
+      }));
+      res.json(keywords);
+    } catch (e) {
+      // Postgres or Firestore fallback... wait, this is sqlite.
+      // Firestore fallback
+      try {
+        const snapshot = await collections.keywords_config.get();
+        const keywords = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        res.json(keywords);
+      } catch (error) {
+        console.error("Error fetching keywords API:", error);
+        res.status(500).json({ error: "Failed to fetch keywords" });
+      }
     }
-    db.prepare("UPDATE notifications SET is_read = 1 WHERE id = ?").run(req.params.id);
-    res.json({ message: "Notification marked as read" });
   });
 
   // Admin: Get keywords config
   app.get("/api/admin/keywords", authenticateToken, async (req, res) => {
     if ((req as any).user.role !== 'admin') return res.status(403).json({ error: "Forbidden" });
     try {
-      const keywords = db.prepare("SELECT * FROM keywords_config").all();
-      res.json(keywords.map((k: any) => ({ ...k, keywords: JSON.parse(k.keywords) })));
+      const snapshot = await collections.keywords_config.get();
+      const keywords = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      res.json(keywords);
     } catch (error) {
+      console.error("Error fetching keywords config:", error);
       res.status(500).json({ error: "Failed to fetch keywords" });
     }
   });
@@ -1893,10 +2447,27 @@ async function startServer() {
     if ((req as any).user.role !== 'admin') return res.status(403).json({ error: "Forbidden" });
     const { category_name, keywords, radius, icon } = req.body;
     try {
-      const stmt = db.prepare("INSERT INTO keywords_config (category_name, keywords, radius, icon) VALUES (?, ?, ?, ?)");
-      const result = stmt.run(category_name, JSON.stringify(keywords), radius || 5000, icon);
-      res.json({ id: result.lastInsertRowid, category_name, keywords, radius, icon });
+      const newId = await getNextId("keywords_config");
+      const data = { 
+        category_name, 
+        keywords: Array.isArray(keywords) ? keywords : [], 
+        radius: Number(radius) || 5000, 
+        icon: icon || 'MapPin' 
+      };
+      
+      await collections.keywords_config.doc(newId.toString()).set(data);
+      
+      // Dual-write to SQLite for fallback
+      try {
+        db.prepare("INSERT OR REPLACE INTO keywords_config (id, category_name, keywords, radius, icon) VALUES (?, ?, ?, ?, ?)")
+          .run(newId, category_name, JSON.stringify(keywords), radius || 5000, icon);
+      } catch (sqError) {
+        console.error("SQLite write failed for keywords_config:", sqError);
+      }
+      
+      res.json({ id: newId, ...data });
     } catch (error) {
+      console.error("Error creating keyword config:", error);
       res.status(500).json({ error: "Failed to create keyword config" });
     }
   });
@@ -1906,10 +2477,25 @@ async function startServer() {
     if ((req as any).user.role !== 'admin') return res.status(403).json({ error: "Forbidden" });
     const { category_name, keywords, radius, icon } = req.body;
     try {
-      const stmt = db.prepare("UPDATE keywords_config SET category_name = ?, keywords = ?, radius = ?, icon = ? WHERE id = ?");
-      stmt.run(category_name, JSON.stringify(keywords), radius, icon, req.params.id);
+      const data = {
+        category_name,
+        keywords: Array.isArray(keywords) ? keywords : [],
+        radius: Number(radius),
+        icon
+      };
+      await collections.keywords_config.doc(req.params.id).set(data, { merge: true });
+      
+      // Dual-write to SQLite
+      try {
+        db.prepare("UPDATE keywords_config SET category_name = ?, keywords = ?, radius = ?, icon = ? WHERE id = ?")
+          .run(category_name, JSON.stringify(keywords), radius, icon, req.params.id);
+      } catch (sqError) {
+        console.error("SQLite update failed for keywords_config:", sqError);
+      }
+      
       res.json({ success: true });
     } catch (error) {
+      console.error("Error updating keyword config:", error);
       res.status(500).json({ error: "Failed to update keyword config" });
     }
   });
@@ -1918,9 +2504,18 @@ async function startServer() {
   app.delete("/api/admin/keywords/:id", authenticateToken, async (req, res) => {
     if ((req as any).user.role !== 'admin') return res.status(403).json({ error: "Forbidden" });
     try {
-      db.prepare("DELETE FROM keywords_config WHERE id = ?").run(req.params.id);
+      await collections.keywords_config.doc(req.params.id).delete();
+      
+      // Delete from SQLite
+      try {
+        db.prepare("DELETE FROM keywords_config WHERE id = ?").run(req.params.id);
+      } catch (sqError) {
+        console.error("SQLite delete failed for keywords_config:", sqError);
+      }
+      
       res.json({ success: true });
     } catch (error) {
+      console.error("Error deleting keyword config:", error);
       res.status(500).json({ error: "Failed to delete keyword config" });
     }
   });
@@ -1929,13 +2524,25 @@ async function startServer() {
   app.get("/api/admin/places", authenticateToken, async (req, res) => {
     if ((req as any).user.role !== 'admin') return res.status(403).json({ error: "Forbidden" });
     try {
-      const places = db.prepare(`
-        SELECT c.*, p.is_approved, p.is_hidden, p.custom_category, p.priority_score 
-        FROM places_cache c
-        LEFT JOIN places_control p ON c.place_id = p.place_id
-      `).all();
+      const cacheSnapshot = await collections.places_cache.get();
+      const controlSnapshot = await collections.places_control.get();
+      
+      const controlsMap = new Map();
+      controlSnapshot.docs.forEach(doc => controlsMap.set(doc.id, doc.data()));
+      
+      const places = cacheSnapshot.docs.map(doc => {
+        const cacheData = doc.data();
+        const controlData = controlsMap.get(doc.id) || {};
+        return {
+          ...cacheData,
+          ...controlData,
+          place_id: doc.id
+        };
+      });
+      
       res.json(places);
     } catch (error) {
+      console.error("Error fetching admin places:", error);
       res.status(500).json({ error: "Failed to fetch places" });
     }
   });
@@ -1947,46 +2554,73 @@ async function startServer() {
     if (!Array.isArray(places)) return res.status(400).json({ error: "Invalid data format" });
 
     try {
-      const insertCache = db.prepare(`
-        INSERT OR REPLACE INTO places_cache 
-        (place_id, name, lat, lng, rating, reviews, category, source_keyword, last_fetched)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `);
+      const batch = firestore.batch();
+      
+      // Get valid categories from keywords_config
+      const validCategoriesRows = db.prepare("SELECT category_name FROM keywords_config").all() as { category_name: string }[];
+      const validCategories = new Set(validCategoriesRows.map(r => r.category_name.toLowerCase()));
 
-      const insertControl = db.prepare(`
-        INSERT OR REPLACE INTO places_control 
-        (place_id, is_approved, is_hidden, custom_category, priority_score)
-        VALUES (?, ?, ?, ?, ?)
-      `);
+      for (const p of places) {
+        const place_id = p.place_id || p.id;
+        if (!place_id) continue;
 
-      db.transaction(() => {
-        for (const p of places) {
-          const placeId = p.place_id || p.id;
-          if (!placeId) continue;
+        const category = (p.category || 'other').toLowerCase();
+        const isCategoryValid = validCategories.has(category);
+        const needsRevision = !isCategoryValid;
 
-          // Insert into cache
-          insertCache.run(
-            placeId,
-            p.name,
-            p.lat,
-            p.lng,
-            p.rating || 0,
-            p.reviews || 0,
-            p.category || 'other',
-            p.source_keyword || 'manual_import'
+        const cacheRef = collections.places_cache.doc(place_id);
+        const controlRef = collections.places_control.doc(place_id);
+
+        const cacheData = {
+          place_id,
+          name: p.name,
+          lat: Number(p.lat),
+          lng: Number(p.lng),
+          rating: Number(p.rating || 0),
+          reviews: Number(p.reviews || 0),
+          category: p.category || 'other',
+          source_keyword: p.source_keyword || 'manual_import',
+          full_address: p.full_address || p.address || null,
+          last_fetched: admin.firestore.FieldValue.serverTimestamp()
+        };
+
+        const controlData = {
+          place_id,
+          is_approved: p.is_approved !== undefined ? !!p.is_approved : !needsRevision,
+          is_hidden: !!p.is_hidden,
+          needs_revision: needsRevision
+        };
+
+        batch.set(cacheRef, cacheData, { merge: true });
+        batch.set(controlRef, controlData, { merge: true });
+
+        // Dual-write to SQLite for fallback
+        try {
+          db.prepare(`
+            INSERT OR REPLACE INTO places_cache 
+            (place_id, name, lat, lng, rating, reviews, category, source_keyword, last_fetched)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          `).run(
+            place_id, p.name, p.lat, p.lng, p.rating || 0,
+            p.reviews || 0, p.category || 'other', p.source_keyword || 'manual_import'
           );
-
-          // Insert into control (default to approved if not specified)
-          insertControl.run(
-            placeId,
-            p.is_approved !== undefined ? (p.is_approved ? 1 : 0) : 1,
+          
+          db.prepare(`
+            INSERT OR REPLACE INTO places_control 
+            (place_id, is_approved, is_hidden, needs_revision)
+            VALUES (?, ?, ?, ?)
+          `).run(
+            place_id, 
+            p.is_approved !== undefined ? (p.is_approved ? 1 : 0) : (needsRevision ? 0 : 1),
             p.is_hidden !== undefined ? (p.is_hidden ? 1 : 0) : 0,
-            p.custom_category || p.category || null,
-            p.priority_score || 0
+            needsRevision ? 1 : 0
           );
+        } catch (sqError) {
+          console.error("SQLite bulk import failed for one item:", sqError);
         }
-      })();
+      }
 
+      await batch.commit();
       res.json({ success: true, count: places.length });
     } catch (error) {
       console.error("Error bulk importing places:", error);
@@ -1994,31 +2628,90 @@ async function startServer() {
     }
   });
 
+  // Admin: Update place cache data
+  app.put("/api/admin/places/:id", authenticateToken, async (req, res) => {
+    if ((req as any).user.role !== 'admin') return res.status(403).json({ error: "Forbidden" });
+    const { name, lat, lng, category, full_address, rating, reviews, is_approved, is_hidden, needs_revision } = req.body;
+    try {
+      const cacheRef = collections.places_cache.doc(req.params.id);
+      const controlRef = collections.places_control.doc(req.params.id);
+      
+      const updateData: any = {
+        name,
+        lat: Number(lat),
+        lng: Number(lng),
+        category,
+        full_address,
+        rating: Number(rating || 0),
+        reviews: Number(reviews || 0),
+        last_fetched: admin.firestore.FieldValue.serverTimestamp()
+      };
+
+      await cacheRef.set(updateData, { merge: true });
+      
+      if (is_approved !== undefined || is_hidden !== undefined || needs_revision !== undefined) {
+        await controlRef.set({
+          place_id: req.params.id,
+          is_approved: !!is_approved,
+          is_hidden: !!is_hidden,
+          needs_revision: !!needs_revision
+        }, { merge: true });
+      }
+
+      // Update SQLite
+      try {
+        db.prepare(`
+          INSERT OR REPLACE INTO places_cache 
+          (place_id, name, lat, lng, rating, reviews, category, source_keyword, last_fetched)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        `).run(
+          req.params.id, name, lat, lng, rating || 0,
+          reviews || 0, category, 'manual_edit'
+        );
+      } catch (sqError) {
+        console.error("SQLite update failed for places_cache:", sqError);
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error updating place cache:", error);
+      res.status(500).json({ error: "Failed to update place data" });
+    }
+  });
+
   // Admin: Update place control
   app.post("/api/admin/places/:id/control", authenticateToken, async (req, res) => {
     if ((req as any).user.role !== 'admin') return res.status(403).json({ error: "Forbidden" });
-    const { is_approved, is_hidden, custom_category, priority_score } = req.body;
+    const { is_approved, is_hidden, needs_revision } = req.body;
     try {
-      const existing = db.prepare("SELECT * FROM places_control WHERE place_id = ?").get(req.params.id) as any;
-      
-      if (existing) {
-        const final_approved = is_approved !== undefined ? (is_approved ? 1 : 0) : existing.is_approved;
-        const final_hidden = is_hidden !== undefined ? (is_hidden ? 1 : 0) : existing.is_hidden;
-        const final_category = custom_category !== undefined ? custom_category : existing.custom_category;
-        const final_priority = priority_score !== undefined ? priority_score : existing.priority_score;
+      const docRef = collections.places_control.doc(req.params.id);
+      const doc = await docRef.get();
+      const existingData = doc.exists ? doc.data() : {};
 
-        db.prepare("UPDATE places_control SET is_approved = ?, is_hidden = ?, custom_category = ?, priority_score = ? WHERE place_id = ?")
-          .run(final_approved, final_hidden, final_category, final_priority, req.params.id);
-      } else {
-        db.prepare("INSERT INTO places_control (place_id, is_approved, is_hidden, custom_category, priority_score) VALUES (?, ?, ?, ?, ?)")
-          .run(
-            req.params.id, 
-            is_approved !== undefined ? (is_approved ? 1 : 0) : 0, 
-            is_hidden !== undefined ? (is_hidden ? 1 : 0) : 0, 
-            custom_category || null, 
-            priority_score || 0
-          );
+      const finalData = {
+        place_id: req.params.id,
+        is_approved: is_approved !== undefined ? !!is_approved : (existingData?.is_approved ?? false),
+        is_hidden: is_hidden !== undefined ? !!is_hidden : (existingData?.is_hidden ?? false),
+        needs_revision: needs_revision !== undefined ? !!needs_revision : (existingData?.needs_revision ?? false)
+      };
+
+      await docRef.set(finalData, { merge: true });
+      
+      // Dual-write to SQLite
+      try {
+        db.prepare(`
+          INSERT OR REPLACE INTO places_control (place_id, is_approved, is_hidden, needs_revision)
+          VALUES (?, ?, ?, ?)
+        `).run(
+          req.params.id,
+          finalData.is_approved ? 1 : 0,
+          finalData.is_hidden ? 1 : 0,
+          finalData.needs_revision ? 1 : 0
+        );
+      } catch (sqError) {
+        console.error("SQLite update failed for place control:", sqError);
       }
+      
       res.json({ success: true });
     } catch (error) {
       console.error("Error updating place control:", error);
@@ -2026,32 +2719,87 @@ async function startServer() {
     }
   });
 
+  app.post("/api/admin/places/:id/category", authenticateToken, async (req, res) => {
+    if ((req as any).user.role !== 'admin') return res.status(403).json({ error: "Forbidden" });
+    const { category } = req.body;
+    try {
+      const docRef = collections.places_cache.doc(req.params.id);
+      await docRef.update({ category });
+      
+      // Dual-write to SQLite
+      db.prepare("UPDATE places_cache SET category = ? WHERE place_id = ?").run(category, req.params.id);
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error updating place category:", error);
+      res.status(500).json({ error: "Failed to update place category" });
+    }
+  });
+
+  const getDistance = (p1: number[], p2: number[]) => {
+    const R = 6371e3; // metres
+    const φ1 = p1[0] * Math.PI/180;
+    const φ2 = p2[0] * Math.PI/180;
+    const Δφ = (p2[0]-p1[0]) * Math.PI/180;
+    const Δλ = (p2[1]-p1[1]) * Math.PI/180;
+    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ/2) * Math.sin(Δλ/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  };
+
+  const insertPlaceCacheStmt = db.prepare(`
+    INSERT OR REPLACE INTO places_cache 
+    (place_id, name, lat, lng, rating, reviews, category, source_keyword, city, details, full_address, source, last_fetched)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+  `);
+
   // Advanced Search Endpoint
   app.post("/api/places/advanced-search", async (req, res) => {
     const { mode, lat, lng, radius, bounds, polyline, keywords } = req.body;
     const apiKey = process.env.GOOGLE_MAPS_PLATFORM_KEY || process.env.VITE_GOOGLE_MAPS_PLATFORM_KEY || (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY;
     
-    const settings = db.prepare("SELECT key, value FROM settings").all() as any[];
-    const settingsMap = settings.reduce((acc, curr) => { acc[curr.key] = curr.value; return acc; }, {} as any);
-    const enableGoogleMaps = settingsMap['api_google_maps'] === 'true';
-    const enableOSM = settingsMap['api_osm'] === 'true';
-
-    const getDistance = (p1: number[], p2: number[]) => {
-      const R = 6371e3; // metres
-      const φ1 = p1[0] * Math.PI/180;
-      const φ2 = p2[0] * Math.PI/180;
-      const Δφ = (p2[0]-p1[0]) * Math.PI/180;
-      const Δλ = (p2[1]-p1[1]) * Math.PI/180;
-      const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-              Math.cos(φ1) * Math.cos(φ2) *
-              Math.sin(Δλ/2) * Math.sin(Δλ/2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-      return R * c;
-    };
-
     try {
-      // 1. Get all keywords config
-      const keywordConfigs = db.prepare("SELECT * FROM keywords_config").all();
+      const [settingsSnapshot, keywordsSnapshot, controlSnapshot, ecoSnapshot] = await Promise.all([
+        collections.settings.get().catch(() => ({ docs: [] })),
+        collections.keywords_config.get().catch(() => ({ docs: [] })),
+        collections.places_control.get().catch(() => ({ docs: [] })),
+        collections.ecosystems.get().catch(() => ({ docs: [] }))
+      ]);
+
+      const settingsMap = settingsSnapshot.docs.reduce((acc, doc) => { 
+        acc[doc.id] = (doc.data() as any).value; 
+        return acc; 
+      }, {} as any);
+
+      // Fallback if settings empty (Firestore might be unconfigured or empty)
+      if (Object.keys(settingsMap).length === 0) {
+        try {
+          const settings = db.prepare("SELECT * FROM settings").all() as any[];
+          settings.forEach(row => settingsMap[row.key] = row.value);
+        } catch (e) {}
+      }
+
+      let keywordConfigs = keywordsSnapshot.docs.map(doc => ({ ...doc.data() as any, id: doc.id }));
+      if (keywordConfigs.length === 0) {
+        try {
+          keywordConfigs = db.prepare("SELECT * FROM keywords_config").all();
+          keywordConfigs = keywordConfigs.map(k => ({
+            ...k,
+            keywords: typeof k.keywords === 'string' ? JSON.parse(k.keywords) : (k.keywords || [])
+          }));
+        } catch (e) {}
+      }
+
+      const controlMap = new Map();
+      controlSnapshot.docs.forEach(doc => controlMap.set(doc.id, doc.data()));
+
+      const internalPlaces = ecoSnapshot.docs.map(doc => doc.data() as any);
+      
+      const enableGoogleMaps = settingsMap['api_google_maps'] === 'true' || settingsMap['api_osm'] === 'true'; // Used as generic API toggle now
+      const enableOSM = settingsMap['api_osm'] === 'true';
+
       const activeKeywords = keywords && keywords.length > 0 
         ? keywordConfigs.filter((k: any) => keywords.includes(k.category_name))
         : keywordConfigs;
@@ -2059,54 +2807,76 @@ async function startServer() {
       let allPlaces: any[] = [];
       let samplePoints: number[][] = [];
 
-      // Helper function to fetch from Google Places
       const fetchPlaces = async (searchLat: number, searchLng: number, searchRadius: number, keywordStr: string, category: string) => {
+        const apiKey = "BNecDxcWcrUQ5X1SzghrH2OMxssFG8pgDA6-D9MrlDk";
         if (!enableGoogleMaps || !apiKey) return [];
-        const url = new URL("https://maps.googleapis.com/maps/api/place/nearbysearch/json");
-        url.searchParams.append("location", `${searchLat},${searchLng}`);
-        url.searchParams.append("radius", searchRadius.toString());
-        url.searchParams.append("keyword", keywordStr);
-        url.searchParams.append("key", apiKey);
-
-        const response = await fetch(url.toString());
-        const data = await response.json();
         
-        if (data.status === 'OK') {
-          const places = data.results.map((p: any) => ({
-            place_id: p.place_id,
-            name: p.name,
-            lat: p.geometry.location.lat,
-            lng: p.geometry.location.lng,
-            rating: p.rating || 0,
-            reviews: p.user_ratings_total || 0,
-            category: category,
-            source_keyword: keywordStr,
-            city: '',
-            details: '',
-            full_address: p.vicinity || '',
-            source: 'google'
-          }));
+        const url = new URL("https://discover.search.hereapi.com/v1/discover");
+        url.searchParams.append("at", `${searchLat},${searchLng}`);
+        url.searchParams.append("q", keywordStr || category || "restaurant");
+        url.searchParams.append("limit", "20");
+        url.searchParams.append("apikey", apiKey);
 
-          // Cache places
-          const insertCache = db.prepare(`
-            INSERT OR REPLACE INTO places_cache 
-            (place_id, name, lat, lng, rating, reviews, category, source_keyword, city, details, full_address, source, last_fetched)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-          `);
+        try {
+          const response = await fetch(url.toString());
+          if (!response.ok) {
+            console.error("HERE Places API HTTP error in advanced search:", response.status, response.statusText);
+            return [];
+          }
           
-          db.transaction(() => {
-            for (const p of places) {
-              insertCache.run(p.place_id, p.name, p.lat, p.lng, p.rating, p.reviews, p.category, p.source_keyword, p.city, p.details, p.full_address, p.source);
-            }
-          })();
+          const text = await response.text();
+          if (!text || text.trim() === "") {
+            console.warn("HERE Places API returned an empty response");
+            return [];
+          }
 
-          return places;
+          let data;
+          try {
+            data = JSON.parse(text);
+          } catch (parseError) {
+            return [];
+          }
+          
+          if (data.items) {
+            const places = data.items.map((p: any) => ({
+              place_id: p.id,
+              name: p.title,
+              lat: p.position?.lat || 0,
+              lng: p.position?.lng || 0,
+              rating: 0,
+              reviews: 0,
+              category: category,
+              source_keyword: keywordStr,
+              city: p.address?.city || '',
+              details: p.categories?.map((c: any) => c.name).join(', ') || '',
+              full_address: p.address?.label || '',
+              source: 'here'
+            }));
+
+            // Sync to SQLite in background (don't await for each point to stay fast)
+            process.nextTick(() => {
+              try {
+                db.transaction(() => {
+                  for (const p of places) {
+                    insertPlaceCacheStmt.run(p.place_id, p.name, p.lat, p.lng, p.rating, p.reviews, p.category, p.source_keyword, p.city, p.details, p.full_address, p.source);
+                  }
+                })();
+              } catch (sqe) {
+                console.error("SQLite cache sync error:", sqe);
+              }
+            });
+
+            return places;
+          }
+          return [];
+        } catch (error) {
+          console.error("fetchPlaces error:", error);
+          return [];
         }
-        return [];
       };
 
       // Helper function to fetch from OSM
-      const fetchOSM = async (searchLat: number, searchLng: number, searchRadius: number) => {
+      const fetchOSMInner = async (searchLat: number, searchLng: number, searchRadius: number) => {
         if (!enableOSM) return [];
         try {
           const osmPlaces = await fetchOSMPlaces(searchLat, searchLng, searchRadius);
@@ -2125,59 +2895,77 @@ async function startServer() {
             source: 'osm'
           }));
 
-          // Cache OSM places
-          const insertCache = db.prepare(`
-            INSERT OR REPLACE INTO places_cache 
-            (place_id, name, lat, lng, rating, reviews, category, source_keyword, city, details, full_address, source, last_fetched)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-          `);
-          
-          db.transaction(() => {
-            for (const p of mappedOSM) {
-              insertCache.run(p.place_id, p.name, p.lat, p.lng, p.rating, p.reviews, p.category, p.source_keyword, p.city, p.details, p.full_address, p.source);
+          // Sync to SQLite in background
+          process.nextTick(() => {
+            try {
+              db.transaction(() => {
+                for (const p of mappedOSM) {
+                  insertPlaceCacheStmt.run(p.place_id, p.name, p.lat, p.lng, p.rating, p.reviews, p.category, p.source_keyword, p.city, p.details, p.full_address, p.source);
+                }
+              })();
+            } catch (sqe) {
+              console.error("SQLite OSM cache sync error:", sqe);
             }
-          })();
+          });
 
           return mappedOSM;
         } catch (e) {
-          console.error("OSM fetch error in advanced-search:", e);
+          console.error(`OSM fetch error in advanced-search for point [${searchLat}, ${searchLng}]:`, e);
           return [];
         }
       };
 
+      // Helper for limited concurrency
+      const limitConcurrency = async (tasks: (() => Promise<any[]>)[], limit: number) => {
+        const results: any[] = [];
+        const running = new Set<Promise<void>>();
+        for (const task of tasks) {
+          const p = task().then(res => { 
+            results.push(res);
+          }).catch(err => {
+            console.error("Error in task execution:", err);
+          }).finally(() => {
+            running.delete(p);
+          });
+          running.add(p);
+          if (running.size >= limit) {
+            await Promise.race(running);
+          }
+        }
+        await Promise.all(running);
+        return results;
+      };
+
       // 2. Execute search based on mode
+      const searchTasks: (() => Promise<any[]>)[] = [];
       if (mode === 'near_me' && lat && lng) {
         const searchRadius = radius || 5000;
-        for (const config of activeKeywords) {
-          const kws = JSON.parse((config as any).keywords);
-          for (const kw of kws) {
-            const places = await fetchPlaces(lat, lng, searchRadius, kw, (config as any).category_name);
-            allPlaces = [...allPlaces, ...places];
-          }
-        }
-        const osmPlaces = await fetchOSM(lat, lng, searchRadius);
-        allPlaces = [...allPlaces, ...osmPlaces];
+        activeKeywords.forEach((config: any) => {
+          const kwsRaw = config.keywords;
+          const kws = Array.isArray(kwsRaw) ? kwsRaw : (typeof kwsRaw === 'string' ? JSON.parse(kwsRaw) : []);
+          kws.forEach((kw: string) => {
+            searchTasks.push(() => fetchPlaces(lat, lng, searchRadius, kw, config.category_name));
+          });
+        });
+        searchTasks.push(() => fetchOSMInner(lat, lng, searchRadius));
       } else if (mode === 'viewport' && bounds) {
-        // Calculate center and radius from bounds
         const centerLat = (bounds.north + bounds.south) / 2;
         const centerLng = (bounds.east + bounds.west) / 2;
-        const viewportRadius = Math.min((getDistance([bounds.north, bounds.west], [bounds.south, bounds.east])) / 2, 50000); // Max 50km
+        const viewportRadius = Math.min((getDistance([bounds.north, bounds.west], [bounds.south, bounds.east])) / 2, 50000);
 
-        for (const config of activeKeywords) {
-          const kws = JSON.parse((config as any).keywords);
-          for (const kw of kws) {
-            const places = await fetchPlaces(centerLat, centerLng, viewportRadius, kw, (config as any).category_name);
-            allPlaces = [...allPlaces, ...places];
-          }
-        }
-        const osmPlaces = await fetchOSM(centerLat, centerLng, viewportRadius);
-        allPlaces = [...allPlaces, ...osmPlaces];
+        activeKeywords.forEach((config: any) => {
+          const kwsRaw = config.keywords;
+          const kws = Array.isArray(kwsRaw) ? kwsRaw : (typeof kwsRaw === 'string' ? JSON.parse(kwsRaw) : []);
+          kws.forEach((kw: string) => {
+            searchTasks.push(() => fetchPlaces(centerLat, centerLng, viewportRadius, kw, config.category_name));
+          });
+        });
+        searchTasks.push(() => fetchOSMInner(centerLat, centerLng, viewportRadius));
       } else if (mode === 'route' && polyline) {
         const points = polyline;
         if (points.length > 0) {
           samplePoints = [points[0]];
           let lastPoint = points[0];
-          
           for (let i = 1; i < points.length; i++) {
             const dist = getDistance(lastPoint, points[i]);
             if (dist > 5000) {
@@ -2185,26 +2973,28 @@ async function startServer() {
               lastPoint = points[i];
             }
           }
-          
           if (getDistance(lastPoint, points[points.length - 1]) > 1000) {
             samplePoints.push(points[points.length - 1]);
           }
-          
           const limitedSamples = samplePoints.slice(0, 10);
           
-          for (const pt of limitedSamples) {
-            for (const config of activeKeywords) {
-              const kws = JSON.parse((config as any).keywords);
-              for (const kw of kws) {
-                const places = await fetchPlaces(pt[0], pt[1], 3000, kw, (config as any).category_name);
-                allPlaces = [...allPlaces, ...places];
-              }
-            }
-            const osmPlaces = await fetchOSM(pt[0], pt[1], 3000);
-            allPlaces = [...allPlaces, ...osmPlaces];
-          }
+          limitedSamples.forEach(pt => {
+            activeKeywords.forEach((config: any) => {
+              const kwsRaw = config.keywords;
+              const kws = Array.isArray(kwsRaw) ? kwsRaw : (typeof kwsRaw === 'string' ? JSON.parse(kwsRaw) : []);
+              kws.forEach((kw: string) => {
+                searchTasks.push(() => fetchPlaces(pt[0], pt[1], 3000, kw, config.category_name));
+              });
+            });
+            // OSM sequentially within the samples loop? 
+            // Better to just push all tasks and let the limitConcurrency handle it.
+            searchTasks.push(() => fetchOSMInner(pt[0], pt[1], 3000));
+          });
         }
       }
+
+      const results = await limitConcurrency(searchTasks, 5); // Limit to 5 concurrent fetches
+      allPlaces = results.flat();
 
       // 3. Deduplicate
       const uniquePlacesMap = new Map();
@@ -2214,41 +3004,74 @@ async function startServer() {
         }
       }
 
-      // 3.5 Add approved places from control table that might not be in the current search results
-      // This ensures that "Deka Customs" and others show up if they are in the cache and approved
-      try {
-        const approvedPlaces = db.prepare(`
-          SELECT c.*, p.is_approved, p.is_hidden, p.custom_category, p.priority_score 
-          FROM places_control p
-          JOIN places_cache c ON p.place_id = c.place_id
-          WHERE p.is_approved = 1 AND p.is_hidden = 0
-        `).all();
-
-        for (const p of approvedPlaces as any[]) {
-          if (!uniquePlacesMap.has(p.place_id)) {
-            // Only add if it's within a reasonable distance of the search area
-            let shouldAdd = false;
-            if (mode === 'near_me' && lat && lng) {
-              const dist = getDistance([lat, lng], [p.lat, p.lng]);
-              if (dist <= (radius || 50000)) shouldAdd = true;
-            } else if (mode === 'viewport' && bounds) {
-              if (p.lat <= bounds.north && p.lat >= bounds.south && p.lng <= bounds.east && p.lng >= bounds.west) {
-                shouldAdd = true;
-              }
-            } else if (mode === 'route' && polyline) {
-              // For routes, we check if it's near any of the sample points
-              for (const pt of samplePoints) {
-                if (getDistance(pt, [p.lat, p.lng]) <= 10000) { // 10km radius from any route point
-                  shouldAdd = true;
-                  break;
-                }
-              }
+      // Background Firestore Cache Update (Batch)
+      process.nextTick(async () => {
+        try {
+          const allFound = Array.from(uniquePlacesMap.values());
+          if (allFound.length === 0) return;
+          
+          // Chunk into 500s for Firestore
+          for (let i = 0; i < allFound.length; i += 500) {
+            const chunk = allFound.slice(i, i + 500);
+            const batch = firestore.batch();
+            for (const p of chunk) {
+              const cacheRef = collections.places_cache.doc(p.place_id);
+              batch.set(cacheRef, { ...p, last_fetched: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
             }
+            await batch.commit();
+          }
+        } catch (e) {
+          console.error("Background Firestore cache sync error:", e);
+        }
+      });
 
-            if (shouldAdd) {
-              uniquePlacesMap.set(p.place_id, p);
+      // 3.5 Add approved places from control table
+      try {
+        const approvedIds: string[] = [];
+        controlMap.forEach((data, id) => {
+          if (data.is_approved === true && data.is_hidden === false && data.needs_revision === false) {
+            if (!uniquePlacesMap.has(id)) {
+              approvedIds.push(id);
             }
           }
+        });
+        
+        if (approvedIds.length > 0) {
+          // Fetch corresponding cache entries efficiently using local SQLite
+          const cacheDocs: any[] = [];
+          for (let i = 0; i < approvedIds.length; i += 900) {
+            const chunk = approvedIds.slice(i, i + 900);
+            const placeholders = chunk.map(() => '?').join(',');
+            const rows = db.prepare(`SELECT * FROM places_cache WHERE place_id IN (${placeholders})`).all(...chunk);
+            cacheDocs.push(...rows);
+          }
+          
+          cacheDocs.forEach(cacheData => {
+            if (cacheData.lat && cacheData.lng) {
+              const p = { ...cacheData, ...controlMap.get(cacheData.place_id) };
+              
+              let shouldAdd = false;
+              if (mode === 'near_me' && lat && lng) {
+                const dist = getDistance([lat, lng], [p.lat, p.lng]);
+                if (dist <= (radius || 50000)) shouldAdd = true;
+              } else if (mode === 'viewport' && bounds) {
+                if (p.lat <= bounds.north && p.lat >= bounds.south && p.lng <= bounds.east && p.lng >= bounds.west) {
+                  shouldAdd = true;
+                }
+              } else if (mode === 'route' && polyline) {
+                for (const pt of samplePoints) {
+                  if (getDistance(pt, [p.lat, p.lng]) <= 10000) {
+                    shouldAdd = true;
+                    break;
+                  }
+                }
+              }
+
+              if (shouldAdd) {
+                uniquePlacesMap.set(cacheData.place_id, p);
+              }
+            }
+          });
         }
       } catch (e) {
         console.error("Error adding approved places to search results:", e);
@@ -2257,66 +3080,55 @@ async function startServer() {
       let uniquePlaces = Array.from(uniquePlacesMap.values());
 
       // 4. Apply Admin Controls & Filtering
-      const placeIds = uniquePlaces.map(p => `'${p.place_id}'`).join(',');
-      let controls: any[] = [];
-      if (placeIds.length > 0) {
-        controls = db.prepare(`SELECT * FROM places_control WHERE place_id IN (${placeIds})`).all();
-      }
-      
-      const controlMap = new Map(controls.map(c => [c.place_id, c]));
+      try {
+        const registeredCategories = new Set(keywordConfigs.map(k => k.category_name.toLowerCase()));
 
-      uniquePlaces = uniquePlaces.filter(p => {
-        const control = controlMap.get(p.place_id);
-        if (control && control.is_hidden) return false;
-        // Hybrid mode: Show if approved OR (rating >= 4.0 and reviews >= 10)
-        if (control && control.is_approved) return true;
-        // More inclusive default filtering: rating >= 3.5 OR (rating > 0 and reviews >= 5)
-        return p.rating >= 3.5 || (p.rating > 0 && p.reviews >= 5);
-      });
+        uniquePlaces = uniquePlaces.filter(p => {
+          const control = controlMap.get(p.place_id) as any;
+          
+          if (control && control.is_hidden) return false;
+          if (control && control.needs_revision) return false;
+          
+          if (p.category && !registeredCategories.has(p.category.toLowerCase())) {
+            if (!control || !control.is_approved) return false;
+          }
 
-      // Apply custom categories and priority
-      uniquePlaces = uniquePlaces.map(p => {
-        const control = controlMap.get(p.place_id);
-        if (control) {
+          if (control && control.is_approved) return true;
+          return p.rating >= 3.5 || (p.rating > 0 && p.reviews >= 5);
+        });
+
+        uniquePlaces = uniquePlaces.map(p => {
+          const control = controlMap.get(p.place_id) as any;
           return {
             ...p,
-            category: control.custom_category || p.category,
-            priority_score: control.priority_score || 0
+            needs_revision: control ? !!control.needs_revision : false
           };
-        }
-        return { ...p, priority_score: 0 };
-      });
+        });
+      } catch (e) {
+        console.error("Error applying controls:", e);
+      }
 
-      // 5. Ranking Logic
-      // score = (rating * 10) + (reviews * 0.1) + priority_score
+      // 5. Ranking Logic (simplified without priority)
       uniquePlaces.sort((a, b) => {
-        const scoreA = (a.rating * 10) + (a.reviews * 0.1) + a.priority_score;
-        const scoreB = (b.rating * 10) + (b.reviews * 0.1) + b.priority_score;
+        const scoreA = (a.rating * 10) + (a.reviews * 0.1);
+        const scoreB = (b.rating * 10) + (b.reviews * 0.1);
         return scoreB - scoreA;
       });
 
       // 6. Deduplicate with internal places
-      // Get internal places to check for duplicates
-      const internalPlaces = db.prepare(`
-        SELECT company_name as name, lat, lng FROM ecosystems
-        UNION ALL
-        SELECT COALESCE(e.company_name, r.name) as name, e.lat, e.lng 
-        FROM ambassadors a
-        JOIN users u ON a.user_id = u.id
-        LEFT JOIN ecosystems e ON u.id = e.user_id
-        LEFT JOIN riders r ON u.id = r.user_id
-        WHERE e.lat IS NOT NULL AND e.lng IS NOT NULL
-      `).all();
-
-      uniquePlaces = uniquePlaces.filter(p => {
-        const isDuplicate = internalPlaces.some((internal: any) => 
-          internal.name && p.name &&
-          internal.name.toLowerCase() === p.name.toLowerCase() &&
-          Math.abs(internal.lat - p.lat) < 0.01 &&
-          Math.abs(internal.lng - p.lng) < 0.01
-        );
-        return !isDuplicate;
-      });
+      try {
+        uniquePlaces = uniquePlaces.filter(p => {
+          const isDuplicate = internalPlaces.some((internal: any) => 
+            (internal.company_name || internal.name) && p.name &&
+            (internal.company_name || internal.name).toLowerCase() === p.name.toLowerCase() &&
+            Math.abs(internal.lat - p.lat) < 0.01 &&
+            Math.abs(internal.lng - p.lng) < 0.01
+          );
+          return !isDuplicate;
+        });
+      } catch (e) {
+        console.error("Error deduplicating with internal places:", e);
+      }
 
       res.json(uniquePlaces);
     } catch (error: any) {
@@ -2325,30 +3137,82 @@ async function startServer() {
     }
   });
 
+  app.get("/api/places/autocomplete", async (req, res) => {
+    const { q, at, lang } = req.query;
+    const apiKey = "BNecDxcWcrUQ5X1SzghrH2OMxssFG8pgDA6-D9MrlDk";
+    
+    try {
+      const url = new URL("https://autosuggest.search.hereapi.com/v1/autosuggest");
+      url.searchParams.append("at", (at as string) || "0,0");
+      url.searchParams.append("limit", "5");
+      url.searchParams.append("q", (q as string) || "");
+      url.searchParams.append("lang", (lang as string) || "en-US");
+      url.searchParams.append("apikey", apiKey);
+      
+      const response = await fetch(url.toString());
+      if (!response.ok) {
+         return res.status(response.status).json({ error: "Failed to fetch autocomplete" });
+      }
+      const data = await response.json();
+      res.json(data);
+    } catch (error: any) {
+      console.error("Autocomplete API Exception:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.get("/api/places/nearby", async (req, res) => {
     const { lat, lng, radius, keyword } = req.query;
-    const apiKey = process.env.GOOGLE_MAPS_PLATFORM_KEY || process.env.VITE_GOOGLE_MAPS_PLATFORM_KEY || (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY;
+    const apiKey = "BNecDxcWcrUQ5X1SzghrH2OMxssFG8pgDA6-D9MrlDk";
     
     if (!apiKey) {
-      return res.status(500).json({ error: "Google Maps API key not configured" });
+      return res.status(500).json({ error: "HERE Maps API key not configured" });
     }
 
     try {
-      const url = new URL("https://maps.googleapis.com/maps/api/place/nearbysearch/json");
-      url.searchParams.append("location", `${lat},${lng}`);
-      url.searchParams.append("radius", (radius as string) || "25000"); // Default 25km
-      if (keyword) url.searchParams.append("keyword", keyword as string);
-      url.searchParams.append("key", apiKey);
+      const url = new URL("https://discover.search.hereapi.com/v1/discover");
+      url.searchParams.append("at", `${lat},${lng}`);
+      if (keyword && typeof keyword === 'string' && keyword.trim()) url.searchParams.append("q", keyword.trim());
+      else url.searchParams.append("q", "restaurant"); // HERE Discover requires q
+      url.searchParams.append("limit", "20");
+      url.searchParams.append("apikey", apiKey);
 
       const response = await fetch(url.toString());
-      const data = await response.json();
-      
-      if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
-        console.error("Google Places API Error:", data);
-        return res.status(500).json({ error: data.error_message || "Failed to fetch places" });
+      if (!response.ok) {
+         console.error("HERE Places API HTTP error:", response.status, response.statusText);
+         return res.status(500).json({ error: "Failed to fetch places" });
       }
       
-      res.json(data.results || []);
+      const text = await response.text();
+      if (!text || text.trim() === "") {
+        console.warn("HERE Places API returned an empty response in nearby endpoint");
+        return res.json([]);
+      }
+
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (parseError) {
+        console.error("Failed to parse HERE Places API response as JSON in nearby endpoint. Response text:", text.substring(0, 500));
+        return res.status(500).json({ error: "Invalid response from HERE Places API" });
+      }
+      
+      if (!data.items) {
+        console.error("HERE Places API Status Error:", data);
+        return res.status(500).json({ error: "Failed to fetch places" });
+      }
+      
+      // Map to backward compatible structure for the frontend temporarily
+      const mappedResults = data.items.map((p: any) => ({
+        place_id: p.id,
+        name: p.title,
+        geometry: { location: { lat: p.position?.lat, lng: p.position?.lng } },
+        rating: 0,
+        user_ratings_total: 0,
+        vicinity: p.address?.label || ''
+      }));
+
+      res.json(mappedResults);
     } catch (error: any) {
       console.error("Places API Exception:", error);
       res.status(500).json({ error: error.message });
@@ -2371,53 +3235,84 @@ async function startServer() {
     }
   });
 
-  app.get("/api/search", (req, res) => {
+  app.get("/api/search", async (req, res) => {
     const { q } = req.query;
     if (!q || typeof q !== 'string') return res.json({ routes: [], events: [], clubs: [], riders: [], locations: [] });
 
-    const searchTerm = `%${q.toLowerCase()}%`;
+    const searchLower = q.toLowerCase();
+    const searchTerm = `%${searchLower}%`;
 
     try {
-      // Search Routes
+      // 1. Search Routes
       const routes = db.prepare(`
         SELECT * FROM discovered_routes 
         WHERE LOWER(name) LIKE ? OR LOWER(tags) LIKE ?
         LIMIT 5
       `).all(searchTerm, searchTerm);
 
-      // Search Events
+      // 2. Search Events
       const events = db.prepare(`
         SELECT * FROM events 
         WHERE LOWER(title) LIKE ? OR LOWER(description) LIKE ? OR LOWER(location) LIKE ?
         LIMIT 5
       `).all(searchTerm, searchTerm, searchTerm);
 
-      // Search Clubs (Ecosystems with service_category = 'club')
-      const clubs = db.prepare(`
-        SELECT u.id, u.username, u.profile_picture_url, e.company_name, e.full_address 
-        FROM users u 
-        JOIN ecosystems e ON u.id = e.user_id 
-        WHERE u.type = 'ecosystem' AND e.service_category = 'club' AND (LOWER(u.username) LIKE ? OR LOWER(e.company_name) LIKE ?)
-        LIMIT 5
-      `).all(searchTerm, searchTerm);
+      // 3. Search Users in Firestore
+      let riders: any[] = [];
+      let clubs: any[] = [];
+      let locations: any[] = [];
 
-      // Search Riders
-      const riders = db.prepare(`
-        SELECT u.id, u.username, u.profile_picture_url, r.name as rider_name 
-        FROM users u 
-        LEFT JOIN riders r ON u.id = r.user_id 
-        WHERE u.type = 'rider' AND (LOWER(u.username) LIKE ? OR LOWER(r.name) LIKE ?)
-        LIMIT 5
-      `).all(searchTerm, searchTerm);
+      try {
+        const userSnap = await collections.users
+          .where("username", ">=", searchLower)
+          .where("username", "<=", searchLower + "\uf8ff")
+          .limit(10)
+          .get();
+        
+        userSnap.docs.forEach(doc => {
+          const u = { id: doc.id, ...doc.data() as any };
+          if (u.type === 'rider') {
+            riders.push(u);
+          } else if (u.type === 'ecosystem') {
+            // we distinguish club vs location typically by service_category
+            if (u.service_category === 'club') clubs.push(u);
+            else locations.push(u);
+          }
+        });
+      } catch(err) {}
 
-      // Search Locations (Ecosystems with service_category != 'club')
-      const locations = db.prepare(`
-        SELECT u.id, u.username, u.profile_picture_url, e.company_name, e.full_address, e.service_category, e.lat, e.lng 
-        FROM users u 
-        JOIN ecosystems e ON u.id = e.user_id 
-        WHERE u.type = 'ecosystem' AND e.service_category != 'club' AND (LOWER(u.username) LIKE ? OR LOWER(e.company_name) LIKE ?)
-        LIMIT 5
-      `).all(searchTerm, searchTerm);
+      // Fallback search Riders in SQLite
+      if (riders.length === 0) {
+        riders = db.prepare(`
+          SELECT u.id, u.username, u.profile_picture_url, r.name as rider_name 
+          FROM users u 
+          LEFT JOIN riders r ON u.id = r.user_id 
+          WHERE u.type = 'rider' AND (LOWER(u.username) LIKE ? OR LOWER(r.name) LIKE ?)
+          LIMIT 5
+        `).all(searchTerm, searchTerm);
+      }
+
+      // Fallback search Clubs in SQLite
+      if (clubs.length === 0) {
+        clubs = db.prepare(`
+          SELECT u.id, u.username, u.profile_picture_url, e.company_name, e.full_address 
+          FROM users u 
+          JOIN ecosystems e ON u.id = e.user_id 
+          WHERE u.type = 'ecosystem' AND e.service_category = 'club' AND (LOWER(u.username) LIKE ? OR LOWER(e.company_name) LIKE ?)
+          LIMIT 5
+        `).all(searchTerm, searchTerm);
+      }
+
+      // Fallback search Locations in SQLite
+      if (locations.length === 0) {
+        locations = db.prepare(`
+          SELECT u.id, u.username, u.profile_picture_url, e.company_name, e.full_address, e.service_category, e.lat, e.lng 
+          FROM users u 
+          JOIN ecosystems e ON u.id = e.user_id 
+          WHERE u.type = 'ecosystem' AND e.service_category != 'club' AND (LOWER(u.username) LIKE ? OR LOWER(e.company_name) LIKE ?)
+          LIMIT 5
+        `).all(searchTerm, searchTerm);
+      }
 
       res.json({
         routes,
@@ -2480,19 +3375,42 @@ async function startServer() {
     }
   });
 
-  app.get("/api/users/search", (req, res) => {
+  app.get("/api/users/search", async (req, res) => {
     const { q } = req.query;
     if (!q || typeof q !== 'string') {
       return res.json([]);
     }
     
     try {
-      const users = db.prepare(`
-        SELECT id, username, profile_picture_url 
-        FROM users 
-        WHERE username LIKE ? AND status = 'active'
-        LIMIT 5
-      `).all(`${q}%`); // Search for usernames starting with q
+      let users: any[] = [];
+      const userMap = new Map();
+      
+      try {
+        const userSnap = await collections.users.where("username", ">=", q.toLowerCase()).where("username", "<=", q.toLowerCase() + "\uf8ff").limit(5).get();
+        if (!userSnap.empty) {
+          userSnap.docs.forEach(doc => {
+            const data = { id: doc.id, ...(doc.data() as any) };
+            userMap.set(data.username.toLowerCase(), data);
+          });
+        }
+      } catch (err) {}
+
+      try {
+        const sqliteUsers = db.prepare(`
+          SELECT id, username, profile_picture_url 
+          FROM users 
+          WHERE LOWER(username) LIKE ? AND status = 'active'
+          LIMIT 5
+        `).all(`${q.toLowerCase()}%`) as any[];
+        
+        sqliteUsers.forEach(su => {
+          if (!userMap.has(su.username.toLowerCase())) {
+            userMap.set(su.username.toLowerCase(), su);
+          }
+        });
+      } catch (err) {}
+      
+      users = Array.from(userMap.values()).slice(0, 5);
       res.json(users);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -2504,7 +3422,8 @@ async function startServer() {
     res.json(users);
   });
 
-  app.get("/api/users/:username/badges", (req, res) => {
+  // Tracking protection bypass: changed from /api/users/:username/badges
+  app.get(["/api/users/:username/achievements", "/api/users/:username/badges"], (req, res) => {
     try {
       const user = db.prepare("SELECT id FROM users WHERE username = ?").get(req.params.username) as any;
       if (!user) return res.status(404).json({ error: "User not found" });
@@ -2525,61 +3444,122 @@ async function startServer() {
     }
   });
 
-  app.get("/api/stamps", (req, res) => {
+  app.get("/api/stamps", async (req, res) => {
     try {
-      const stamps = db.prepare("SELECT * FROM passport_stamps").all();
+      const snapshot = await collections.passport_stamps.get();
+      const stamps = snapshot.docs.map(doc => ({ ...doc.data() as any, id: doc.id }));
       res.json(stamps);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      if (!error.message?.includes('PERMISSION_DENIED')) {
+        console.error("Error fetching stamps from Firestore:", error);
+      }
+      // Fallback
+      const stamps = db.prepare("SELECT * FROM passport_stamps").all();
+      res.json(stamps);
     }
   });
 
-  app.get("/api/badges", (req, res) => {
+  // Tracking protection bypass: changed from /api/badges
+  app.get(["/api/achievements", "/api/badges"], async (req, res) => {
     const { creator_id } = req.query;
     try {
-      let query = `
-        SELECT b.*, creator.username as creator_username, creator.type as creator_type_name
-        FROM badges b
-        LEFT JOIN users creator ON b.creator_id = creator.id
-        WHERE b.is_active = 1
-      `;
-      const params: any[] = [];
-
+      let query: admin.firestore.Query = collections.badges.where("is_active", "==", 1);
       if (creator_id) {
-        query += ` AND b.creator_id = ?`;
-        params.push(creator_id);
+        query = query.where("creator_id", "==", parseInt(creator_id as string));
       }
-
-      query += ` ORDER BY b.creation_date DESC`;
-
-      const badges = db.prepare(query).all(...params);
+      
+      const snapshot = await query.get();
+      const badges = await Promise.all(snapshot.docs.map(async (doc) => {
+        const b = doc.data() as any;
+        const creatorDoc = await collections.users.doc(b.creator_id.toString()).get();
+        const creatorData = creatorDoc.exists ? creatorDoc.data() as any : {};
+        return {
+          ...b,
+          id: doc.id,
+          creator_username: creatorData.username || 'unknown',
+          creator_type_name: creatorData.type || 'unknown'
+        };
+      }));
+      
       res.json(badges);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      if (!error.message?.includes('PERMISSION_DENIED')) {
+        console.error("Error fetching badges from Firestore:", error);
+      }
+      // Fallback
+      try {
+        let queryStr = `
+          SELECT b.*,
+                 creator.username as creator_username,
+                 creator.type as creator_type_name
+          FROM badges b
+          LEFT JOIN users creator ON b.creator_id = creator.id
+          WHERE b.is_active = 1
+        `;
+        const params: any[] = [];
+        if (creator_id) {
+          queryStr += " AND b.creator_id = ?";
+          params.push(parseInt(creator_id as string));
+        }
+        queryStr += " ORDER BY b.badge_id DESC";
+        const badges = db.prepare(queryStr).all(...params);
+        res.json(badges);
+      } catch (sqliteErr) {
+        res.status(500).json({ error: "Failed to load badges" });
+      }
     }
   });
 
-  app.post("/api/stamps", authenticateToken, checkAdmin, (req, res) => {
+  app.post("/api/stamps", authenticateToken, checkAdmin, async (req, res) => {
     const { name, description, icon, category, creator_type, creator_id } = req.body;
     try {
-      const stmt = db.prepare("INSERT INTO passport_stamps (name, description, icon, type, creator_type, creator_id, ambassador_id) VALUES (?, ?, ?, ?, ?, ?, ?)");
-      const result = stmt.run(name, description || '', icon, category || 'event', creator_type, creator_id || null, 0);
-      res.status(201).json({ message: "Stamp created successfully", id: result.lastInsertRowid });
+      const stampId = await getNextId("passport_stamps");
+      const stampData = {
+        name,
+        description: description || '',
+        icon,
+        type: category || 'event',
+        creator_type,
+        creator_id: creator_id ? parseInt(creator_id as string) : null,
+        ambassador_id: 0,
+        created_at: new Date().toISOString()
+      };
+
+      await collections.passport_stamps.doc(stampId.toString()).set(stampData);
+
+      // Dual write to SQLite
+      try {
+        const stmt = db.prepare("INSERT INTO passport_stamps (name, description, icon, type, creator_type, creator_id, ambassador_id) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        stmt.run(name, description || '', icon, category || 'event', creator_type, creator_id || null, 0);
+      } catch (sqe) {}
+
+      res.status(201).json({ message: "Stamp created successfully", id: stampId });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.put("/api/stamps/:id", authenticateToken, checkAdmin, (req, res) => {
+  app.put("/api/stamps/:id", authenticateToken, checkAdmin, async (req, res) => {
     const { id } = req.params;
     const { name, description, icon, category } = req.body;
     try {
-      const stmt = db.prepare(`
-        UPDATE passport_stamps 
-        SET name = ?, description = ?, icon = ?, type = ? 
-        WHERE id = ?
-      `);
-      stmt.run(name, description, icon, category, id);
+      await collections.passport_stamps.doc(id).update({
+        name,
+        description,
+        icon,
+        type: category
+      });
+
+      // Dual write to SQLite
+      try {
+        const stmt = db.prepare(`
+          UPDATE passport_stamps 
+          SET name = ?, description = ?, icon = ?, type = ? 
+          WHERE id = ?
+        `);
+        stmt.run(name, description, icon, category, id);
+      } catch (sqe) {}
+
       res.json({ message: "Stamp updated successfully" });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -2627,30 +3607,56 @@ async function startServer() {
     }
   });
 
-  app.get("/api/roads", (req, res) => {
+  app.get("/api/roads", async (req, res) => {
     try {
-      const routes = db.prepare("SELECT * FROM discovered_routes").all() as any[];
-      // Parse JSON strings back to arrays/objects
-      const formattedRoutes = routes.map(route => ({
-        route_id: route.id,
-        name: route.name,
-        distance_km: route.distance_km,
-        difficulty: route.difficulty,
-        road_score: route.road_score,
-        tags: JSON.parse(route.tags),
-        polyline: JSON.parse(route.polyline),
-        start_point: { lat: route.start_lat, lng: route.start_lng },
-        metrics: {
-          curvature: route.curvature,
-          elevation: route.elevation,
-          scenic: route.scenic,
-          stops: route.stops,
-          popularity: route.popularity
-        }
-      }));
-      res.json(formattedRoutes);
+      const snapshot = await collections.discovered_routes.get();
+      const routes = snapshot.docs.map(doc => {
+        const route = doc.data() as any;
+        return {
+          route_id: doc.id,
+          name: route.name,
+          distance_km: route.distance_km,
+          difficulty: route.difficulty,
+          road_score: route.road_score,
+          tags: route.tags || [],
+          polyline: route.polyline || [],
+          start_point: { lat: route.start_lat, lng: route.start_lng },
+          metrics: {
+            curvature: route.curvature,
+            elevation: route.elevation,
+            scenic: route.scenic,
+            stops: route.stops,
+            popularity: route.popularity
+          }
+        };
+      });
+      res.json(routes);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      console.error("Error fetching roads from Firestore:", error);
+      // Fallback
+      try {
+        const routes = db.prepare("SELECT * FROM discovered_routes").all() as any[];
+        const formattedRoutes = routes.map(route => ({
+          route_id: route.id,
+          name: route.name,
+          distance_km: route.distance_km,
+          difficulty: route.difficulty,
+          road_score: route.road_score,
+          tags: typeof route.tags === 'string' ? JSON.parse(route.tags) : route.tags,
+          polyline: typeof route.polyline === 'string' ? JSON.parse(route.polyline) : route.polyline,
+          start_point: { lat: route.start_lat, lng: route.start_lng },
+          metrics: {
+            curvature: route.curvature,
+            elevation: route.elevation,
+            scenic: route.scenic,
+            stops: route.stops,
+            popularity: route.popularity
+          }
+        }));
+        res.json(formattedRoutes);
+      } catch (sqe) {
+        res.status(500).json({ error: error.message });
+      }
     }
   });
 
@@ -2683,12 +3689,23 @@ async function startServer() {
     });
   });
 
-  app.get("/api/users/:id/recommendations", (req, res) => {
+  app.get("/api/users/:id/recommendations", async (req, res) => {
     try {
-      const recommendations = db.prepare("SELECT * FROM recommendations WHERE user_id = ? ORDER BY created_at DESC").all(req.params.id);
+      const snapshot = await collections.recommendations
+        .where("user_id", "==", parseInt(req.params.id as string))
+        .orderBy("created_at", "desc")
+        .get();
+      const recommendations = snapshot.docs.map(doc => ({ ...doc.data() as any, id: doc.id }));
       res.json(recommendations);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      console.error("Error fetching recommendations from Firestore:", error);
+      // Fallback
+      try {
+        const recommendations = db.prepare("SELECT * FROM recommendations WHERE user_id = ? ORDER BY created_at DESC").all(req.params.id);
+        res.json(recommendations);
+      } catch (sqe) {
+        res.status(500).json({ error: error.message });
+      }
     }
   });
 
@@ -2736,28 +3753,52 @@ async function startServer() {
   });
 
   // Reviews Routes
-  app.get("/api/reviews/:target_type/:target_id", (req, res) => {
+  // Reviews Routes
+  app.get("/api/reviews/:target_type/:target_id", async (req, res) => {
     try {
-      const reviews = db.prepare(`
-        SELECT r.*, u.username, u.profile_picture_url
-        FROM reviews r
-        JOIN users u ON r.reviewer_user_id = u.id
-        WHERE r.target_type = ? AND r.target_id = ?
-        ORDER BY r.created_at DESC
-      `).all(req.params.target_type, req.params.target_id);
+      const snapshot = await collections.reviews
+        .where("target_type", "==", req.params.target_type)
+        .where("target_id", "==", req.params.target_id)
+        .orderBy("created_at", "desc")
+        .get();
+      
+      const reviews = await Promise.all(snapshot.docs.map(async (doc) => {
+        const review = doc.data() as any;
+        const userDoc = await collections.users.doc(review.reviewer_user_id.toString()).get();
+        const userData = userDoc.exists ? userDoc.data() : {};
+        return {
+          ...review,
+          review_id: doc.id,
+          username: (userData as any).username,
+          profile_picture_url: (userData as any).profile_picture_url
+        };
+      }));
       res.json(reviews);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      console.error("Error fetching reviews from Firestore:", error);
+      // Fallback
+      try {
+        const reviews = db.prepare(`
+          SELECT r.*, u.username, u.profile_picture_url
+          FROM reviews r
+          JOIN users u ON r.reviewer_user_id = u.id
+          WHERE r.target_type = ? AND r.target_id = ?
+          ORDER BY r.created_at DESC
+        `).all(req.params.target_type, req.params.target_id);
+        res.json(reviews);
+      } catch (sqe) {
+        res.status(500).json({ error: error.message });
+      }
     }
   });
 
-  app.post("/api/reviews", authenticateToken, (req: any, res) => {
+  app.post("/api/reviews", authenticateToken, async (req: any, res) => {
     const { reviewer_user_id, target_type, target_id, rating, review_text } = req.body;
     if (!reviewer_user_id || !target_type || !target_id || !rating) {
       return res.status(400).json({ error: "Missing required fields" });
     }
     
-    if (reviewer_user_id !== req.user.id && req.user.role !== 'admin' && req.user.role !== 'moderator') {
+    if (reviewer_user_id.toString() !== req.user.id.toString() && req.user.role !== 'admin' && req.user.role !== 'moderator') {
       return res.status(403).json({ error: "Forbidden: You can only post reviews for yourself" });
     }
 
@@ -2772,21 +3813,62 @@ async function startServer() {
         }
       }
 
-      const stmt = db.prepare(`
-        INSERT INTO reviews (reviewer_user_id, target_type, target_id, rating, review_text, verification_status)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `);
-      const result = stmt.run(reviewer_user_id, target_type, target_id, rating, review_text || null, isVerified ? 'verified' : 'unverified');
+      const reviewId = await getNextId("reviews");
+      const reviewData = {
+        reviewer_user_id: parseInt(reviewer_user_id as string),
+        target_type,
+        target_id,
+        rating: parseFloat(rating as string),
+        review_text: review_text || null,
+        verification_status: isVerified ? 'verified' : 'unverified',
+        created_at: new Date().toISOString()
+      };
+
+      await collections.reviews.doc(reviewId.toString()).set(reviewData);
+
+      // Update rating summary in Firestore (using transaction for consistency)
+      const summaryId = `${target_type}_${target_id}`;
+      const summaryRef = collections.rating_summaries.doc(summaryId);
       
-      // Update rating summary
-      db.prepare(`
-        INSERT INTO rating_summaries (target_type, target_id, average_rating, total_reviews, verified_reviews)
-        VALUES (?, ?, ?, 1, ?)
-        ON CONFLICT(target_type, target_id) DO UPDATE SET
-        average_rating = ((average_rating * total_reviews) + ?) / (total_reviews + 1),
-        total_reviews = total_reviews + 1,
-        verified_reviews = verified_reviews + ?
-      `).run(target_type, target_id, rating, isVerified ? 1 : 0, rating, isVerified ? 1 : 0);
+      await firestore.runTransaction(async (transaction) => {
+        const doc = await transaction.get(summaryRef);
+        if (!doc.exists) {
+          transaction.set(summaryRef, {
+            target_type,
+            target_id,
+            average_rating: parseFloat(rating as string),
+            total_reviews: 1,
+            verified_reviews: isVerified ? 1 : 0
+          });
+        } else {
+          const data = doc.data() as any;
+          const newTotal = data.total_reviews + 1;
+          const newAvg = ((data.average_rating * data.total_reviews) + parseFloat(rating as string)) / newTotal;
+          transaction.update(summaryRef, {
+            average_rating: newAvg,
+            total_reviews: newTotal,
+            verified_reviews: data.verified_reviews + (isVerified ? 1 : 0)
+          });
+        }
+      });
+
+      // Dual write to SQLite
+      try {
+        const stmt = db.prepare(`
+          INSERT INTO reviews (reviewer_user_id, target_type, target_id, rating, review_text, verification_status)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `);
+        stmt.run(reviewer_user_id, target_type, target_id, rating, review_text || null, isVerified ? 'verified' : 'unverified');
+        
+        db.prepare(`
+          INSERT INTO rating_summaries (target_type, target_id, average_rating, total_reviews, verified_reviews)
+          VALUES (?, ?, ?, 1, ?)
+          ON CONFLICT(target_type, target_id) DO UPDATE SET
+          average_rating = ((average_rating * total_reviews) + ?) / (total_reviews + 1),
+          total_reviews = total_reviews + 1,
+          verified_reviews = verified_reviews + ?
+        `).run(target_type, target_id, rating, isVerified ? 1 : 0, rating, isVerified ? 1 : 0);
+      } catch (sqe) {}
       
       if (target_type === 'ecosystem') {
         const ecosystem = db.prepare("SELECT user_id FROM ecosystems WHERE id = ?").get(target_id) as any;
@@ -2795,17 +3877,26 @@ async function startServer() {
         }
       }
 
-      res.status(201).json({ review_id: result.lastInsertRowid });
+      res.status(201).json({ review_id: reviewId });
     } catch (error: any) {
+      console.error("Error creating review in Firestore:", error);
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.get("/api/rating-summaries/:target_type/:target_id", (req, res) => {
+  app.get("/api/rating-summaries/:target_type/:target_id", async (req, res) => {
     try {
-      const summary = db.prepare("SELECT * FROM rating_summaries WHERE target_type = ? AND target_id = ?").get(req.params.target_type, req.params.target_id);
-      res.json(summary || { average_rating: 0, total_reviews: 0, verified_reviews: 0 });
+      const summaryId = `${req.params.target_type}_${req.params.target_id}`;
+      const doc = await collections.rating_summaries.doc(summaryId).get();
+      if (doc.exists) {
+        res.json(doc.data());
+      } else {
+        // Try fallback
+        const summary = db.prepare("SELECT * FROM rating_summaries WHERE target_type = ? AND target_id = ?").get(req.params.target_type, req.params.target_id);
+        res.json(summary || { average_rating: 0, total_reviews: 0, verified_reviews: 0 });
+      }
     } catch (error: any) {
+      console.error("Error fetching rating summary from Firestore:", error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -2845,22 +3936,36 @@ async function startServer() {
     }
   });
 
-  app.post("/api/checkpoints", authenticateToken, checkAmbassador, (req, res) => {
+  app.post("/api/checkpoints", authenticateToken, checkAmbassador, async (req, res) => {
     const { route_id, type, lat, lng } = req.body;
     try {
       // Fetch route to check distance
-      const route = db.prepare("SELECT distance_km FROM discovered_routes WHERE id = ?").get(route_id) as any;
-      if (!route) {
+      const routeDoc = await collections.discovered_routes.doc(route_id.toString()).get();
+      if (!routeDoc.exists) {
         return res.status(404).json({ error: "Route not found" });
       }
+      const route = routeDoc.data() as any;
       if (route.distance_km <= 400) {
         return res.status(400).json({ error: "Checkpoints can only be added to routes longer than 400km" });
       }
 
       const checkpoint_id = `cp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      db.prepare("INSERT INTO checkpoints (checkpoint_id, route_id, type, lat, lng) VALUES (?, ?, ?, ?, ?)").run(checkpoint_id, route_id, type, lat, lng);
+      await collections.checkpoints.doc(checkpoint_id).set({
+        route_id: parseInt(route_id as string),
+        type,
+        lat: parseFloat(lat as string),
+        lng: parseFloat(lng as string),
+        created_at: new Date().toISOString()
+      });
+
+      // Dual write to SQLite
+      try {
+        db.prepare("INSERT INTO checkpoints (checkpoint_id, route_id, type, lat, lng) VALUES (?, ?, ?, ?, ?)").run(checkpoint_id, route_id, type, lat, lng);
+      } catch (sqe) {}
+
       res.json({ success: true, checkpoint_id });
     } catch (error: any) {
+      console.error("Error creating checkpoint in Firestore:", error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -2878,19 +3983,20 @@ async function startServer() {
     return R * c;
   }
 
-  app.post("/api/checkpoints/scan", authenticateToken, (req: any, res) => {
+  app.post("/api/checkpoints/scan", authenticateToken, async (req: any, res) => {
     const { user_id, checkpoint_id, location_lat, location_lng } = req.body;
     
-    if (user_id !== req.user.id.toString() && user_id !== req.user.id && req.user.role !== 'admin' && req.user.role !== 'moderator') {
+    if (user_id.toString() !== req.user.id.toString() && req.user.role !== 'admin' && req.user.role !== 'moderator') {
       return res.status(403).json({ error: "Forbidden: You can only scan checkpoints for yourself" });
     }
 
     try {
-      const checkpoint = db.prepare("SELECT route_id, type, lat, lng FROM checkpoints WHERE checkpoint_id = ?").get(checkpoint_id) as any;
-      if (!checkpoint) {
+      const cpDoc = await collections.checkpoints.doc(checkpoint_id).get();
+      if (!cpDoc.exists) {
         return res.status(404).json({ error: "Checkpoint not found" });
       }
 
+      const checkpoint = cpDoc.data() as any;
       const { route_id, type, lat, lng } = checkpoint;
 
       // Anti-fraud: Distance validation (e.g., within 1km)
@@ -2901,182 +4007,564 @@ async function startServer() {
         }
       }
 
-      // Initialize progress if not exists
-      db.prepare("INSERT OR IGNORE INTO user_route_progress (user_id, route_id) VALUES (?, ?)").run(user_id, route_id);
+      // Initialize progress in Firestore
+      const progressId = `${user_id}_${route_id}`;
+      const progressRef = collections.user_route_progress.doc(progressId);
+      const progressDoc = await progressRef.get();
       
-      if (type === 'start') {
-        db.prepare("UPDATE user_route_progress SET start_scanned = 1 WHERE user_id = ? AND route_id = ?").run(user_id, route_id);
-      } else if (type === 'end') {
-        db.prepare("UPDATE user_route_progress SET end_scanned = 1 WHERE user_id = ? AND route_id = ?").run(user_id, route_id);
+      const updates: any = {};
+      if (type === 'start') updates.start_scanned = 1;
+      else if (type === 'end') updates.end_scanned = 1;
+
+      if (!progressDoc.exists) {
+        await progressRef.set({
+          user_id: parseInt(user_id as string),
+          route_id: parseInt(route_id as string),
+          start_scanned: type === 'start' ? 1 : 0,
+          end_scanned: type === 'end' ? 1 : 0,
+          updated_at: new Date().toISOString()
+        });
+      } else {
+        await progressRef.update({
+          ...updates,
+          updated_at: new Date().toISOString()
+        });
       }
       
-      // Check if route is now fully completed
-      const progress = db.prepare("SELECT start_scanned, end_scanned FROM user_route_progress WHERE user_id = ? AND route_id = ?").get(user_id, route_id) as any;
-      if (progress && progress.start_scanned === 1 && progress.end_scanned === 1) {
-        // Auto-verify any existing unverified reviews for this route by this user
-        const unverifiedReviews = db.prepare("SELECT review_id, rating FROM reviews WHERE reviewer_user_id = ? AND (target_type = 'route' OR target_type = 'ride_route') AND target_id = ? AND verification_status = 'unverified'").all(user_id, route_id) as any[];
+      // Check for completion in Firestore
+      const updatedProgress = (await progressRef.get()).data() as any;
+      if (updatedProgress.start_scanned === 1 && updatedProgress.end_scanned === 1) {
+        // Auto-verify Firestore reviews
+        const reviewsSnapshot = await collections.reviews
+          .where("reviewer_user_id", "==", parseInt(user_id as string))
+          .where("target_id", "==", route_id.toString())
+          .where("verification_status", "==", "unverified")
+          .get();
         
-        for (const rev of unverifiedReviews) {
-          db.prepare("UPDATE reviews SET verification_status = 'verified' WHERE review_id = ?").run(rev.review_id);
-          db.prepare("UPDATE rating_summaries SET verified_reviews = verified_reviews + 1 WHERE target_type = ? AND target_id = ?").run('route', route_id);
-          db.prepare("UPDATE rating_summaries SET verified_reviews = verified_reviews + 1 WHERE target_type = ? AND target_id = ?").run('ride_route', route_id);
+        for (const doc of reviewsSnapshot.docs) {
+          const rev = doc.data() as any;
+          if (rev.target_type === 'route' || rev.target_type === 'ride_route') {
+            await doc.ref.update({ verification_status: 'verified' });
+            
+            // Update summary
+            const summaryId = `${rev.target_type}_${route_id}`;
+            await collections.rating_summaries.doc(summaryId).update({
+              verified_reviews: admin.firestore.FieldValue.increment(1)
+            });
+          }
         }
       }
 
+      // Dual write to SQLite
+      try {
+        db.prepare("INSERT OR IGNORE INTO user_route_progress (user_id, route_id) VALUES (?, ?)").run(user_id, route_id);
+        if (type === 'start') {
+          db.prepare("UPDATE user_route_progress SET start_scanned = 1 WHERE user_id = ? AND route_id = ?").run(user_id, route_id);
+        } else if (type === 'end') {
+          db.prepare("UPDATE user_route_progress SET end_scanned = 1 WHERE user_id = ? AND route_id = ?").run(user_id, route_id);
+        }
+        
+        const sqliteProgress = db.prepare("SELECT start_scanned, end_scanned FROM user_route_progress WHERE user_id = ? AND route_id = ?").get(user_id, route_id) as any;
+        if (sqliteProgress && sqliteProgress.start_scanned === 1 && sqliteProgress.end_scanned === 1) {
+          const unverifiedReviews = db.prepare("SELECT review_id, rating FROM reviews WHERE reviewer_user_id = ? AND (target_type = 'route' OR target_type = 'ride_route') AND target_id = ? AND verification_status = 'unverified'").all(user_id, route_id) as any[];
+          for (const rev of unverifiedReviews) {
+            db.prepare("UPDATE reviews SET verification_status = 'verified' WHERE review_id = ?").run(rev.review_id);
+            db.prepare("UPDATE rating_summaries SET verified_reviews = verified_reviews + 1 WHERE target_type = ? AND target_id = ?").run('route', route_id);
+            db.prepare("UPDATE rating_summaries SET verified_reviews = verified_reviews + 1 WHERE target_type = ? AND target_id = ?").run('ride_route', route_id);
+          }
+        }
+      } catch (sqe) {}
+
       res.json({ message: "Checkpoint scanned", route_id, type });
     } catch (error: any) {
+      console.error("Error scanning checkpoint in Firestore:", error);
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.get("/api/ecosystems", (req, res) => {
-    const ecosystems = db.prepare(`
-      SELECT e.*, u.username, u.profile_picture_url 
-      FROM ecosystems e
-      JOIN users u ON e.user_id = u.id
-    `).all();
-    res.json(ecosystems);
+  app.get("/api/ecosystems", async (req, res) => {
+    try {
+      // Try SQLite first
+      const ecosystems = db.prepare(`
+        SELECT e.*, u.username, u.profile_picture_url 
+        FROM ecosystems e
+        JOIN users u ON e.user_id = u.id
+      `).all();
+
+      if (ecosystems.length > 0) {
+        return res.json(ecosystems);
+      }
+
+      // Fallback to Firestore
+      try {
+        const ecosystemsSnapshot = await collections.ecosystems.get();
+        const firestoreEcosystems = await Promise.all(ecosystemsSnapshot.docs.map(async (doc) => {
+          const eData = doc.data() as any;
+          const userDoc = await collections.users.doc(eData.user_id.toString()).get();
+          const uData = userDoc.exists ? userDoc.data() as any : {};
+          return {
+            ...eData,
+            username: uData.username || 'unknown',
+            profile_picture_url: uData.profile_picture_url || null
+          };
+        }));
+        res.json(firestoreEcosystems);
+      } catch (err: any) {
+        if (!err.message?.includes('PERMISSION_DENIED')) {
+          console.error("Error fetching ecosystems from Firestore:", err.message);
+        }
+        res.json([]);
+      }
+    } catch (err: any) {
+      console.error("Error fetching ecosystems:", err.message);
+      res.status(500).json({ error: "Failed to fetch ecosystems" });
+    }
   });
 
-  app.get("/api/profile/:username", (req, res) => {
+  app.get("/api/profile/:username", async (req, res) => {
     const { viewer_id } = req.query;
-    console.log(`DEBUG: Fetching profile for username: ${req.params.username}`);
-    const user = db.prepare(`
-      SELECT id, username, fullName, location, bio, profile_picture_url, 
-             cover_photo_url, type, role, plan, status, reputation, 
-             created_at, motorcycle, businessName, businessType, 
-             interests, services, referralCode 
-      FROM users 
-      WHERE LOWER(username) = LOWER(?)
-    `).get(req.params.username) as any;
-    if (!user) {
-      console.log(`DEBUG: User not found in database: ${req.params.username}`);
-      return res.status(404).json({ error: "User not found" });
-    }
-    console.log(`DEBUG: User found: ${user.id}, ${user.username}, status: ${user.status}`);
+    const { username } = req.params;
+    console.log(`DEBUG: Fetching profile for username: ${username}`);
 
-    const followers_count = (db.prepare("SELECT COUNT(*) as count FROM followers WHERE user_id = ?").get(user.id) as any).count;
-    const following_count = (db.prepare("SELECT COUNT(*) as count FROM followers WHERE follower_id = ?").get(user.id) as any).count;
-    const is_following = viewer_id ? (db.prepare("SELECT 1 FROM followers WHERE user_id = ? AND follower_id = ?").get(user.id, viewer_id) ? true : false) : false;
-    const referral_count = (db.prepare("SELECT COUNT(*) as count FROM users WHERE referred_by = ?").get(user.id) as any).count;
+    try {
+      let user: any = null;
+      // Try SQLite first as primary source of truth for profile data
+      const sqliteUser = db.prepare(`
+        SELECT id, username, email, fullName, location, bio, profile_picture_url, 
+               cover_photo_url, type, role, plan, status, reputation, 
+               created_at, motorcycle, businessName, businessType, 
+               interests, services, referralCode 
+        FROM users 
+        WHERE LOWER(username) = LOWER(?)
+      `).get(username) as any;
 
-    const is_owner = viewer_id && parseInt(viewer_id as string) === user.id;
-    const can_view_locked = is_owner || is_following;
+      const userSnapshot = await collections.users.where("username", "==", username).limit(1).get();
+      if (!userSnapshot.empty) {
+        const firestoreUser = { id: userSnapshot.docs[0].id, ...userSnapshot.docs[0].data() as any };
+        user = sqliteUser ? { ...firestoreUser, ...sqliteUser } : firestoreUser;
+      } else {
+        user = sqliteUser;
+      }
 
-    const posts = db.prepare(`
-      SELECT p.*, 
-             m.make, m.model, m.year,
-             ev.title as shared_event_title, ev.date as shared_event_date, ev.image_url as shared_event_image_url, ev.location as shared_event_location,
-             p.respect_count as likes_count,
-             p.comment_count,
-             ${viewer_id ? `(SELECT COUNT(*) FROM post_likes WHERE post_id = p.id AND user_id = ${viewer_id}) > 0` : '0'} as has_liked,
-             (SELECT COUNT(*) FROM user_pinned_posts WHERE post_id = p.id AND user_id = ${user.id}) > 0 as is_pinned_by_owner,
-             ${viewer_id ? `(SELECT COUNT(*) FROM user_pinned_posts WHERE post_id = p.id AND user_id = ${viewer_id}) > 0` : '0'} as is_pinned
-      FROM posts p
-      LEFT JOIN motorcycles m ON p.tagged_motorcycle_id = m.id
-      LEFT JOIN events ev ON CAST(p.shared_event_id AS INTEGER) = ev.id
-      WHERE p.user_id = ? AND (p.privacy_level = 'public' OR ? = 1)
-      ORDER BY is_pinned_by_owner DESC, p.created_at DESC
-    `).all(user.id, can_view_locked ? 1 : 0);
+      if (!user) {
+        console.log(`DEBUG: User not found: ${username}`);
+        return res.status(404).json({ error: "User not found" });
+      }
 
-    const recommendations = db.prepare(`
-      SELECT * FROM recommendations 
-      WHERE user_id = ? 
-      ORDER BY created_at DESC
-    `).all(user.id);
+      const userId = user.id.toString();
 
-    const ambassador = db.prepare(`
-      SELECT * FROM ambassadors WHERE user_id = ?
-    `).get(user.id) as any;
+      // Following/Followers from Firestore and SQLite
+      const userStrId = user.id.toString();
+      const userNumId = isNaN(Number(user.id)) ? user.id : Number(user.id);
 
-    if (user.type === "rider") {
-      const rider = db.prepare("SELECT * FROM riders WHERE user_id = ?").get(user.id) as any;
-      const motorcycles = db.prepare("SELECT * FROM motorcycles WHERE rider_id = ?").all(user.id) as any[];
+      let followers_count = 0;
+      let following_count = 0;
+      let is_following = false;
       
-      // Fetch maintenance logs for each motorcycle
-      const garage = motorcycles.map(moto => {
-        const logs = db.prepare("SELECT * FROM maintenance_logs WHERE motorcycle_id = ? ORDER BY date DESC, km DESC").all(moto.id);
-        return { ...moto, maintenance_logs: logs };
-      });
+      try {
+        let sqliteFollowersCount = 0;
+        let sqliteFollowingCount = 0;
+        
+        try {
+          const fsRow = db.prepare("SELECT count(*) as c FROM followers WHERE user_id = ?").get(userNumId) as any;
+          if (fsRow) sqliteFollowersCount = fsRow.c;
+          
+          const flRow = db.prepare("SELECT count(*) as c FROM followers WHERE follower_id = ?").get(userNumId) as any;
+          if (flRow) sqliteFollowingCount = flRow.c;
+        } catch (e) {}
 
-      // Fetch events created by user
-      const createdEvents = db.prepare(`
-        SELECT e.*, u.username, u.profile_picture_url,
-               (SELECT COUNT(*) FROM event_rsvps WHERE event_id = e.id) as rsvp_count
-        FROM events e
-        JOIN users u ON e.user_id = u.id
-        WHERE e.user_id = ?
-        ORDER BY e.date ASC
-      `).all(user.id);
+        const followersSnap = await collections.followers.where("user_id", "==", userNumId).get();
+        followers_count = followersSnap.size;
+        
+        if (followers_count === 0 && userStrId !== userNumId) {
+          const followersSnapStr = await collections.followers.where("user_id", "==", userStrId).get();
+          followers_count = followersSnapStr.size;
+        }
 
-      // Fetch events RSVP'd by user
-      const rsvpdEvents = db.prepare(`
-        SELECT e.*, u.username, u.profile_picture_url,
-               (SELECT COUNT(*) FROM event_rsvps WHERE event_id = e.id) as rsvp_count
-        FROM events e
-        JOIN event_rsvps r ON e.id = r.event_id
-        JOIN users u ON e.user_id = u.id
-        WHERE r.user_id = ?
-        ORDER BY e.date ASC
-      `).all(user.id);
+        const followingSnap = await collections.followers.where("follower_id", "==", userNumId).get();
+        following_count = followingSnap.size;
+        
+        if (following_count === 0 && userStrId !== userNumId) {
+          const followingSnapStr = await collections.followers.where("follower_id", "==", userStrId).get();
+          following_count = followingSnapStr.size;
+        }
 
-      const { password: _, ...safeUser } = user;
-      res.json({ ...safeUser, profile: rider, garage, posts, events: createdEvents, rsvpd_events: rsvpdEvents, recommendations, followers_count, following_count, is_following, ambassador, referral_count });
-    } else {
-      const ecosystem = db.prepare("SELECT * FROM ecosystems WHERE user_id = ?").get(user.id) as any;
-      const { password: __, ...safeUser } = user;
+        followers_count = Math.max(followers_count, sqliteFollowersCount);
+        following_count = Math.max(following_count, sqliteFollowingCount);
+      } catch (err) {}
       
-      // Fetch events hosted by this business
-      const hostedEvents = db.prepare(`
-        SELECT e.*, u.username, u.profile_picture_url,
-               (SELECT COUNT(*) FROM event_rsvps WHERE event_id = e.id) as rsvp_count
-        FROM events e
-        JOIN users u ON e.user_id = u.id
-        WHERE e.user_id = ?
-        ORDER BY e.date ASC
-      `).all(user.id);
+      if (viewer_id && viewer_id !== 'undefined') {
+        const viewerNumId = isNaN(Number(viewer_id)) ? viewer_id : Number(viewer_id);
+        
+        try {
+          const sqCheck = db.prepare("SELECT 1 FROM followers WHERE user_id = ? AND follower_id = ?").get(userNumId, viewerNumId);
+          if (sqCheck) {
+            is_following = true;
+          }
+        } catch (e) {}
 
-      // Fetch events RSVP'd by this business
-      const rsvpdEvents = db.prepare(`
-        SELECT e.*, u.username, u.profile_picture_url,
-               (SELECT COUNT(*) FROM event_rsvps WHERE event_id = e.id) as rsvp_count
-        FROM events e
-        JOIN event_rsvps r ON e.id = r.event_id
-        JOIN users u ON e.user_id = u.id
-        WHERE r.user_id = ?
-        ORDER BY e.date ASC
-      `).all(user.id);
+        if (!is_following) {
+          const followCheck = await collections.followers.doc(`${user.id}_${viewer_id}`).get();
+          is_following = followCheck.exists;
+        }
+        
+        if (!is_following) {
+          // Check for string variant document ID as fallback
+          const followCheckAlt = await collections.followers.where('user_id', 'in', [userNumId, userStrId]).where('follower_id', 'in', [viewerNumId, viewer_id.toString()]).get();
+          is_following = !followCheckAlt.empty;
+        }
+      }
 
-      res.json({ ...safeUser, profile: ecosystem, posts, events: hostedEvents, rsvpd_events: rsvpdEvents, recommendations, followers_count, following_count, is_following, ambassador, referral_count });
+      // Referral count
+      const referralSnapshot = await collections.users.where("referred_by", "==", user.id).get();
+      const referral_count = referralSnapshot.size;
+
+      const is_owner = viewer_id && viewer_id.toString() === userId;
+      const can_view_locked = is_owner || is_following;
+
+      // Posts from Firestore
+      const postsSnapshot = await collections.posts
+        .where("user_id", "==", user.id)
+        .orderBy("created_at", "desc")
+        .get();
+      
+      let posts = postsSnapshot.docs.map(doc => ({ ...doc.data() as any, id: doc.id }));
+      posts = posts.filter(p => p.privacy_level === 'public' || can_view_locked);
+
+      // Recommendations from Firestore
+      const recommendationsSnapshot = await collections.recommendations
+        .where("user_id", "==", user.id)
+        .orderBy("created_at", "desc")
+        .get();
+      const recommendations = recommendationsSnapshot.docs.map(doc => ({ ...doc.data() as any, id: doc.id }));
+
+      // Ambassador from Firestore
+      const ambassadorDoc = await collections.ambassadors.doc(userId).get();
+      const ambassador = ambassadorDoc.exists ? ambassadorDoc.data() : null;
+
+      if (user.type === "rider") {
+        const riderDoc = await collections.riders.doc(userId).get();
+        const rider = riderDoc.exists ? riderDoc.data() : null;
+
+        const motorcyclesSnapshot = await collections.motorcycles.where("rider_id", "==", user.id).get();
+        const motorcycles = motorcyclesSnapshot.docs.map(doc => ({ ...doc.data() as any, id: doc.id }));
+
+        const garage = await Promise.all(motorcycles.map(async (moto) => {
+          const logsSnapshot = await collections.maintenance_logs
+            .where("motorcycle_id", "==", parseInt(moto.id))
+            .get();
+          const logs = logsSnapshot.docs.map(d => ({ id: d.id, ...d.data() as any }));
+          return { ...moto, maintenance_logs: logs };
+        }));
+
+        // Created events
+        const createdEventsSnapshot = await collections.events.where("user_id", "==", user.id).get();
+        const createdEvents = await Promise.all(createdEventsSnapshot.docs.map(async (doc) => {
+          const e = doc.data() as any;
+          const rsvps = await collections.event_rsvps.where("event_id", "==", doc.id).get();
+          return { ...e, id: doc.id, username: user.username, profile_picture_url: user.profile_picture_url, rsvp_count: rsvps.size };
+        }));
+
+        // RSVP'd events
+        const rsvpdSnapshot = await collections.event_rsvps.where("user_id", "==", user.id).get();
+        const rsvpdEvents = await Promise.all(rsvpdSnapshot.docs.map(async (doc) => {
+          const r = doc.data() as any;
+          const eDoc = await collections.events.doc(r.event_id.toString()).get();
+          if (!eDoc.exists) return null;
+          const e = eDoc.data() as any;
+          const hostDoc = await collections.users.doc(e.user_id.toString()).get();
+          const host = hostDoc.exists ? hostDoc.data() as any : {};
+          const rsvps = await collections.event_rsvps.where("event_id", "==", eDoc.id).get();
+          return { ...e, id: eDoc.id, username: host.username, profile_picture_url: host.profile_picture_url, rsvp_count: rsvps.size };
+        }));
+
+        const { password: _, ...safeUser } = user;
+        res.json({ 
+          ...safeUser, 
+          profile: rider, 
+          garage, 
+          posts, 
+          events: createdEvents, 
+          rsvpd_events: rsvpdEvents.filter(e => e !== null), 
+          recommendations, 
+          followers_count, 
+          following_count, 
+          is_following, 
+          ambassador, 
+          referral_count 
+        });
+      } else {
+        const ecosystemDoc = await collections.ecosystems.doc(userId).get();
+        const ecosystem = ecosystemDoc.exists ? ecosystemDoc.data() : null;
+
+        // Hosted events
+        const hostedEventsSnapshot = await collections.events.where("user_id", "==", user.id).get();
+        const hostedEvents = await Promise.all(hostedEventsSnapshot.docs.map(async (doc) => {
+          const e = doc.data() as any;
+          const rsvps = await collections.event_rsvps.where("event_id", "==", doc.id).get();
+          return { ...e, id: doc.id, username: user.username, profile_picture_url: user.profile_picture_url, rsvp_count: rsvps.size };
+        }));
+
+        // RSVP'd events for ecosystem
+        const rsvpdSnapshot = await collections.event_rsvps.where("user_id", "==", user.id).get();
+        const rsvpdEvents = await Promise.all(rsvpdSnapshot.docs.map(async (doc) => {
+          const r = doc.data() as any;
+          const eDoc = await collections.events.doc(r.event_id.toString()).get();
+          if (!eDoc.exists) return null;
+          const e = eDoc.data() as any;
+          const hostDoc = await collections.users.doc(e.user_id.toString()).get();
+          const host = hostDoc.exists ? hostDoc.data() as any : {};
+          const rsvps = await collections.event_rsvps.where("event_id", "==", eDoc.id).get();
+          return { ...e, id: eDoc.id, username: host.username, profile_picture_url: host.profile_picture_url, rsvp_count: rsvps.size };
+        }));
+
+        const { password: __, ...safeUser } = user;
+        res.json({ 
+          ...safeUser, 
+          profile: ecosystem, 
+          posts, 
+          events: hostedEvents, 
+          rsvpd_events: rsvpdEvents.filter(e => e !== null), 
+          recommendations, 
+          followers_count, 
+          following_count, 
+          is_following, 
+          ambassador, 
+          referral_count 
+        });
+      }
+    } catch (error: any) {
+      if (!error.message?.includes('PERMISSION_DENIED')) {
+        console.error("Profile retrieval error in Firestore:", error);
+      }
+      
+      // Complete Fallback for /api/profile/:username
+      try {
+        const user = db.prepare(`
+          SELECT id, username, fullName, location, bio, profile_picture_url, 
+                 cover_photo_url, type, role, plan, status, reputation, 
+                 created_at, motorcycle, businessName, businessType, 
+                 interests, services, referral_code as referralCode 
+          FROM users 
+          WHERE LOWER(username) = LOWER(?)
+        `).get(req.params.username) as any;
+
+        if (!user) {
+          return res.status(404).json({ error: "User not found" });
+        }
+
+        const followers_count = db.prepare("SELECT COUNT(*) as count FROM followers WHERE user_id = ?").get(user.id).count;
+        const following_count = db.prepare("SELECT COUNT(*) as count FROM followers WHERE follower_id = ?").get(user.id).count;
+        const is_following = req.query.viewer_id ? !!db.prepare("SELECT 1 FROM followers WHERE user_id = ? AND follower_id = ?").get(user.id, req.query.viewer_id) : false;
+        
+        let posts = db.prepare(`
+          SELECT p.*, u.username, u.profile_picture_url as user_profile_pic,
+                 (SELECT COUNT(*) FROM post_likes WHERE post_id = p.id) as likes,
+                 (SELECT COUNT(*) FROM post_comments WHERE post_id = p.id) as comments,
+                 EXISTS(SELECT 1 FROM post_likes WHERE post_id = p.id AND user_id = ?) as userHasLiked
+          FROM posts p
+          JOIN users u ON p.user_id = u.id
+          WHERE p.user_id = ?
+          ORDER BY p.created_at DESC
+        `).all(req.query.viewer_id || 0, user.id);
+        
+        const is_owner = req.query.viewer_id && req.query.viewer_id.toString() === user.id.toString();
+        const can_view_locked = is_owner || is_following;
+        posts = posts.filter((p: any) => p.privacy_level === 'public' || can_view_locked);
+
+        const recommendations = db.prepare("SELECT * FROM recommendations WHERE user_id = ? ORDER BY created_at DESC").all(user.id);
+        let ambassador = db.prepare("SELECT * FROM ambassadors WHERE user_id = ?").get(user.id);
+        if (!ambassador) {
+           try {
+             const aDoc = await collections.ambassadors.doc(user.id.toString()).get();
+             if (aDoc.exists) ambassador = aDoc.data();
+           } catch(e) {}
+        }
+        const referral_count = db.prepare("SELECT COUNT(*) as count FROM users WHERE referred_by = ?").get(user.id).count;
+
+        let profile = null;
+        let garage = [];
+        
+        if (user.type === "rider") {
+          profile = db.prepare("SELECT * FROM riders WHERE user_id = ?").get(user.id);
+          garage = db.prepare("SELECT * FROM motorcycles WHERE rider_id = ?").all(user.id).map((moto: any) => {
+            return { ...moto, maintenance_logs: db.prepare("SELECT * FROM maintenance_logs WHERE motorcycle_id = ?").all(moto.id) };
+          });
+        } else {
+          profile = db.prepare("SELECT * FROM ecosystems WHERE user_id = ?").get(user.id);
+        }
+
+        const events = db.prepare(`
+          SELECT e.*, u.username, u.profile_picture_url,
+                 (SELECT COUNT(*) FROM event_rsvps WHERE event_id = e.id) as rsvp_count
+          FROM events e
+          JOIN users u ON e.user_id = u.id
+          WHERE e.user_id = ?
+        `).all(user.id);
+
+        const rsvpd_events = db.prepare(`
+          SELECT e.*, u.username, u.profile_picture_url,
+                 (SELECT COUNT(*) FROM event_rsvps WHERE event_id = e.id) as rsvp_count
+          FROM event_rsvps r
+          JOIN events e ON r.event_id = e.id
+          JOIN users u ON e.user_id = u.id
+          WHERE r.user_id = ?
+        `).all(user.id);
+
+        res.json({
+          ...user,
+          profile,
+          garage,
+          posts,
+          events,
+          rsvpd_events,
+          recommendations,
+          followers_count,
+          following_count,
+          is_following,
+          ambassador,
+          referral_count
+        });
+      } catch (sqe: any) {
+        console.error("SQLite Fallback error in profile:", sqe);
+        res.status(500).json({ error: sqe.message, originalError: error.message });
+      }
     }
   });
 
-  app.get("/api/posts", (req, res) => {
+  app.get("/api/posts", async (req, res) => {
     const { user_id } = req.query;
     
     try {
-      const posts = db.prepare(`
-        SELECT p.*, u.username, u.type, u.profile_picture_url,
-               r.name as rider_name, e.company_name, e.service_category,
-               m.make, m.model, m.year,
-               ev.title as shared_event_title, ev.date as shared_event_date, ev.image_url as shared_event_image_url, ev.location as shared_event_location,
-               p.respect_count as likes_count,
-               p.comment_count,
-               ${user_id ? `(SELECT COUNT(*) FROM post_likes WHERE post_id = p.id AND user_id = ${user_id}) > 0` : '0'} as has_liked,
-               ${user_id ? `(SELECT COUNT(*) FROM user_pinned_posts WHERE post_id = p.id AND user_id = ${user_id}) > 0` : '0'} as is_pinned
-        FROM posts p
-        JOIN users u ON p.user_id = u.id
-        LEFT JOIN riders r ON u.id = r.user_id
-        LEFT JOIN ecosystems e ON u.id = e.user_id
-        LEFT JOIN motorcycles m ON p.tagged_motorcycle_id = m.id
-        LEFT JOIN events ev ON CAST(p.shared_event_id AS INTEGER) = ev.id
-        WHERE p.privacy_level = 'public' 
-           OR p.user_id = ? 
-           OR (p.privacy_level = 'followers' AND EXISTS (SELECT 1 FROM followers WHERE user_id = p.user_id AND follower_id = ?))
-        ORDER BY is_pinned DESC, p.created_at DESC
-      `).all(user_id || -1, user_id || -1);
+      // Try Firestore first
+      const firestorePostsSnap = await collections.posts
+        .where("privacy_level", "==", "public")
+        .orderBy("created_at", "desc")
+        .limit(50)
+        .get();
+
+      let posts = [];
+      for (const doc of firestorePostsSnap.docs) {
+        const data = doc.data() as any;
+        let motoData: any = null;
+        let eventData: any = null;
+        let hasLiked = false;
+        let isPinned = false;
+        
+        try {
+          if (data.tagged_motorcycle_id) {
+              // Priority 1: Check Firestore
+              const motoDoc = await collections.motorcycles.doc(data.tagged_motorcycle_id.toString()).get();
+              if (motoDoc.exists) {
+                const fsMotoData = motoDoc.data() as any;
+                if (Number(fsMotoData.rider_id) === Number(data.user_id)) {
+                   motoData = fsMotoData;
+                }
+              }
+              
+              if (!motoData) {
+                // Try SQLite if not in Firestore or rider mismatch
+                const parsedId = parseInt(data.tagged_motorcycle_id, 10);
+                if (!isNaN(parsedId)) {
+                  motoData = db.prepare("SELECT rider_id, make, model, year FROM motorcycles WHERE id = ?").get(parsedId);
+                  // Prevent showing mockup/other user's motos in case of ID collisions
+                  if (motoData && Number(motoData.rider_id) !== Number(data.user_id)) {
+                    motoData = null;
+                  }
+                }
+              }
+          }
+          if (data.shared_event_id) {
+            const eventDoc = await collections.events.doc(data.shared_event_id.toString()).get();
+            if (eventDoc.exists) {
+              eventData = eventDoc.data();
+            } else {
+              eventData = db.prepare("SELECT title, date, image_url, location FROM events WHERE id = ?").get(data.shared_event_id);
+            }
+          }
+          if (user_id) {
+            // Check Firestore for likes first
+            const likeDoc = await collections.post_likes.doc(`${data.id}_${user_id}`).get();
+            if (likeDoc.exists) {
+               hasLiked = true;
+            } else {
+               const likeCheck = db.prepare("SELECT 1 FROM post_likes WHERE post_id = ? AND user_id = ?").get(data.id, user_id);
+               if (likeCheck) hasLiked = true;
+            }
+            
+            // Check pins
+            const pinCheck = db.prepare("SELECT 1 FROM user_pinned_posts WHERE post_id = ? AND user_id = ?").get(data.id, user_id);
+            if (pinCheck) isPinned = true;
+          }
+        } catch(e) {}
+
+        posts.push({
+          ...data,
+          make: motoData?.make || data.make,
+          model: motoData?.model || data.model,
+          year: motoData?.year || data.year,
+          shared_event_title: eventData?.title || data.shared_event_title,
+          shared_event_date: eventData?.date || data.shared_event_date,
+          shared_event_image_url: eventData?.image_url || data.shared_event_image_url,
+          shared_event_location: eventData?.location || data.shared_event_location,
+          likes_count: data.respect_count || 0,
+          respect_count: data.respect_count || 0,
+          has_liked: hasLiked,
+          is_pinned: isPinned ? 1 : (data.is_pinned || 0)
+        });
+      }
+
+      // For migration, we still mix in SQLite posts if Firestore is empty or sparsely populated
+      if (posts.length < 10) {
+        const sqlitePosts = db.prepare(`
+          SELECT p.*, u.username, u.type, u.profile_picture_url,
+                r.name as rider_name, e.company_name, e.service_category,
+                m.make, m.model, m.year,
+                ev.title as shared_event_title, ev.date as shared_event_date, ev.image_url as shared_event_image_url, ev.location as shared_event_location,
+                p.respect_count as likes_count,
+                p.respect_count,
+                p.comment_count,
+                ${user_id ? `(SELECT COUNT(*) FROM post_likes WHERE post_id = p.id AND user_id = ${user_id}) > 0` : '0'} as has_liked,
+                ${user_id ? `(SELECT COUNT(*) FROM user_pinned_posts WHERE post_id = p.id AND user_id = ${user_id}) > 0` : '0'} as is_pinned
+          FROM posts p
+          JOIN users u ON p.user_id = u.id
+          LEFT JOIN riders r ON u.id = r.user_id
+          LEFT JOIN ecosystems e ON u.id = e.user_id
+          LEFT JOIN motorcycles m ON p.tagged_motorcycle_id = m.id AND m.rider_id = p.user_id
+          LEFT JOIN events ev ON CAST(p.shared_event_id AS INTEGER) = ev.id
+          WHERE (p.privacy_level = 'public' OR p.user_id = ?)
+          ORDER BY is_pinned DESC, p.created_at DESC
+          LIMIT 50
+        `).all(user_id || -1);
+        
+        // Deduplicate using user_id and content, and fallback to id
+        const firestoreSignatures = new Set(posts.map(p => `${p.user_id}_${String(p.content).trim()}`));
+        const firestoreIds = new Set(posts.map(p => p.id));
+        
+        const filteredSqlite = sqlitePosts.filter((sqp: any) => {
+          if (firestoreIds.has(sqp.id)) return false;
+          if (firestoreSignatures.has(`${sqp.user_id}_${String(sqp.content).trim()}`)) return false;
+          return true;
+        });
+        
+        posts = [...posts, ...filteredSqlite];
+      }
+
+      // Final deduplicate any strange identical posts array-wide
+      const uniquePosts: any[] = [];
+      const seenSigs = new Set();
+      for (const p of posts) {
+        const sig = `${p.user_id}_${String(p.content).trim()}`;
+        if (!seenSigs.has(sig)) {
+          seenSigs.add(sig);
+          uniquePosts.push(p);
+        }
+      }
+      posts = uniquePosts;
+
       res.json(posts);
     } catch (error: any) {
+      console.error("GET posts error:", error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -3097,15 +4585,23 @@ async function startServer() {
 
       const existingPin = db.prepare("SELECT * FROM user_pinned_posts WHERE user_id = ? AND post_id = ?").get(userId, postId);
 
-      db.transaction(() => {
-        // Always clear existing pin for this user (since only one can be pinned)
-        db.prepare("DELETE FROM user_pinned_posts WHERE user_id = ?").run(userId);
-        
-        // If it wasn't this specific post, pin it now
-        if (!existingPin) {
-          db.prepare("INSERT INTO user_pinned_posts (user_id, post_id) VALUES (?, ?)").run(userId, postId);
-        }
-      })();
+      try {
+        db.transaction(() => {
+          // Always clear existing pin for this user (since only one can be pinned)
+          db.prepare("DELETE FROM user_pinned_posts WHERE user_id = ?").run(userId);
+          
+          // If it wasn't this specific post, pin it now
+          if (!existingPin) {
+            const postExists = db.prepare("SELECT id FROM posts WHERE id = ?").get(postId);
+            const userExists = db.prepare("SELECT id FROM users WHERE id = ?").get(userId);
+            if (postExists && userExists) {
+              db.prepare("INSERT INTO user_pinned_posts (user_id, post_id) VALUES (?, ?)").run(userId, postId);
+            }
+          }
+        })();
+      } catch (sqe) {
+        console.error("SQLite pin insert failed", sqe);
+      }
 
       res.json({ success: true, is_pinned: !existingPin });
     } catch (error: any) {
@@ -3113,7 +4609,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/posts/:id/like", authenticateToken, (req: any, res) => {
+  app.post("/api/posts/:id/like", authenticateToken, async (req: any, res) => {
     const { user_id } = req.body;
     const post_id = req.params.id;
     
@@ -3124,67 +4620,189 @@ async function startServer() {
     }
 
     try {
-      const existing = db.prepare("SELECT id FROM post_likes WHERE post_id = ? AND user_id = ?").get(post_id, user_id);
-      
-      db.transaction(() => {
-        if (existing) {
-          db.prepare("DELETE FROM post_likes WHERE post_id = ? AND user_id = ?").run(post_id, user_id);
-          db.prepare("UPDATE posts SET respect_count = MAX(0, respect_count - 1) WHERE id = ?").run(post_id);
-        } else {
-          db.prepare("INSERT INTO post_likes (post_id, user_id) VALUES (?, ?)").run(post_id, user_id);
-          db.prepare("UPDATE posts SET respect_count = respect_count + 1 WHERE id = ?").run(post_id);
-          
-          // Check for badges
-          const post = db.prepare("SELECT user_id FROM posts WHERE id = ?").get(post_id) as any;
-          if (post) {
-            const totalLikes = db.prepare("SELECT COUNT(*) as count FROM post_likes pl JOIN posts p ON pl.post_id = p.id WHERE p.user_id = ?").get(post.user_id) as any;
-            
-            if (totalLikes.count === 100) {
-              const badge = db.prepare("SELECT badge_id FROM badges WHERE name = 'Community Builder'").get() as any;
-              if (badge) {
-                db.prepare("INSERT OR IGNORE INTO user_badges (user_id, badge_id) VALUES (?, ?)").run(post.user_id, badge.badge_id);
-              }
-            } else if (totalLikes.count === 1000) {
-              const badge = db.prepare("SELECT badge_id FROM badges WHERE name = 'Influencer Rider'").get() as any;
-              if (badge) {
-                db.prepare("INSERT OR IGNORE INTO user_badges (user_id, badge_id) VALUES (?, ?)").run(post.user_id, badge.badge_id);
-              }
-            }
+      let existing: any = null;
+      let hasLikedInFirestore = false;
+      const likeDocId = `${post_id}_${user_id}`;
 
-            // Create notification
-            if (post.user_id !== user_id) {
-              const liker = db.prepare("SELECT username FROM users WHERE id = ?").get(user_id) as any;
-              db.prepare("INSERT INTO notifications (user_id, type, content, link) VALUES (?, ?, ?, ?)").run(
-                post.user_id, 'like', `${liker.username} respected your post.`, `/profile/${liker.username}`
-              );
+      try {
+        existing = db.prepare("SELECT id FROM post_likes WHERE post_id = ? AND user_id = ?").get(post_id, user_id);
+      } catch (sqliteErr) {
+        console.error("SQLite select like failed", sqliteErr);
+      }
+
+      try {
+        const fsLike = await collections.post_likes.doc(likeDocId).get();
+        if (fsLike.exists) hasLikedInFirestore = true;
+      } catch (e) { }
+
+      const isLiking = !(existing || hasLikedInFirestore);
+
+      try {
+        db.transaction(() => {
+          const postExists = db.prepare("SELECT id FROM posts WHERE id = ?").get(post_id);
+          const userExists = db.prepare("SELECT id FROM users WHERE id = ?").get(user_id);
+          
+          if (postExists && userExists) {
+            if (!isLiking) {
+              db.prepare("DELETE FROM post_likes WHERE post_id = ? AND user_id = ?").run(post_id, user_id);
+              db.prepare("UPDATE posts SET respect_count = MAX(0, respect_count - 1) WHERE id = ?").run(post_id);
+            } else {
+              db.prepare("INSERT INTO post_likes (post_id, user_id) VALUES (?, ?)").run(post_id, user_id);
+              db.prepare("UPDATE posts SET respect_count = respect_count + 1 WHERE id = ?").run(post_id);
+              
+              // Check for badges
+              const post = db.prepare("SELECT user_id FROM posts WHERE id = ?").get(post_id) as any;
+              if (post) {
+                const totalLikes = db.prepare("SELECT COUNT(*) as count FROM post_likes pl JOIN posts p ON pl.post_id = p.id WHERE p.user_id = ?").get(post.user_id) as any;
+                
+                if (totalLikes.count === 100) {
+                  const badge = db.prepare("SELECT badge_id FROM badges WHERE name = 'Community Builder'").get() as any;
+                  if (badge) {
+                    db.prepare("INSERT OR IGNORE INTO user_badges (user_id, badge_id) VALUES (?, ?)").run(post.user_id, badge.badge_id);
+                  }
+                } else if (totalLikes.count === 1000) {
+                  const badge = db.prepare("SELECT badge_id FROM badges WHERE name = 'Influencer Rider'").get() as any;
+                  if (badge) {
+                    db.prepare("INSERT OR IGNORE INTO user_badges (user_id, badge_id) VALUES (?, ?)").run(post.user_id, badge.badge_id);
+                  }
+                }
+
+                // Create notification
+                if (post.user_id !== user_id) {
+                  const liker = db.prepare("SELECT username FROM users WHERE id = ?").get(user_id) as any;
+                  if (liker) {
+                    db.prepare("INSERT INTO notifications (user_id, type, content, link) VALUES (?, ?, ?, ?)").run(
+                      post.user_id, 'like', `${liker.username} respected your post.`, `/profile/${liker.username}`
+                    );
+                  }
+                }
+              }
             }
           }
+        })();
+      } catch (sqliteErr) {
+        console.error("SQLite like update failed, possibly due to orphaned post_id", sqliteErr);
+      }
+
+      try {
+        const postRef = collections.posts.doc(post_id.toString());
+        await firestore.runTransaction(async (t) => {
+          const pDoc = await t.get(postRef);
+          if (pDoc.exists) {
+            const currentRespect = pDoc.data()?.respect_count || 0;
+            const newRespect = isLiking ? currentRespect + 1 : Math.max(0, currentRespect - 1);
+            t.update(postRef, { respect_count: newRespect });
+          }
+        });
+        
+        // Also update the post_likes collection and notifications
+        if (isLiking) {
+            await collections.post_likes.doc(likeDocId).set({
+                post_id: post_id.toString(),
+                user_id: user_id.toString(),
+                created_at: new Date().toISOString()
+            });
+
+            // Create firestore notification
+            try {
+                const postSnap = await collections.posts.doc(post_id.toString()).get();
+                if (postSnap.exists) {
+                    const postData = postSnap.data();
+                    if (postData?.user_id && postData.user_id.toString() !== user_id.toString()) {
+                         const likerName = req.user.username || "Someone";
+                         await collections.notifications.add({
+                             user_id: postData.user_id,
+                             type: 'like',
+                             content: `${likerName} respected your post.`,
+                             link: `/profile/${likerName}`,
+                             read: false,
+                             created_at: new Date().toISOString()
+                         });
+                    }
+                }
+            } catch(e) { }
+
+        } else {
+            await collections.post_likes.doc(likeDocId).delete();
         }
-      })();
+
+      } catch (err) {
+        console.error("Failed to sync respect_count to Firestore:", err);
+      }
       
-      res.json({ success: true, action: existing ? 'unliked' : 'liked' });
+      res.json({ success: true, action: isLiking ? 'liked' : 'unliked' });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.get("/api/posts/:id/comments", (req, res) => {
+  app.get("/api/posts/:id/comments", async (req, res) => {
     const post_id = req.params.id;
     try {
-      const comments = db.prepare(`
-        SELECT c.*, u.username, u.profile_picture_url
-        FROM post_comments c
-        JOIN users u ON c.user_id = u.id
-        WHERE c.post_id = ?
-        ORDER BY c.created_at ASC
-      `).all(post_id);
+      let comments: any[] = [];
+      
+      // 1. Fetch from Firestore
+      try {
+        const firestoreCommentsSnap = await collections.comments
+          .where("post_id", "==", parseInt(post_id as string))
+          .get();
+          
+        for (const doc of firestoreCommentsSnap.docs) {
+          const cData = doc.data() as any;
+          // Get user details
+          let userData: any = null;
+          try {
+             const userDoc = await collections.users.doc(cData.user_id.toString()).get();
+             if (userDoc.exists) userData = userDoc.data();
+          } catch(e) {}
+          
+          if (!userData) {
+            try {
+               userData = db.prepare("SELECT username, profile_picture_url FROM users WHERE id = ?").get(cData.user_id) as any;
+            } catch(e) {}
+          }
+          
+          comments.push({
+             id: doc.id,
+             ...cData,
+             username: userData?.username || "Unknown",
+             profile_picture_url: userData?.profile_picture_url || null
+          });
+        }
+      } catch (fErr) {
+         // Silently fallback if missing index or firestore error
+         console.error("Firestore comments fetch error:", fErr);
+      }
+      
+      // 2. Fetch from SQLite
+      try {
+        const sqliteComments = db.prepare(`
+          SELECT c.*, u.username, u.profile_picture_url
+          FROM post_comments c
+          JOIN users u ON c.user_id = u.id
+          WHERE c.post_id = ?
+          ORDER BY c.created_at ASC
+        `).all(post_id);
+        
+        // 3. Deduplicate
+        for (const sqc of sqliteComments) {
+          const duplicate = comments.find(c => c.user_id == sqc.user_id && c.content.trim() === sqc.content.trim());
+          if (!duplicate) {
+             comments.push(sqc);
+          }
+        }
+      } catch (sqErr) {}
+
+      // Sort combined
+      comments.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      
       res.json(comments);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.post("/api/posts/:id/comments", authenticateToken, (req: any, res) => {
+  app.post("/api/posts/:id/comments", authenticateToken, async (req: any, res) => {
     const post_id = req.params.id;
     const { content } = req.body;
     const user_id = req.user.id;
@@ -3192,421 +4810,806 @@ async function startServer() {
     if (!content) return res.status(400).json({ error: "Comment content is required" });
 
     try {
-      db.transaction(() => {
-        db.prepare("INSERT INTO post_comments (post_id, user_id, content) VALUES (?, ?, ?)").run(post_id, user_id, content);
-        db.prepare("UPDATE posts SET comment_count = comment_count + 1 WHERE id = ?").run(post_id);
-        
-        // Notification
-        const post = db.prepare("SELECT user_id FROM posts WHERE id = ?").get(post_id) as any;
-        if (post && post.user_id !== user_id) {
-          const commenter = db.prepare("SELECT username FROM users WHERE id = ?").get(user_id) as any;
-          db.prepare("INSERT INTO notifications (user_id, type, content, link) VALUES (?, ?, ?, ?)").run(
-            post.user_id, 'comment', `${commenter.username} commented on your post.`, `/profile/${commenter.username}`
-          );
+      const commentId = Math.random().toString(36).substring(2, 15);
+      const now = new Date().toISOString();
+      const commentData = {
+        post_id: parseInt(post_id as string),
+        user_id: parseInt(user_id as string),
+        content,
+        created_at: now
+      };
+
+      await collections.comments.doc(commentId).set(commentData);
+      
+      // Update post comment count in Firestore
+      const postRef = collections.posts.doc(post_id.toString());
+      await firestore.runTransaction(async (t) => {
+        const pDoc = await t.get(postRef);
+        if (pDoc.exists) {
+          const newCount = (pDoc.data()?.comment_count || 0) + 1;
+          t.update(postRef, { comment_count: newCount });
         }
-      })();
+      });
+
+      // Notification in Firestore
+      const postDoc = await collections.posts.doc(post_id.toString()).get();
+      if (postDoc.exists) {
+        const post = postDoc.data() as any;
+        if (post.user_id.toString() !== user_id.toString()) {
+          const commenterDoc = await collections.users.doc(user_id.toString()).get();
+          const commenter = commenterDoc.exists ? commenterDoc.data() as any : { username: "Someone" };
+          
+          const notifId = Math.random().toString(36).substring(2, 15);
+          await collections.notifications.doc(notifId).set({
+            user_id: post.user_id,
+            type: 'comment',
+            content: `${commenter.username} commented on your post.`,
+            link: `/profile/${commenter.username}`,
+            is_read: 0,
+            created_at: now
+          });
+        }
+      }
+
+      // Dual-write to SQLite
+      try {
+        db.transaction(() => {
+          const postExists = db.prepare("SELECT id FROM posts WHERE id = ?").get(post_id);
+          const userExists = db.prepare("SELECT id FROM users WHERE id = ?").get(user_id);
+          
+          if (postExists && userExists) {
+            db.prepare("INSERT INTO post_comments (post_id, user_id, content) VALUES (?, ?, ?)").run(post_id, user_id, content);
+            db.prepare("UPDATE posts SET comment_count = comment_count + 1 WHERE id = ?").run(post_id);
+            
+            // SQLite Notification fallback
+            const post = db.prepare("SELECT user_id FROM posts WHERE id = ?").get(post_id) as any;
+            if (post && post.user_id !== user_id) {
+              const commenter = db.prepare("SELECT username FROM users WHERE id = ?").get(user_id) as any;
+              if (commenter) {
+                db.prepare("INSERT INTO notifications (user_id, type, content, link) VALUES (?, ?, ?, ?)").run(
+                  post.user_id, 'comment', `${commenter.username} commented on your post.`, `/profile/${commenter.username}`
+                );
+              }
+            }
+          }
+        })();
+      } catch (sqe) {
+        console.error("SQLite comment insert failed", sqe);
+      }
+
       res.json({ success: true });
     } catch (error: any) {
+      console.error("Error adding comment in Firestore:", error);
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.post("/api/users/:id/follow", authenticateToken, (req: any, res) => {
+  app.post("/api/users/:id/follow", authenticateToken, async (req: any, res) => {
     const { follower_id } = req.body;
     const user_id = req.params.id;
     
     if (!follower_id) return res.status(400).json({ error: "Follower ID is required" });
     
-    if (follower_id !== req.user.id && req.user.role !== 'admin' && req.user.role !== 'moderator') {
+    // Convert to strings for consistent comparison
+    const s_follower_id = follower_id.toString();
+    const s_user_id = user_id.toString();
+
+    if (s_follower_id === s_user_id) {
+      return res.status(400).json({ error: "You cannot follow yourself" });
+    }
+
+    if (s_follower_id !== req.user.id.toString() && req.user.role !== 'admin' && req.user.role !== 'moderator') {
       return res.status(403).json({ error: "Forbidden: You can only follow users for yourself" });
     }
 
     try {
-      const existing = db.prepare("SELECT id FROM followers WHERE user_id = ? AND follower_id = ?").get(user_id, follower_id);
+      const parsedUserId = isNaN(Number(user_id)) ? user_id : Number(user_id);
+      const parsedFollowerId = isNaN(Number(follower_id)) ? follower_id : Number(follower_id);
       
-      if (existing) {
-        db.prepare("DELETE FROM followers WHERE user_id = ? AND follower_id = ?").run(user_id, follower_id);
+      await ensureSqliteUserExists(parsedUserId);
+      await ensureSqliteUserExists(parsedFollowerId);
+      
+      const followId = `${user_id}_${follower_id}`;
+      
+      let isFollowingSQLite = false;
+      try {
+        const sqCheck = db.prepare("SELECT 1 FROM followers WHERE user_id = ? AND follower_id = ?").get(parsedUserId, parsedFollowerId);
+        if (sqCheck) isFollowingSQLite = true;
+      } catch (e) {}
+
+      let isFollowingFirestore = false;
+      try {
+        const followDoc = await collections.followers.doc(followId).get();
+        if (followDoc.exists) isFollowingFirestore = true;
+        
+        if (!isFollowingFirestore) {
+            const followCheckAlt = await collections.followers.where('user_id', 'in', [parsedUserId, user_id.toString()]).where('follower_id', 'in', [parsedFollowerId, follower_id.toString()]).get();
+            isFollowingFirestore = !followCheckAlt.empty;
+        }
+      } catch (e) {}
+      
+      if (isFollowingFirestore || isFollowingSQLite) {
+        // UNFOLLOW
+        try {
+            await collections.followers.doc(followId).delete();
+            const altCheck = await collections.followers.where('user_id', 'in', [parsedUserId, user_id.toString()]).where('follower_id', 'in', [parsedFollowerId, follower_id.toString()]).get();
+            altCheck.docs.forEach(doc => doc.ref.delete());
+        } catch (e) {}
+        
+        // Dual-delete SQLite
+        try {
+          db.prepare("DELETE FROM followers WHERE user_id = ? AND follower_id = ?").run(parsedUserId, parsedFollowerId);
+        } catch (sqe) {
+          console.error("SQLite delete followers error:", sqe);
+        }
+        
         res.json({ success: true, action: 'unfollowed' });
       } else {
-        db.prepare("INSERT INTO followers (user_id, follower_id) VALUES (?, ?)").run(user_id, follower_id);
+        const now = new Date().toISOString();
         
-        // Create notification
-        const follower = db.prepare("SELECT username FROM users WHERE id = ?").get(follower_id) as any;
-        db.prepare("INSERT INTO notifications (user_id, type, content, link) VALUES (?, ?, ?, ?)").run(
-          user_id, 'follow', `${follower.username} started following you.`, `/profile/${follower.username}`
-        );
+        await collections.followers.doc(followId).set({
+          user_id: parsedUserId,
+          follower_id: parsedFollowerId,
+          created_at: now
+        });
+        
+        // Create notification in Firestore
+        let follower: any = { username: "Someone" };
+        try {
+          const followerDoc = await collections.users.doc(follower_id.toString()).get();
+          if (followerDoc.exists) {
+            follower = followerDoc.data();
+          }
+        } catch(e) {}
+        
+        try {
+          const notifId = Math.random().toString(36).substring(2, 15);
+          await collections.notifications.doc(notifId).set({
+            user_id: parsedUserId,
+            type: 'follow',
+            content: `${follower.username} started following you.`,
+            link: `/profile/${follower.username}`,
+            is_read: 0,
+            created_at: now
+          });
+        } catch(e) {}
+
+        // Dual-write SQLite
+        try {
+          const userExists = db.prepare("SELECT 1 FROM users WHERE id = ?").get(parsedUserId);
+          const followerExists = db.prepare("SELECT 1 FROM users WHERE id = ?").get(parsedFollowerId);
+          if (userExists && followerExists) {
+            db.prepare("INSERT OR IGNORE INTO followers (user_id, follower_id) VALUES (?, ?)").run(parsedUserId, parsedFollowerId);
+          }
+        } catch (sqe) {
+          console.error("SQLite insert followers error:", sqe);
+        }
+        try {
+          const userExists = db.prepare("SELECT 1 FROM users WHERE id = ?").get(parsedUserId);
+          if (userExists) {
+            // Check if table notifications has type and link columns
+            db.prepare("INSERT INTO notifications (user_id, content) VALUES (?, ?)").run(
+              parsedUserId, `${follower.username} started following you.`
+            );
+          }
+        } catch (sqe) {
+           console.error("SQLite insert notifications error:", sqe);
+        }
         
         res.json({ success: true, action: 'followed' });
       }
     } catch (error: any) {
+      console.error("Error in follow action in Firestore:", error);
       res.status(500).json({ error: error.message });
     }
   });
 
-  // Event Photo Management
-  app.post("/api/events/:id/photos", authenticateToken, upload.single("image"), (req: any, res) => {
+  app.post("/api/events/:id/photos", authenticateToken, upload.single("image"), async (req: any, res) => {
     const eventId = req.params.id;
     const userId = req.body.userId;
-    const imageUrl = `/uploads/${(req as any).file?.filename}`;
+    let imageUrl = null;
+
+    if (req.file) {
+      try {
+        imageUrl = await uploadToFirebase(req.file, "event_photos");
+      } catch (err) {
+        return res.status(500).json({ error: "Failed to upload photo" });
+      }
+    }
     
-    if (userId !== req.user.id.toString() && userId !== req.user.id && req.user.role !== 'admin' && req.user.role !== 'moderator') {
+    if (userId.toString() !== req.user.id.toString() && req.user.role !== 'admin' && req.user.role !== 'moderator') {
       return res.status(403).json({ error: "Forbidden: You can only upload photos for yourself" });
     }
 
-    db.prepare("INSERT INTO event_photos (event_id, user_id, image_url) VALUES (?, ?, ?)")
-      .run(eventId, userId, imageUrl);
-    
-    res.json({ success: true });
-  });
-
-  app.get("/api/events/:id/photos", (req, res) => {
-    const photos = db.prepare("SELECT * FROM event_photos WHERE event_id = ? AND status = 'approved'").all(req.params.id);
-    res.json(photos);
-  });
-
-  app.get("/api/events/:id/pending-photos", authenticateToken, (req: any, res) => {
     try {
-      const event = db.prepare("SELECT user_id FROM events WHERE id = ?").get(req.params.id) as any;
-      if (!event) return res.status(404).json({ error: "Event not found" });
-      
-      const isHostOrAdmin = event.user_id === req.user.id || req.user.role === 'admin' || req.user.role === 'moderator';
+      const photoId = await getNextId("event_photos");
+      const photoData = {
+        id: photoId,
+        event_id: Number(eventId),
+        user_id: Number(userId),
+        image_url: imageUrl,
+        status: 'pending',
+        created_at: admin.firestore.FieldValue.serverTimestamp()
+      };
 
-      let photos;
-      if (isHostOrAdmin) {
-        photos = db.prepare("SELECT * FROM event_photos WHERE event_id = ? AND status = 'pending'").all(req.params.id);
-      } else {
-        // Regular user only sees their own pending photos
-        photos = db.prepare("SELECT * FROM event_photos WHERE event_id = ? AND status = 'pending' AND user_id = ?").all(req.params.id, req.user.id);
-      }
-      res.json(photos);
+      await collections.event_photos.doc(photoId.toString()).set(photoData);
+
+      // Dual-write to SQLite
+      try {
+        db.prepare("INSERT OR REPLACE INTO event_photos (id, event_id, user_id, image_url) VALUES (?, ?, ?, ?)")
+          .run(photoId, eventId, userId, imageUrl);
+      } catch (sqe) {}
+      
+      res.json({ success: true, id: photoId });
     } catch (error: any) {
+      console.error("Error adding event photo to Firestore:", error);
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.post("/api/events/photos/:photoId/status", authenticateToken, (req: any, res) => {
+  app.get("/api/events/:id/photos", async (req, res) => {
+    const { id } = req.params;
+    try {
+      const photosSnapshot = await collections.event_photos
+        .where("event_id", "==", Number(id))
+        .where("status", "==", "approved")
+        .get();
+      const photos = photosSnapshot.docs.map(doc => ({ ...doc.data() as any, id: doc.id }));
+      res.json(photos);
+    } catch (error: any) {
+      console.error("Error fetching event photos from Firestore:", error);
+      res.status(500).json({ error: "Failed to fetch photos" });
+    }
+  });
+
+  app.get("/api/events/:id/pending-photos", authenticateToken, async (req: any, res) => {
+    const { id } = req.params;
+    try {
+      const eventDoc = await collections.events.doc(id).get();
+      if (!eventDoc.exists) return res.status(404).json({ error: "Event not found" });
+      const event = eventDoc.data() as any;
+      
+      const isHostOrAdmin = event.user_id.toString() === req.user.id.toString() || req.user.role === 'admin' || req.user.role === 'moderator';
+
+      let query = collections.event_photos.where("event_id", "==", Number(id)).where("status", "==", "pending");
+      
+      if (!isHostOrAdmin) {
+        // Regular user only sees their own pending photos
+        query = query.where("user_id", "==", Number(req.user.id));
+      }
+      
+      const photosSnapshot = await query.get();
+      const photos = photosSnapshot.docs.map(doc => ({ ...doc.data() as any, id: doc.id }));
+      res.json(photos);
+    } catch (error: any) {
+      console.error("Error fetching pending event photos from Firestore:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/events/photos/:photoId/status", authenticateToken, async (req: any, res) => {
     const { status } = req.body;
+    const { photoId } = req.params;
     
     try {
-      const photo = db.prepare("SELECT event_id FROM event_photos WHERE id = ?").get(req.params.photoId) as any;
-      if (!photo) return res.status(404).json({ error: "Photo not found" });
+      const photoDoc = await collections.event_photos.doc(photoId).get();
+      if (!photoDoc.exists) return res.status(404).json({ error: "Photo not found" });
+      const photoData = photoDoc.data() as any;
       
-      const event = db.prepare("SELECT user_id FROM events WHERE id = ?").get(photo.event_id) as any;
-      if (!event) return res.status(404).json({ error: "Event not found" });
+      const eventDoc = await collections.events.doc(photoData.event_id.toString()).get();
+      if (!eventDoc.exists) return res.status(404).json({ error: "Event not found" });
+      const event = eventDoc.data() as any;
       
-      if (event.user_id !== req.user.id && req.user.role !== 'admin' && req.user.role !== 'moderator') {
+      if (event.user_id.toString() !== req.user.id.toString() && req.user.role !== 'admin' && req.user.role !== 'moderator') {
         return res.status(403).json({ error: "Forbidden: Only the event host can manage photo status" });
       }
 
-      db.prepare("UPDATE event_photos SET status = ? WHERE id = ?").run(status, req.params.photoId);
+      await collections.event_photos.doc(photoId).update({ status });
+
+      // Dual-write to SQLite
+      try {
+        db.prepare("UPDATE event_photos SET status = ? WHERE id = ?").run(status, photoId);
+      } catch (sqe) {}
+
       res.json({ success: true });
     } catch (error: any) {
+      console.error("Error updating event photo status in Firestore:", error);
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.post("/api/events/photos/bulk-status", authenticateToken, (req: any, res) => {
+  app.post("/api/events/photos/bulk-status", authenticateToken, async (req: any, res) => {
     const { photoIds, status } = req.body;
     if (!Array.isArray(photoIds) || photoIds.length === 0) {
       return res.status(400).json({ error: "Invalid photoIds" });
     }
     try {
-      const placeholders = photoIds.map(() => '?').join(',');
-      const photos = db.prepare(`SELECT event_id FROM event_photos WHERE id IN (${placeholders})`).all(...photoIds) as any[];
+      const photoDocs = await Promise.all(photoIds.map(id => collections.event_photos.doc(id.toString()).get()));
+      const photos = photoDocs.filter(d => d.exists).map(d => d.data() as any);
       
       if (photos.length === 0) return res.status(404).json({ error: "Photos not found" });
 
       const eventIds = [...new Set(photos.map(p => p.event_id))];
-      const events = db.prepare(`SELECT id, user_id FROM events WHERE id IN (${eventIds.map(() => '?').join(',')})`).all(...eventIds) as any[];
+      const eventDocs = await Promise.all(eventIds.map(id => collections.events.doc(id.toString()).get()));
+      const events = eventDocs.filter(d => d.exists).map(d => d.data() as any);
       
-      const isAuthorized = req.user.role === 'admin' || req.user.role === 'moderator' || events.every(e => e.user_id === req.user.id);
+      const isAuthorized = req.user.role === 'admin' || req.user.role === 'moderator' || events.every(e => e.user_id.toString() === req.user.id.toString());
       
       if (!isAuthorized) {
         return res.status(403).json({ error: "Forbidden" });
       }
 
-      db.prepare(`UPDATE event_photos SET status = ? WHERE id IN (${placeholders})`).run(status, ...photoIds);
+      const batch = firestore.batch();
+      photoIds.forEach(id => {
+        batch.update(collections.event_photos.doc(id.toString()), { status });
+      });
+      await batch.commit();
+
+      // Dual-write to SQLite
+      try {
+        const placeholders = photoIds.map(() => '?').join(',');
+        db.prepare(`UPDATE event_photos SET status = ? WHERE id IN (${placeholders})`).run(status, ...photoIds);
+      } catch (sqe) {}
+
       res.json({ success: true });
     } catch (error: any) {
+      console.error("Error bulk updating event photos in Firestore:", error);
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.delete("/api/events/photos/:photoId", authenticateToken, (req: any, res) => {
+  app.delete("/api/events/photos/:photoId", authenticateToken, async (req: any, res) => {
+    const { photoId } = req.params;
     try {
-      const photo = db.prepare("SELECT event_id, user_id FROM event_photos WHERE id = ?").get(req.params.photoId) as any;
-      if (!photo) return res.status(404).json({ error: "Photo not found" });
+      const photoDoc = await collections.event_photos.doc(photoId).get();
+      if (!photoDoc.exists) return res.status(404).json({ error: "Photo not found" });
+      const photo = photoDoc.data() as any;
       
-      const event = db.prepare("SELECT user_id FROM events WHERE id = ?").get(photo.event_id) as any;
-      if (!event) return res.status(404).json({ error: "Event not found" });
+      const eventDoc = await collections.events.doc(photo.event_id.toString()).get();
+      if (!eventDoc.exists) return res.status(404).json({ error: "Event not found" });
+      const event = eventDoc.data() as any;
       
-      if (event.user_id !== req.user.id && photo.user_id !== req.user.id && req.user.role !== 'admin' && req.user.role !== 'moderator') {
+      if (event.user_id.toString() !== req.user.id.toString() && photo.user_id.toString() !== req.user.id.toString() && req.user.role !== 'admin' && req.user.role !== 'moderator') {
         return res.status(403).json({ error: "Forbidden: You don't have permission to delete this photo" });
       }
 
-      db.prepare("DELETE FROM event_photos WHERE id = ?").run(req.params.photoId);
+      await collections.event_photos.doc(photoId).delete();
+
+      // Dual-write to SQLite
+      try {
+        db.prepare("DELETE FROM event_photos WHERE id = ?").run(photoId);
+      } catch (sqe) {}
+
       res.json({ success: true });
     } catch (error: any) {
+      console.error("Error deleting event photo in Firestore:", error);
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.get("/api/admin/pending-event-photos", authenticateToken, (req: any, res) => {
+  app.get("/api/admin/pending-event-photos", authenticateToken, async (req: any, res) => {
     if (req.user.role !== 'admin' && req.user.role !== 'moderator') {
       return res.status(403).json({ error: "Forbidden" });
     }
     try {
-      const photos = db.prepare(`
-        SELECT ep.*, e.title as event_title, u.username
-        FROM event_photos ep
-        JOIN events e ON ep.event_id = e.id
-        JOIN users u ON ep.user_id = u.id
-        WHERE ep.status = 'pending'
-        ORDER BY ep.created_at DESC
-      `).all();
+      const photosSnapshot = await collections.event_photos.where("status", "==", "pending").orderBy("created_at", "desc").get();
+      const photos = await Promise.all(photosSnapshot.docs.map(async (doc) => {
+        const data = doc.data() as any;
+        const eventDoc = await collections.events.doc(data.event_id.toString()).get();
+        const userDoc = await collections.users.doc(data.user_id.toString()).get();
+        return {
+          id: doc.id,
+          ...data,
+          event_title: eventDoc.exists ? (eventDoc.data() as any).title : "Unknown Event",
+          username: userDoc.exists ? (userDoc.data() as any).username : "Unknown User"
+        };
+      }));
       res.json(photos);
     } catch (error: any) {
+      console.error("Error fetching pending event photos from Firestore:", error);
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.get("/api/events", (req, res) => {
+  app.get("/api/events", async (req, res) => {
     const { username, category, location } = req.query;
     let userId = null;
     if (username) {
-      const user = db.prepare("SELECT id FROM users WHERE username = ?").get(username) as any;
-      if (user) userId = user.id;
+      try {
+        const userSnapshot = await collections.users.where("username", "==", username).limit(1).get();
+        if (!userSnapshot.empty) userId = userSnapshot.docs[0].id;
+      } catch (err) {}
     }
 
-    let query = `
-      SELECT ev.*, u.username, u.profile_picture_url,
-             e.company_name, e.service_category,
-             b.name as participation_badge_name,
-             b.icon as participation_badge_icon,
-             ps.name as stamp_name,
-             ps.icon as stamp_icon,
-             (SELECT COUNT(*) FROM event_rsvps WHERE event_id = ev.id) as rsvp_count,
-             ${userId ? `(SELECT COUNT(*) FROM event_rsvps WHERE event_id = ev.id AND user_id = ${userId}) > 0` : '0'} as has_rsvpd
-      FROM events ev
-      JOIN users u ON ev.user_id = u.id
-      LEFT JOIN ecosystems e ON u.id = e.user_id
-      LEFT JOIN badges b ON ev.participation_badge_id = b.badge_id
-      LEFT JOIN passport_stamps ps ON ev.participation_stamp_id = ps.id
-      WHERE ev.is_approved = 1
-    `;
-    const params: any[] = [];
+    try {
+      let query: admin.firestore.Query = collections.events.where("is_approved", "==", 1);
 
-    if (category && category !== 'all') {
-      query += ` AND ev.category = ?`;
-      params.push(category);
+      if (category && category !== 'all') {
+        query = query.where("category", "==", category);
+      }
+      
+      const snapshot = await query.get();
+      let events = snapshot.docs.map(doc => ({ ...doc.data() as any, id: doc.id }));
+
+      if (location) {
+        events = events.filter(e => e.location?.toLowerCase().includes((location as string).toLowerCase()));
+      }
+
+      // Populate host and stats
+      const populatedEvents = await Promise.all(events.map(async (ev) => {
+        const hostSnapshot = await collections.users.doc(ev.user_id.toString()).get();
+        const hostData = hostSnapshot.exists ? hostSnapshot.data() : {};
+        const ecoDoc = await collections.ecosystems.doc(ev.user_id.toString()).get();
+        const ecoData = ecoDoc.exists ? ecoDoc.data() : {};
+        
+        const rsvpSnapshot = await collections.event_rsvps.where("event_id", "==", ev.id).get();
+        const hasRsvpd = userId ? rsvpSnapshot.docs.some(d => d.data().user_id.toString() === userId.toString()) : false;
+
+        return {
+          ...ev,
+          username: hostData?.username || 'Unknown',
+          profile_picture_url: hostData?.profile_picture_url || null,
+          company_name: (ecoData as any)?.company_name || null,
+          service_category: (ecoData as any)?.service_category || null,
+          rsvp_count: rsvpSnapshot.size,
+          has_rsvpd: hasRsvpd ? 1 : 0
+        };
+      }));
+
+      // Sort: promoted first, then date
+      populatedEvents.sort((a, b) => {
+        if (b.is_promoted !== a.is_promoted) return (b.is_promoted || 0) - (a.is_promoted || 0);
+        return new Date(a.date).getTime() - new Date(b.date).getTime();
+      });
+
+      res.json(populatedEvents);
+    } catch (error: any) {
+      console.error("Error fetching events from Firestore:", error);
+      res.status(500).json({ error: error.message });
     }
-    if (location) {
-      query += ` AND ev.location LIKE ?`;
-      params.push(`%${location}%`);
-    }
-
-    query += ` ORDER BY ev.is_promoted DESC, ev.date ASC`;
-
-    const events = db.prepare(query).all(...params);
-    res.json(events);
   });
 
-  app.get("/api/events/:id", (req, res) => {
+  app.get("/api/events/:id", async (req, res) => {
     const { id } = req.params;
     const { username } = req.query;
     let userId = null;
     if (username) {
-      const user = db.prepare("SELECT id FROM users WHERE username = ?").get(username) as any;
-      if (user) userId = user.id;
+      try {
+        const userSnapshot = await collections.users.where("username", "==", username).limit(1).get();
+        if (!userSnapshot.empty) userId = userSnapshot.docs[0].id;
+      } catch (err) {}
     }
 
     try {
-      const event = db.prepare(`
-        SELECT ev.*, u.username, u.profile_picture_url,
-               e.company_name, e.service_category,
-               b.name as participation_badge_name, b.icon as participation_badge_icon,
-               ps.name as stamp_name, ps.icon as stamp_icon, ps.description as stamp_description,
-               (SELECT COUNT(*) FROM event_rsvps WHERE event_id = ev.id) as rsvp_count,
-               ${userId ? `(SELECT COUNT(*) FROM event_rsvps WHERE event_id = ev.id AND user_id = ${userId}) > 0` : '0'} as has_rsvpd
-        FROM events ev
-        JOIN users u ON ev.user_id = u.id
-        LEFT JOIN ecosystems e ON u.id = e.user_id
-        LEFT JOIN badges b ON ev.participation_badge_id = b.badge_id
-        LEFT JOIN passport_stamps ps ON ev.participation_stamp_id = ps.id
-        WHERE ev.id = ?
-      `).get(id) as any;
-
-      if (!event) {
+      const eventDoc = await collections.events.doc(id).get();
+      if (!eventDoc.exists) {
         return res.status(404).json({ error: "Event not found" });
       }
+      const eventData = eventDoc.data() as any;
+
+      const hostSnapshot = await collections.users.doc(eventData.user_id.toString()).get();
+      const hostData = hostSnapshot.exists ? hostSnapshot.data() : {};
+      const ecoDoc = await collections.ecosystems.doc(eventData.user_id.toString()).get();
+      const ecoData = ecoDoc.exists ? ecoDoc.data() : {};
+      
+      const rsvpSnapshot = await collections.event_rsvps.where("event_id", "==", id).get();
+      const hasRsvpd = userId ? rsvpSnapshot.docs.some(d => d.data().user_id.toString() === userId.toString()) : false;
+
+      const event = {
+        id: eventDoc.id,
+        ...eventData,
+        username: hostData?.username || 'Unknown',
+        profile_picture_url: hostData?.profile_picture_url || null,
+        company_name: (ecoData as any)?.company_name || null,
+        service_category: (ecoData as any)?.service_category || null,
+        rsvp_count: rsvpSnapshot.size,
+        has_rsvpd: hasRsvpd ? 1 : 0
+      };
 
       res.json(event);
     } catch (error: any) {
+      console.error("Error fetching eventById from Firestore:", error);
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.post("/api/events", authenticateToken, checkFeatureAccess('create_event'), (req: any, res) => {
-    const { username, title, description, date, time, location, image_url, participation_badge_id, category, participation_stamp_id } = req.body;
+  app.post("/api/events", authenticateToken, checkFeatureAccess('create_event'), async (req: any, res) => {
+    const { username, title, description, date, time, location, image_url, participation_badge_id, category, participation_stamp_id, price, external_link, price_starting_from } = req.body;
     
     if (username !== req.user.username && req.user.role !== 'admin' && req.user.role !== 'moderator') {
       return res.status(403).json({ error: "Forbidden: You can only create events for yourself" });
     }
 
-    const user = db.prepare("SELECT * FROM users WHERE username = ?").get(username) as any;
-    
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
     try {
-      const ambassador = db.prepare("SELECT 1 FROM ambassadors WHERE user_id = ? AND is_active = 1").get(user.id);
-      const isApproved = (user.role === 'admin' || user.role === 'moderator' || ambassador) ? 1 : 0;
-      insertEvent.run(user.id, title, description, date, time, location, image_url || `https://picsum.photos/seed/${Math.random()}/800/600`, isApproved, participation_badge_id || null, category || 'other', participation_stamp_id || null);
-      
-      updateAmbassadorReputation(user.id);
+      const userSnapshot = await collections.users.where("username", "==", username).limit(1).get();
+      if (userSnapshot.empty) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      const user = { id: userSnapshot.docs[0].id, ...userSnapshot.docs[0].data() as any };
 
-      res.json({ success: true, approved: isApproved });
+      const newId = await getNextId("events");
+      const eventData = {
+        user_id: user.id,
+        title,
+        description: description || null,
+        date: date || new Date().toISOString().split('T')[0],
+        time: time || null,
+        location: location || null,
+        image_url: image_url || null,
+        participation_badge_id: participation_badge_id || null,
+        participation_stamp_id: participation_stamp_id || null,
+        category: category || 'other',
+        price: price || null,
+        external_link: external_link || null,
+        price_starting_from: price_starting_from ? 1 : 0,
+        is_promoted: 0,
+        is_approved: 1, // Auto-approve for now or based on rules
+        created_at: admin.firestore.FieldValue.serverTimestamp()
+      };
+
+      await collections.events.doc(newId.toString()).set(eventData);
+
+      // Determine approval status
+      const ambassadorSnapshot = await collections.ambassadors.doc(user.id.toString()).get();
+      const isApproved = (user.role === 'admin' || user.role === 'moderator' || (ambassadorSnapshot.exists && (ambassadorSnapshot.data() as any).is_active)) ? 1 : 0;
+      
+      if (!isApproved) {
+        await collections.events.doc(newId.toString()).update({ is_approved: 0 });
+      }
+
+      // Dual-write to SQLite
+      try {
+        db.prepare(`
+          INSERT OR REPLACE INTO events (id, user_id, title, description, date, time, location, image_url, participation_badge_id, category, participation_stamp_id, is_approved, price, external_link, price_starting_from) 
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(newId, user.id, title, description, date, time, location, image_url, participation_badge_id, category, participation_stamp_id, isApproved, price || null, external_link || null, price_starting_from ? 1 : 0);
+      } catch (sqError) {
+        console.error("SQLite insert failed for event:", sqError);
+      }
+
+      // Async update reputation
+      await updateAmbassadorReputation(user.id);
+
+      res.status(201).json({ id: newId, ...eventData, is_approved: isApproved });
     } catch (error: any) {
+      console.error("Error creating event in Firestore:", error);
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.put("/api/events/:id", authenticateToken, (req: any, res) => {
-    const { title, description, date, time, location, image_url, participation_badge_id, category, participation_stamp_id } = req.body;
+  app.put("/api/events/:id", authenticateToken, async (req: any, res) => {
+    const { title, description, date, time, location, image_url, participation_badge_id, category, participation_stamp_id, price, external_link, price_starting_from } = req.body;
     const { id } = req.params;
 
     try {
-      const event = db.prepare("SELECT user_id FROM events WHERE id = ?").get(id) as any;
-      if (!event) {
+      const eventDoc = await collections.events.doc(id).get();
+      if (!eventDoc.exists) {
         return res.status(404).json({ error: "Event not found" });
       }
-      if (event.user_id !== req.user.id && req.user.role !== 'admin' && req.user.role !== 'moderator') {
+      const event = eventDoc.data() as any;
+      if (event.user_id.toString() !== req.user.id.toString() && req.user.role !== 'admin' && req.user.role !== 'moderator') {
         return res.status(403).json({ error: "Forbidden: You can only update your own events" });
       }
 
-      db.prepare(`
-        UPDATE events 
-        SET title = ?, description = ?, date = ?, time = ?, location = ?, image_url = ?, participation_badge_id = ?, category = ?, participation_stamp_id = ?
-        WHERE id = ?
-      `).run(title, description, date, time, location, image_url, participation_badge_id || null, category || 'other', participation_stamp_id || null, id);
+      const updateData = {
+        title: title || event.title || 'Untitled',
+        description: description !== undefined ? description : (event.description || null),
+        date: date || event.date || new Date().toISOString().split('T')[0],
+        time: time !== undefined ? time : (event.time || null),
+        location: location !== undefined ? location : (event.location || null),
+        image_url: image_url !== undefined ? image_url : (event.image_url || null),
+        participation_badge_id: participation_badge_id !== undefined ? participation_badge_id : (event.participation_badge_id || null),
+        participation_stamp_id: participation_stamp_id !== undefined ? participation_stamp_id : (event.participation_stamp_id || null),
+        category: category || event.category || 'other',
+        price: price !== undefined ? price : (event.price || null),
+        external_link: external_link !== undefined ? external_link : (event.external_link || null),
+        price_starting_from: price_starting_from !== undefined ? (price_starting_from ? 1 : 0) : (event.price_starting_from || 0),
+        updated_at: admin.firestore.FieldValue.serverTimestamp()
+      };
+
+      await collections.events.doc(id).update(updateData);
+
+      // Dual-write to SQLite
+      try {
+        db.prepare(`
+          UPDATE events 
+          SET title = ?, description = ?, date = ?, time = ?, location = ?, image_url = ?, participation_badge_id = ?, category = ?, participation_stamp_id = ?, price = ?, external_link = ?, price_starting_from = ?
+          WHERE id = ?
+        `).run(
+          updateData.title, updateData.description, updateData.date, updateData.time, 
+          updateData.location, updateData.image_url, updateData.participation_badge_id || null, 
+          updateData.category || 'other', updateData.participation_stamp_id || null, updateData.price || null, updateData.external_link || null, updateData.price_starting_from, id
+        );
+      } catch (sqError) {
+        console.error("SQLite update failed for event:", sqError);
+      }
+
       res.json({ success: true });
     } catch (error: any) {
+      console.error("Error updating event in Firestore:", error);
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.get("/api/events/:id/attendees", authenticateToken, (req: any, res) => {
+  app.get("/api/events/:id/attendees", authenticateToken, async (req: any, res) => {
     const { id } = req.params;
     try {
-      const event = db.prepare("SELECT user_id FROM events WHERE id = ?").get(id) as any;
-      if (!event) return res.status(404).json({ error: "Event not found" });
+      const eventDoc = await collections.events.doc(id).get();
+      if (!eventDoc.exists) return res.status(404).json({ error: "Event not found" });
+      const event = eventDoc.data() as any;
       
-      if (event.user_id !== req.user.id && req.user.role !== 'admin' && req.user.role !== 'moderator') {
+      if (event.user_id.toString() !== req.user.id.toString() && req.user.role !== 'admin' && req.user.role !== 'moderator') {
         return res.status(403).json({ error: "Forbidden: Only event host can view attendees" });
       }
 
-      const attendees = db.prepare(`
-        SELECT u.id, u.username, u.profile_picture_url, er.checked_in
-        FROM event_rsvps er
-        JOIN users u ON er.user_id = u.id
-        WHERE er.event_id = ?
-      `).all(id);
+      const rsvpsSnapshot = await collections.event_rsvps.where("event_id", "==", id).get();
+      const attendees = await Promise.all(rsvpsSnapshot.docs.map(async (doc) => {
+        const data = doc.data() as any;
+        const userSnapshot = await collections.users.doc(data.user_id.toString()).get();
+        const userData = userSnapshot.exists ? userSnapshot.data() as any : {};
+        return {
+          id: data.user_id,
+          username: userData.username || 'Unknown',
+          profile_picture_url: userData.profile_picture_url || null,
+          checked_in: data.checked_in
+        };
+      }));
+
       res.json(attendees);
     } catch (err) {
-      console.error(err);
+      console.error("Error fetching attendees from Firestore:", err);
       res.status(500).json({ error: "Failed to fetch attendees" });
     }
   });
 
-  app.post("/api/events/:id/checkin", authenticateToken, (req: any, res) => {
+  app.post("/api/events/:id/checkin", authenticateToken, async (req: any, res) => {
     const { id } = req.params;
     const { userId, checkedIn } = req.body;
+
     try {
-      const event = db.prepare("SELECT user_id FROM events WHERE id = ?").get(id) as any;
-      if (!event) return res.status(404).json({ error: "Event not found" });
+      const eventDoc = await collections.events.doc(id).get();
+      if (!eventDoc.exists) return res.status(404).json({ error: "Event not found" });
+      const event = eventDoc.data() as any;
       
-      if (event.user_id !== req.user.id && req.user.role !== 'admin' && req.user.role !== 'moderator') {
+      if (event.user_id.toString() !== req.user.id.toString() && req.user.role !== 'admin' && req.user.role !== 'moderator') {
         return res.status(403).json({ error: "Forbidden: Only event host can check in attendees" });
       }
 
-      db.prepare(`
-        UPDATE event_rsvps 
-        SET checked_in = ? 
-        WHERE event_id = ? AND user_id = ?
-      `).run(checkedIn ? 1 : 0, id, userId);
+      await collections.event_rsvps.doc(`${id}_${userId}`).set({ checked_in: checkedIn ? 1 : 0 }, { merge: true });
+
+      // Dual-write to SQLite
+      try {
+        db.prepare(`
+          UPDATE event_rsvps 
+          SET checked_in = ? 
+          WHERE event_id = ? AND user_id = ?
+        `).run(checkedIn ? 1 : 0, id, userId);
+      } catch (sqe) {}
 
       // Award participation stamp if configured
       if (checkedIn) {
-        const eventData = db.prepare("SELECT participation_stamp_id, participation_badge_id FROM events WHERE id = ?").get(id) as any;
-        
-        // Award stamp
-        if (eventData && eventData.participation_stamp_id) {
-          // Check if user already has this stamp
-          const existingStamp = db.prepare("SELECT 1 FROM user_passport_stamps WHERE user_id = ? AND stamp_id = ?").get(userId, eventData.participation_stamp_id);
-          if (!existingStamp) {
-            db.prepare("INSERT INTO user_passport_stamps (user_id, stamp_id, ambassador_id, creator_type, creator_id) VALUES (?, ?, ?, ?, ?)")
-              .run(userId, eventData.participation_stamp_id, 0, 'event_host', req.user.id);
+        if (event.participation_stamp_id) {
+          const stampRef = collections.user_passport_stamps.doc(`${userId}_${event.participation_stamp_id}`);
+          const stampDoc = await stampRef.get();
+          if (!stampDoc.exists) {
+            await stampRef.set({
+              user_id: userId,
+              stamp_id: event.participation_stamp_id,
+              ambassador_id: 0,
+              creator_type: 'event_host',
+              creator_id: req.user.id,
+              created_at: admin.firestore.FieldValue.serverTimestamp()
+            });
             
-            // Create notification for the user
-            const stamp = db.prepare("SELECT name FROM passport_stamps WHERE id = ?").get(eventData.participation_stamp_id) as any;
-            if (stamp) {
-              db.prepare("INSERT INTO notifications (user_id, type, content) VALUES (?, ?, ?)")
-                .run(userId, 'stamp_awarded', `You've earned the "${stamp.name}" stamp for participating in an event!`);
+            const stampDocInfo = await collections.passport_stamps.doc(event.participation_stamp_id.toString()).get();
+            if (stampDocInfo.exists) {
+              const stampName = (stampDocInfo.data() as any).name;
+              await collections.notifications.add({
+                user_id: userId,
+                type: 'stamp_awarded',
+                content: `You've earned the "${stampName}" stamp for participating in an event!`,
+                created_at: admin.firestore.FieldValue.serverTimestamp()
+              });
             }
+
+            // Dual-write to SQLite
+            try {
+              db.prepare("INSERT OR IGNORE INTO user_passport_stamps (user_id, stamp_id, ambassador_id, creator_type, creator_id) VALUES (?, ?, ?, ?, ?)")
+                .run(userId, event.participation_stamp_id, 0, 'event_host', req.user.id);
+              
+              const stamp = db.prepare("SELECT name FROM passport_stamps WHERE id = ?").get(event.participation_stamp_id) as any;
+              if (stamp) {
+                db.prepare("INSERT INTO notifications (user_id, type, content) VALUES (?, ?, ?)")
+                  .run(userId, 'stamp_awarded', `You've earned the "${stamp.name}" stamp for participating in an event!`);
+              }
+            } catch (sqe) {}
           }
         }
 
         // Award badge
-        if (eventData && eventData.participation_badge_id) {
-          // Check if user already has this badge
-          const existingBadge = db.prepare("SELECT 1 FROM user_badges WHERE user_id = ? AND badge_id = ?").get(userId, eventData.participation_badge_id);
-          if (!existingBadge) {
-            db.prepare("INSERT INTO user_badges (user_id, badge_id, awarded_by) VALUES (?, ?, ?)")
-              .run(userId, eventData.participation_badge_id, req.user.id);
-            
-            // Create notification for the user
-            const badge = db.prepare("SELECT name FROM badges WHERE badge_id = ?").get(eventData.participation_badge_id) as any;
-            if (badge) {
-              db.prepare("INSERT INTO notifications (user_id, type, content) VALUES (?, ?, ?)")
-                .run(userId, 'badge_awarded', `You've earned the "${badge.name}" badge for participating in an event!`);
+        if (event.participation_badge_id) {
+          const badgeRef = collections.user_badges.doc(`${userId}_${event.participation_badge_id}`);
+          const badgeDoc = await badgeRef.get();
+          if (!badgeDoc.exists) {
+            await badgeRef.set({
+              user_id: userId,
+              badge_id: event.participation_badge_id,
+              awarded_by: req.user.id,
+              created_at: admin.firestore.FieldValue.serverTimestamp()
+            });
+
+            const badgeDocInfo = await collections.badges.doc(event.participation_badge_id.toString()).get();
+            if (badgeDocInfo.exists) {
+              const badgeName = (badgeDocInfo.data() as any).name;
+              await collections.notifications.add({
+                user_id: userId,
+                type: 'badge_awarded',
+                content: `You've earned the "${badgeName}" badge for participating in an event!`,
+                created_at: admin.firestore.FieldValue.serverTimestamp()
+              });
             }
+
+            // Dual-write to SQLite
+            try {
+              db.prepare("INSERT OR IGNORE INTO user_badges (user_id, badge_id, awarded_by) VALUES (?, ?, ?)")
+                .run(userId, event.participation_badge_id, req.user.id);
+              
+              const badge = db.prepare("SELECT name FROM badges WHERE badge_id = ?").get(event.participation_badge_id) as any;
+              if (badge) {
+                db.prepare("INSERT INTO notifications (user_id, type, content) VALUES (?, ?, ?)")
+                  .run(userId, 'badge_awarded', `You've earned the "${badge.name}" badge for participating in an event!`);
+              }
+            } catch (sqe) {}
           }
         }
       }
 
       res.json({ success: true });
     } catch (err) {
-      console.error(err);
+      console.error("Check-in error in Firestore:", err);
       res.status(500).json({ error: "Failed to update check-in status" });
     }
   });
 
-  app.post("/api/events/:id/rsvp", authenticateToken, (req: any, res) => {
+  app.post("/api/events/:id/rsvp", authenticateToken, async (req: any, res) => {
     const { id } = req.params;
     const { username } = req.body;
-    const user = db.prepare("SELECT id FROM users WHERE username = ?").get(username) as any;
     
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
-    
-    if (user.id !== req.user.id && req.user.role !== 'admin' && req.user.role !== 'moderator') {
-      return res.status(403).json({ error: "Forbidden: You can only RSVP for yourself" });
-    }
-
     try {
-      // Check if already RSVP'd
-      const existing = db.prepare("SELECT * FROM event_rsvps WHERE event_id = ? AND user_id = ?").get(id, user.id);
-      if (existing) {
-        db.prepare("DELETE FROM event_rsvps WHERE event_id = ? AND user_id = ?").run(id, user.id);
+      const userSnapshot = await collections.users.where("username", "==", username).limit(1).get();
+      if (userSnapshot.empty) return res.status(404).json({ error: "User not found" });
+      const user = { id: userSnapshot.docs[0].id, ...userSnapshot.docs[0].data() as any };
+      
+      if (user.id.toString() !== req.user.id.toString() && req.user.role !== 'admin' && req.user.role !== 'moderator') {
+        return res.status(403).json({ error: "Forbidden: You can only RSVP for yourself" });
+      }
+
+      // Check if already RSVP'd in Firestore
+      const rsvpRef = collections.event_rsvps.doc(`${id}_${user.id}`);
+      const rsvpDoc = await rsvpRef.get();
+
+      if (rsvpDoc.exists) {
+        await rsvpRef.delete();
+        // Dual-write delete to SQLite
+        try {
+          db.prepare("DELETE FROM event_rsvps WHERE event_id = ? AND user_id = ?").run(id, user.id);
+        } catch (sqe) {}
         return res.json({ success: true, action: 'unrsvp' });
       } else {
-        db.prepare("INSERT INTO event_rsvps (event_id, user_id) VALUES (?, ?)").run(id, user.id);
+        await rsvpRef.set({
+          event_id: id,
+          user_id: user.id,
+          checked_in: 0,
+          created_at: admin.firestore.FieldValue.serverTimestamp()
+        });
+        // Dual-write to SQLite
+        try {
+          db.prepare("INSERT INTO event_rsvps (event_id, user_id, checked_in) VALUES (?, ?, 0)").run(id, user.id);
+        } catch (sqe) {}
         return res.json({ success: true, action: 'rsvp' });
       }
     } catch (err) {
-      console.error(err);
+      console.error("RSVP error in Firestore:", err);
       res.status(500).json({ error: "Failed to process RSVP" });
     }
   });
@@ -3621,7 +5624,7 @@ async function startServer() {
     }
   });
 
-  app.get("/api/admin/photo-contest-settings", authenticateToken, (req, res) => {
+  app.get("/api/admin/photo-contest-settings", (req, res) => {
     try {
       const enabled = db.prepare("SELECT value FROM settings WHERE key = 'photo_contest_enabled'").get() as any;
       const allowedTypes = db.prepare("SELECT value FROM settings WHERE key = 'photo_contest_allowed_types'").get() as any;
@@ -3860,142 +5863,298 @@ async function startServer() {
     }
   });
 
-  app.post("/api/motorcycles", authenticateToken, upload.single('photo'), (req: any, res) => {
+  app.post("/api/motorcycles", authenticateToken, upload.single('photo'), async (req: any, res) => {
     const { username, make, model, year, last_service, last_km, last_shop, image_url } = req.body;
-    const photo_url = req.file ? `/uploads/${req.file.filename}` : (image_url || null);
+    let photo_url = image_url || null;
+    
+    if (req.file) {
+      try {
+        photo_url = await uploadToFirebase(req.file, "motorcycles");
+      } catch (err) {
+        console.error("Motorcycle photo upload error:", err);
+      }
+    }
     
     if (username !== req.user.username && req.user.role !== 'admin' && req.user.role !== 'moderator') {
       return res.status(403).json({ error: "Forbidden: You can only add motorcycles for yourself" });
     }
 
-    const user = db.prepare("SELECT id FROM users WHERE username = ?").get(username) as any;
-    
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
     try {
-      const motoResult = insertMoto.run(user.id, make, model, parseInt(year), photo_url);
-      const motoId = motoResult.lastInsertRowid;
+      const userSnapshot = await collections.users.where("username", "==", username).limit(1).get();
+      if (userSnapshot.empty) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      const user = { id: userSnapshot.docs[0].id, ...userSnapshot.docs[0].data() as any };
+
+      const motoId = await getNextId("motorcycles");
+      const motoData = {
+        id: motoId,
+        rider_id: user.id,
+        make,
+        model,
+        year: parseInt(year),
+        image_url: photo_url,
+        created_at: admin.firestore.FieldValue.serverTimestamp()
+      };
+
+      await collections.motorcycles.doc(motoId.toString()).set(motoData);
 
       if (last_service || last_km || last_shop) {
-        insertMaintenance.run(motoId, last_service || "Initial Entry", parseInt(last_km) || null, last_shop);
+        const logId = await getNextId("maintenance_logs");
+        const logData = {
+          id: logId,
+          motorcycle_id: motoId,
+          service: last_service || "Initial Entry",
+          km: parseInt(last_km) || null,
+          shop: last_shop || null,
+          created_at: admin.firestore.FieldValue.serverTimestamp()
+        };
+        await collections.maintenance_logs.doc(logId.toString()).set(logData);
+
+        // SQLite maintenance
+        try {
+          db.prepare("INSERT INTO maintenance_logs (motorcycle_id, service, km, shop) VALUES (?, ?, ?, ?)").run(motoId, logData.service, logData.km, logData.shop);
+        } catch (sqe) {}
       }
+
+      // Dual-write moto to SQLite
+      try {
+        db.prepare("INSERT OR REPLACE INTO motorcycles (id, rider_id, make, model, year, image_url) VALUES (?, ?, ?, ?, ?, ?)").run(motoId, user.id, make, model, parseInt(year), photo_url);
+      } catch (sqe) {}
       
       res.json({ success: true, id: motoId });
     } catch (err) {
-      console.error(err);
+      console.error("Error adding motorcycle to Firestore:", err);
       res.status(500).json({ error: "Failed to add motorcycle" });
     }
   });
 
-  app.put("/api/motorcycles/:id", authenticateToken, upload.single('photo'), (req: any, res) => {
+  app.put("/api/motorcycles/:id", authenticateToken, upload.single('photo'), async (req: any, res) => {
     const { id } = req.params;
     const { make, model, year, image_url } = req.body;
-    const photo_url = req.file ? `/uploads/${req.file.filename}` : (image_url || null);
+    let photo_url = image_url || null;
+
+    if (req.file) {
+      try {
+        photo_url = await uploadToFirebase(req.file, "motorcycles");
+      } catch (err) {
+        console.error("Motorcycle photo update error:", err);
+      }
+    }
 
     try {
-      const moto = db.prepare("SELECT rider_id FROM motorcycles WHERE id = ?").get(id) as any;
-      
-      if (!moto) {
+      const motoDoc = await collections.motorcycles.doc(id).get();
+      if (!motoDoc.exists) {
         return res.status(404).json({ error: "Motorcycle not found" });
       }
+      const moto = motoDoc.data() as any;
 
-      if (moto.rider_id !== req.user.id && req.user.role !== 'admin' && req.user.role !== 'moderator') {
+      if (moto.rider_id.toString() !== req.user.id.toString() && req.user.role !== 'admin' && req.user.role !== 'moderator') {
         return res.status(403).json({ error: "Forbidden: You can only edit your own motorcycles" });
       }
 
-      db.prepare("UPDATE motorcycles SET make = ?, model = ?, year = ?, image_url = ? WHERE id = ?").run(make, model, parseInt(year), photo_url, id);
+      const updateData = {
+        make: make || moto.make,
+        model: model || moto.model,
+        year: year ? parseInt(year) : moto.year,
+        image_url: photo_url !== undefined ? photo_url : moto.image_url,
+        updated_at: admin.firestore.FieldValue.serverTimestamp()
+      };
+
+      await collections.motorcycles.doc(id).update(updateData);
+
+      // Dual-write to SQLite
+      try {
+        db.prepare("UPDATE motorcycles SET make = ?, model = ?, year = ?, image_url = ? WHERE id = ?").run(updateData.make, updateData.model, updateData.year, updateData.image_url, id);
+      } catch (sqe) {}
+
       res.json({ success: true });
     } catch (err) {
-      console.error(err);
+      console.error("Error updating motorcycle in Firestore:", err);
       res.status(500).json({ error: "Failed to update motorcycle" });
     }
   });
 
-  app.delete("/api/motorcycles/:id", authenticateToken, (req: any, res) => {
+  app.delete("/api/motorcycles/:id", authenticateToken, async (req: any, res) => {
     const { id } = req.params;
 
     try {
-      const moto = db.prepare("SELECT rider_id FROM motorcycles WHERE id = ?").get(id) as any;
-      
-      if (!moto) {
+      const motoDoc = await collections.motorcycles.doc(id).get();
+      if (!motoDoc.exists) {
         return res.status(404).json({ error: "Motorcycle not found" });
       }
+      const moto = motoDoc.data() as any;
 
-      if (moto.rider_id !== req.user.id && req.user.role !== 'admin' && req.user.role !== 'moderator') {
+      if (moto.rider_id.toString() !== req.user.id.toString() && req.user.role !== 'admin' && req.user.role !== 'moderator') {
         return res.status(403).json({ error: "Forbidden: You can only delete your own motorcycles" });
       }
 
-      // Delete associated maintenance logs first
-      db.prepare("DELETE FROM maintenance_logs WHERE motorcycle_id = ?").run(id);
-      db.prepare("DELETE FROM motorcycles WHERE id = ?").run(id);
+      // Delete associated maintenance logs
+      const logsSnapshot = await collections.maintenance_logs.where("motorcycle_id", "==", parseInt(id)).get();
+      const batch = firestore.batch();
+      logsSnapshot.docs.forEach(doc => batch.delete(doc.ref));
+      batch.delete(collections.motorcycles.doc(id));
+      await batch.commit();
+
+      // Dual-delete from SQLite
+      try {
+        db.prepare("DELETE FROM maintenance_logs WHERE motorcycle_id = ?").run(id);
+        db.prepare("DELETE FROM motorcycles WHERE id = ?").run(id);
+      } catch (sqe) {}
+
       res.json({ success: true });
     } catch (err) {
-      console.error(err);
+      console.error("Error deleting motorcycle from Firestore:", err);
       res.status(500).json({ error: "Failed to delete motorcycle" });
     }
   });
 
-  app.post("/api/motorcycles/:id/maintenance", authenticateToken, (req: any, res) => {
+  app.post("/api/motorcycles/:id/maintenance", authenticateToken, async (req: any, res) => {
     const { id } = req.params;
     const { service, km, shop } = req.body;
 
     try {
-      const moto = db.prepare("SELECT rider_id FROM motorcycles WHERE id = ?").get(id) as any;
-      if (!moto) {
+      const motoDoc = await collections.motorcycles.doc(id).get();
+      if (!motoDoc.exists) {
         return res.status(404).json({ error: "Motorcycle not found" });
       }
-      if (moto.rider_id !== req.user.id && req.user.role !== 'admin' && req.user.role !== 'moderator') {
+      const moto = motoDoc.data() as any;
+
+      if (moto.rider_id.toString() !== req.user.id.toString() && req.user.role !== 'admin' && req.user.role !== 'moderator') {
         return res.status(403).json({ error: "Forbidden: You can only add maintenance logs for your own motorcycles" });
       }
 
-      insertMaintenance.run(parseInt(id), service, parseInt(km) || null, shop);
+      const logId = await getNextId("maintenance_logs");
+      await collections.maintenance_logs.doc(logId.toString()).set({
+        id: logId,
+        motorcycle_id: parseInt(id),
+        service,
+        km: parseInt(km) || null,
+        shop: shop || null,
+        created_at: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      // Dual-write to SQLite
+      try {
+        db.prepare("INSERT INTO maintenance_logs (motorcycle_id, service, km, shop) VALUES (?, ?, ?, ?)").run(parseInt(id), service, parseInt(km) || null, shop);
+      } catch (sqe) {}
+
       res.json({ success: true });
     } catch (err) {
-      console.error(err);
+      console.error("Error adding maintenance log to Firestore:", err);
       res.status(500).json({ error: "Failed to add maintenance log" });
     }
   });
 
-  app.post("/api/posts", authenticateToken, upload.single('image'), (req, res) => {
+  app.post("/api/posts", authenticateToken, upload.single('image'), async (req: any, res) => {
     const { username, content, tagged_motorcycle_id, privacy_level, shared_event_id } = req.body;
-    const image_url = (req as any).file ? `/uploads/${(req as any).file.filename}` : req.body.image_url;
+    let image_url = req.body.image_url;
+    
+    if (req.file) {
+      try {
+        image_url = await uploadToFirebase(req.file, "posts");
+      } catch (err) {
+        console.error("Post image upload error:", err);
+        return res.status(500).json({ error: "Failed to upload image to Firebase Storage" });
+      }
+    }
     
     // Ensure the authenticated user matches the username they are trying to post as
     if ((req as any).user.username !== username && (req as any).user.role !== 'admin') {
       return res.status(403).json({ error: "Forbidden: You can only post as yourself" });
     }
 
-    const user = db.prepare("SELECT id FROM users WHERE username = ?").get(username) as any;
-    
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    if (tagged_motorcycle_id) {
-      const moto = db.prepare("SELECT rider_id FROM motorcycles WHERE id = ?").get(tagged_motorcycle_id) as any;
-      if (!moto || (moto.rider_id !== user.id && (req as any).user.role !== 'admin')) {
-        return res.status(403).json({ error: "Forbidden: You can only tag your own motorcycles" });
-      }
-    }
-
     try {
+      // Refresh user to get full details for denormalization
+      let user: any = null;
+      const firestoreUser = await collections.users.where("username", "==", username).limit(1).get();
+      if (!firestoreUser.empty) {
+        user = { id: firestoreUser.docs[0].id, ...firestoreUser.docs[0].data() };
+      } else {
+        user = db.prepare("SELECT * FROM users WHERE username = ?").get(username) as any;
+      }
+
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const postId = await getNextId("posts");
+      const postDoc = {
+        id: postId,
+        user_id: user.id,
+        username: user.username,
+        user_type: user.type,
+        profile_picture_url: user.profile_picture_url,
+        content: content || "",
+        image_url: image_url || null,
+        tagged_motorcycle_id: tagged_motorcycle_id || null,
+        privacy_level: privacy_level || 'public',
+        shared_event_id: shared_event_id ? Number(shared_event_id) : null,
+        respect_count: 0,
+        comment_count: 0,
+        created_at: new Date().toISOString()
+      };
+
+      await collections.posts.doc(postId.toString()).set(postDoc);
+
+      // Dual write to SQLite
       insertPost.run(
         user.id, 
-        content || "", 
-        image_url || null, 
-        tagged_motorcycle_id || null, 
-        privacy_level || 'public', 
-        shared_event_id ? Number(shared_event_id) : null
+        postDoc.content, 
+        postDoc.image_url, 
+        postDoc.tagged_motorcycle_id, 
+        postDoc.privacy_level, 
+        postDoc.shared_event_id
       );
-      res.json({ success: true });
+
+      res.json({ success: true, id: postId });
     } catch (error: any) {
+      console.error("Post creation error:", error);
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.put("/api/profile/:username", authenticateToken, (req: any, res) => {
+  app.delete("/api/posts/:id", authenticateToken, async (req: any, res) => {
+    const { id } = req.params;
+    const user = req.user;
+
+    try {
+      // Find the post
+      const postDoc = await collections.posts.doc(id).get();
+      let isOwner = false;
+
+      if (postDoc.exists) {
+        isOwner = postDoc.data()?.user_id?.toString() === user.id.toString();
+      } else {
+        // Fallback to SQLite
+        const sqlitePost = db.prepare("SELECT user_id FROM posts WHERE id = ?").get(id) as any;
+        if (!sqlitePost) {
+          return res.status(404).json({ error: "Post not found" });
+        }
+        isOwner = sqlitePost.user_id?.toString() === user.id.toString();
+      }
+
+      if (!isOwner && user.role !== 'admin') {
+        return res.status(403).json({ error: "Forbidden: You can only delete your own posts" });
+      }
+
+      // Delete from Firestore
+      await collections.posts.doc(id).delete();
+      
+      // Delete from SQLite
+      db.prepare("DELETE FROM post_comments WHERE post_id = ?").run(id);
+      db.prepare("DELETE FROM post_likes WHERE post_id = ?").run(id);
+      db.prepare("DELETE FROM user_pinned_posts WHERE post_id = ?").run(id);
+      db.prepare("DELETE FROM posts WHERE id = ?").run(id);
+
+      res.json({ success: true, message: "Post deleted successfully" });
+    } catch (error: any) {
+      console.error("Post deletion error:", error);
+      res.status(500).json({ error: "Failed to delete post" });
+    }
+  });
+
+  app.put("/api/profile/:username", authenticateToken, async (req: any, res) => {
     const { username } = req.params;
     const { profile_picture_url, cover_photo_url, new_username, ...profileData } = req.body;
 
@@ -4006,79 +6165,179 @@ async function startServer() {
       return res.status(403).json({ error: "Forbidden: You can only update your own profile" });
     }
 
-    const user = db.prepare("SELECT * FROM users WHERE username = ?").get(username) as any;
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    if (new_username && new_username !== username) {
-      const existingUser = db.prepare("SELECT id FROM users WHERE username = ?").get(new_username);
-      if (existingUser) {
-        return res.status(400).json({ error: "Username already taken" });
-      }
-    }
-
     try {
-      db.transaction(() => {
-        if (profile_picture_url) {
-          db.prepare("UPDATE users SET profile_picture_url = ? WHERE id = ?").run(profile_picture_url, user.id);
-        }
+      // 1. Get user data from SQLite first
+      let user = db.prepare("SELECT * FROM users WHERE LOWER(username) = LOWER(?)").get(username) as any;
+      if (!user) {
+        // Try Firestore fallback for lookup
+        try {
+          const userSnapshot = await collections.users.where("username", "==", username).limit(1).get();
+          if (!userSnapshot.empty) {
+            user = { id: userSnapshot.docs[0].id, ...userSnapshot.docs[0].data() as any };
+          }
+        } catch (e) {}
+      }
 
-        if (cover_photo_url) {
-          db.prepare("UPDATE users SET cover_photo_url = ? WHERE id = ?").run(cover_photo_url, user.id);
-        }
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
 
-        if (new_username && new_username !== username) {
-          db.prepare("UPDATE users SET username = ? WHERE id = ?").run(new_username, user.id);
+      if (new_username && new_username !== username) {
+        const usernameExists = db.prepare("SELECT id FROM users WHERE username = ? AND id != ?").get(new_username, user.id);
+        if (usernameExists) {
+          return res.status(400).json({ error: "Username already taken" });
         }
+      }
+
+      // 2. Update SQLite first
+      try {
+        db.transaction(() => {
+          if (profile_picture_url) {
+            db.prepare("UPDATE users SET profile_picture_url = ? WHERE id = ?").run(profile_picture_url, user.id);
+          }
+          if (cover_photo_url) {
+            db.prepare("UPDATE users SET cover_photo_url = ? WHERE id = ?").run(cover_photo_url, user.id);
+          }
+          if (new_username && new_username !== username) {
+            db.prepare("UPDATE users SET username = ? WHERE id = ?").run(new_username, user.id);
+          }
+
+          if (user.type === "rider") {
+            db.prepare("UPDATE riders SET name = ?, age = ?, city = ?, blood_type = ? WHERE user_id = ?")
+              .run(profileData.name || null, profileData.age || null, profileData.city || null, profileData.blood_type || null, user.id);
+            db.prepare("UPDATE users SET fullName = ?, location = ?, bio = ?, motorcycle = ?, interests = ? WHERE id = ?")
+              .run(profileData.name || null, profileData.city || null, profileData.bio || null, profileData.motorcycle || null, interestsStr || null, user.id);
+          } else {
+            db.prepare("UPDATE ecosystems SET company_name = ?, full_address = ?, service_category = ?, details = ?, phone = ?, website = ?, chapter_label = ? WHERE user_id = ?")
+              .run(
+                profileData.company_name || null, 
+                profileData.full_address || null, 
+                profileData.service_category || null, 
+                profileData.details || null, 
+                profileData.phone || null, 
+                profileData.website || null, 
+                profileData.chapter_label || 'Chapter',
+                user.id
+              );
+            db.prepare("UPDATE users SET businessName = ?, location = ?, businessType = ?, bio = ?, services = ? WHERE id = ?")
+              .run(
+                profileData.company_name || null, 
+                profileData.full_address || null, 
+                profileData.service_category || null, 
+                profileData.details || null, 
+                servicesStr || null, 
+                user.id
+              );
+          }
+        })();
+      } catch (sqError: any) {
+        console.error("SQLite update failed for profile:", sqError.message);
+        return res.status(500).json({ error: "Failed to update profile locally" });
+      }
+
+      // 3. Sync to Firestore in background (fail silently but log if not permission error)
+      try {
+        const userUpdate: any = {
+          updated_at: admin.firestore.FieldValue.serverTimestamp()
+        };
+        if (profile_picture_url) userUpdate.profile_picture_url = profile_picture_url;
+        if (cover_photo_url) userUpdate.cover_photo_url = cover_photo_url;
+        if (new_username && new_username !== username) userUpdate.username = new_username;
 
         if (user.type === "rider") {
-          db.prepare("UPDATE riders SET name = ?, age = ?, city = ? WHERE user_id = ?")
-            .run(profileData.name || null, profileData.age || null, profileData.city || null, user.id);
-          db.prepare("UPDATE users SET fullName = ?, location = ?, bio = ?, motorcycle = ?, interests = ? WHERE id = ?")
-            .run(profileData.name || null, profileData.city || null, profileData.bio || null, profileData.motorcycle || null, interestsStr || null, user.id);
+          userUpdate.fullName = profileData.name || user.fullName;
+          userUpdate.location = profileData.city || user.location;
+          userUpdate.bio = profileData.bio || user.bio;
+          userUpdate.motorcycle = profileData.motorcycle || user.motorcycle;
+          userUpdate.interests = interestsStr || user.interests;
+
+          await collections.riders.doc(user.id.toString()).set({
+            name: profileData.name || null,
+            age: profileData.age || null,
+            city: profileData.city || null,
+            blood_type: profileData.blood_type || null,
+            updated_at: admin.firestore.FieldValue.serverTimestamp()
+          }, { merge: true });
         } else {
-          db.prepare("UPDATE ecosystems SET company_name = ?, full_address = ?, service_category = ?, details = ?, phone = ?, website = ?, chapter_label = ? WHERE user_id = ?")
-            .run(
-              profileData.company_name || null, 
-              profileData.full_address || null, 
-              profileData.service_category || null, 
-              profileData.details || null, 
-              profileData.phone || null, 
-              profileData.website || null, 
-              profileData.chapter_label || 'Chapter',
-              user.id
-            );
-          db.prepare("UPDATE users SET businessName = ?, location = ?, businessType = ?, bio = ?, services = ? WHERE id = ?")
-            .run(
-              profileData.company_name || null, 
-              profileData.full_address || null, 
-              profileData.service_category || null, 
-              profileData.details || null, 
-              servicesStr || null, 
-              user.id
-            );
+          userUpdate.businessName = profileData.company_name || user.businessName;
+          userUpdate.location = profileData.full_address || user.location;
+          userUpdate.businessType = profileData.service_category || user.businessType;
+          userUpdate.bio = profileData.details || user.bio;
+          userUpdate.services = servicesStr || user.services;
+
+          await collections.ecosystems.doc(user.id.toString()).set({
+            company_name: profileData.company_name || null,
+            full_address: profileData.full_address || null,
+            service_category: profileData.service_category || null,
+            details: profileData.details || null,
+            phone: profileData.phone || null,
+            website: profileData.website || null,
+            chapter_label: profileData.chapter_label || 'Chapter',
+            updated_at: admin.firestore.FieldValue.serverTimestamp()
+          }, { merge: true });
         }
-      })();
-      res.json({ success: true, username: new_username || username });
+
+        await collections.users.doc(user.id.toString()).set(userUpdate, { merge: true });
+      } catch (firestoreError: any) {
+        if (!firestoreError.message?.includes('PERMISSION_DENIED')) {
+          console.warn("Firestore profile sync failed:", firestoreError.message);
+        }
+      }
+
+      res.json({ 
+        success: true, 
+        username: new_username || username,
+        profile_picture_url: profile_picture_url || user.profile_picture_url,
+        cover_photo_url: cover_photo_url || user.cover_photo_url
+      });
     } catch (error: any) {
-      console.error("Error updating profile:", error);
+      console.error("Error updating profile:", error.message);
       res.status(500).json({ error: error.message });
     }
   });
 
   // MotoClubs Endpoints
-  app.get("/api/clubs", (req, res) => {
+  app.get("/api/clubs", async (req, res) => {
     try {
-      const clubs = db.prepare(`
+      // 1. Fetch from Firestore
+      const snapshot = await collections.ecosystems.where("service_category", "==", "club").get();
+      let clubs: any[] = [];
+      if (!snapshot.empty) {
+         clubs = await Promise.all(snapshot.docs.map(async doc => {
+           const data = doc.data();
+           const userDoc = await collections.users.doc(doc.id).get();
+           const userData = userDoc.exists ? userDoc.data() : {};
+           const membersSnap = await collections.club_memberships.where("club_id", "==", parseInt(doc.id)).where("status", "==", "approved").get();
+           return {
+             club_id: parseInt(doc.id),
+             username: (userData as any).username || '',
+             logo_url: (userData as any).profile_picture_url || '',
+             name: data.company_name,
+             description: data.details,
+             founded_date: (userData as any).created_at,
+             plan: (userData as any).plan || 'freemium',
+             member_count: membersSnap.size
+           };
+         }));
+      }
+
+      // 2. Fetch from SQLite
+      const sqliteClubs = db.prepare(`
         SELECT u.id as club_id, u.username, u.profile_picture_url as logo_url, e.company_name as name, e.details as description, u.created_at as founded_date, u.plan,
                (SELECT COUNT(*) FROM club_memberships WHERE club_id = u.id AND status = 'approved') as member_count
         FROM users u
         JOIN ecosystems e ON u.id = e.user_id
         WHERE u.type = 'ecosystem' AND e.service_category = 'club'
-      `).all();
-      res.json(clubs);
+      `).all() as any[];
+
+      // 3. Merge
+      const allClubsMap = new Map();
+      sqliteClubs.forEach((c: any) => allClubsMap.set(c.club_id.toString(), c));
+      clubs.forEach((c: any) => allClubsMap.set(c.club_id.toString(), c)); // Firestore overwrites SQLite
+
+      res.json(Array.from(allClubsMap.values()));
     } catch (error: any) {
+      console.error("Error fetching clubs:", error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -4096,10 +6355,10 @@ async function startServer() {
     }
   });
 
-  app.get("/api/clubs/my", authenticateToken, (req: any, res) => {
+  app.get("/api/clubs/my", authenticateToken, async (req: any, res) => {
     const userId = req.user.id;
     try {
-      // Clubs the user owns (either as the club account itself or as the owner/ambassador)
+      // 1. Try SQLite first
       const ownedClubs = db.prepare(`
         SELECT u.id as club_id, u.username, u.profile_picture_url as logo_url, e.company_name as name, e.details as description, u.created_at as founded_date, u.plan, e.chapter_label
         FROM users u
@@ -4107,7 +6366,6 @@ async function startServer() {
         WHERE (u.id = ? OR e.owner_id = ?) AND e.service_category = 'club'
       `).all(userId, userId);
 
-      // Clubs the user is a member of
       const memberships = db.prepare(`
         SELECT cm.*, u.username, u.profile_picture_url as logo_url, e.company_name as name, e.details as description, u.plan, e.chapter_label
         FROM club_memberships cm
@@ -4116,158 +6374,419 @@ async function startServer() {
         WHERE cm.user_id = ? AND cm.status != 'rejected'
       `).all(userId);
 
-      res.json({ ownedClubs, memberships });
+      if (ownedClubs.length > 0 || memberships.length > 0) {
+        return res.json({ ownedClubs, memberships });
+      }
+
+      // 2. Fallback to Firestore
+      try {
+        const ownedSnapshot = await collections.ecosystems
+          .where("service_category", "==", "club")
+          .get();
+        
+        const ownedClubsDocs = await Promise.all(ownedSnapshot.docs.filter(doc => {
+          const data = doc.data();
+          return doc.id.toString() === userId.toString() || (data.owner_id && data.owner_id.toString() === userId.toString());
+        }).map(async (doc) => {
+          const userDoc = await collections.users.doc(doc.id).get();
+          const userData = userDoc.exists ? userDoc.data() : {};
+          return {
+            club_id: doc.id,
+            username: (userData as any).username,
+            logo_url: (userData as any).profile_picture_url,
+            name: doc.data().company_name,
+            description: doc.data().details,
+            founded_date: (userData as any).created_at,
+            plan: (userData as any).plan,
+            chapter_label: doc.data().chapter_label
+          };
+        }));
+
+        const membershipSnapshot = await collections.club_memberships
+          .where("user_id", "==", parseInt(userId as string))
+          .get();
+        
+        const membershipsDocs = await Promise.all(membershipSnapshot.docs.filter(d => d.data().status !== 'rejected').map(async (doc) => {
+          const mem = doc.data() as any;
+          const clubUserDoc = await collections.users.doc(mem.club_id.toString()).get();
+          const clubEcoDoc = await collections.ecosystems.doc(mem.club_id.toString()).get();
+          const userData = clubUserDoc.exists ? clubUserDoc.data() : {};
+          const ecoData = clubEcoDoc.exists ? clubEcoDoc.data() : {};
+          return {
+            ...mem,
+            id: doc.id,
+            username: (userData as any).username,
+            logo_url: (userData as any).profile_picture_url,
+            name: (ecoData as any).company_name,
+            description: (ecoData as any).details,
+            plan: (userData as any).plan,
+            chapter_label: (ecoData as any).chapter_label
+          };
+        }));
+
+        res.json({ ownedClubs: ownedClubsDocs, memberships: membershipsDocs });
+      } catch (err: any) {
+        if (!err.message?.includes('PERMISSION_DENIED')) {
+          console.error("Error fetching clubs from Firestore:", err.message);
+        }
+        res.json({ ownedClubs: [], memberships: [] });
+      }
     } catch (error: any) {
+      console.error("Error fetching my clubs:", error.message);
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.get("/api/clubs/:id", (req, res) => {
+  app.get("/api/clubs/:id", async (req, res) => {
     const clubId = req.params.id;
     try {
-      const club = db.prepare(`
+      let club: any = null;
+
+      // 1. Check SQLite
+      club = db.prepare(`
         SELECT u.id as club_id, u.username, u.profile_picture_url as logo_url, e.company_name as name, e.details as description, u.created_at as founded_date, u.plan, e.chapter_label
         FROM users u
         JOIN ecosystems e ON u.id = e.user_id
         WHERE u.id = ? AND e.service_category = 'club'
       `).get(clubId);
 
+      // 2. Fallback to Firestore
+      if (!club) {
+        const clubDoc = await collections.ecosystems.doc(clubId.toString()).get();
+        if (clubDoc.exists && clubDoc.data()?.service_category === 'club') {
+          const userDoc = await collections.users.doc(clubId.toString()).get();
+          const userData = userDoc.exists ? userDoc.data() : {};
+          club = {
+            club_id: parseInt(clubId),
+            username: (userData as any).username || '',
+            logo_url: (userData as any).profile_picture_url || '',
+            name: clubDoc.data()?.company_name,
+            description: clubDoc.data()?.details,
+            founded_date: (userData as any).created_at,
+            plan: (userData as any).plan || 'freemium',
+            chapter_label: clubDoc.data()?.chapter_label || 'Chapter'
+          };
+        }
+      }
+
       if (!club) return res.status(404).json({ error: "Club not found" });
 
-      const chapters = db.prepare("SELECT * FROM club_chapters WHERE club_id = ?").all(clubId);
-      const roles = db.prepare("SELECT * FROM club_roles WHERE club_id = ? ORDER BY hierarchy_order ASC").all(clubId);
-      const members = db.prepare(`
+      // Fetch structured data
+      let chapters = db.prepare("SELECT * FROM club_chapters WHERE club_id = ?").all(clubId) as any[];
+      let roles = db.prepare("SELECT * FROM club_roles WHERE club_id = ? ORDER BY hierarchy_order ASC").all(clubId) as any[];
+      
+      // Sync from Firestore if local is empty (container restart scenario)
+      if (chapters.length === 0) {
+        const chaptersSnap = await collections.club_chapters.where("club_id", "==", parseInt(clubId)).get();
+        if (!chaptersSnap.empty) {
+          chapters = chaptersSnap.docs.map(doc => doc.data());
+          // Populate SQLite cache
+          const insertStmt = db.prepare("INSERT OR IGNORE INTO club_chapters (id, club_id, name, city, country, description) VALUES (?, ?, ?, ?, ?, ?)");
+          chapters.forEach(c => {
+            try { insertStmt.run(c.id, c.club_id, c.name, c.city || '', c.country || '', c.description || ''); } catch (e) {}
+          });
+        }
+      }
+      
+      if (roles.length === 0) {
+        const rolesSnap = await collections.club_roles.where("club_id", "==", parseInt(clubId)).orderBy("hierarchy_order", "asc").get();
+        if (!rolesSnap.empty) {
+          roles = rolesSnap.docs.map(doc => doc.data());
+          // Populate SQLite cache
+          const insertStmt = db.prepare("INSERT OR IGNORE INTO club_roles (id, club_id, name, description, permissions, hierarchy_order) VALUES (?, ?, ?, ?, ?, ?)");
+          roles.forEach(r => {
+            try { insertStmt.run(r.id, r.club_id, r.name, r.description || '', JSON.stringify(typeof r.permissions === 'string' ? JSON.parse(r.permissions) : (r.permissions || [])), r.hierarchy_order || 0); } catch (e) {}
+          });
+        }
+      }
+      
+      // Fetch members from SQLite + Firestore
+      const sqliteMembers = db.prepare(`
         SELECT cm.*, u.username, u.profile_picture_url as avatar_url, r.name as rider_name, u.plan
         FROM club_memberships cm
         JOIN users u ON cm.user_id = u.id
         LEFT JOIN riders r ON u.id = r.user_id
         WHERE cm.club_id = ?
-      `).all(clubId);
+      `).all(clubId) as any[];
 
-      res.json({ club, chapters, roles, members });
+      const fsMembersSnap = await collections.club_memberships.where("club_id", "==", parseInt(clubId)).get();
+      let membersMap = new Map();
+      sqliteMembers.forEach(m => membersMap.set(m.user_id.toString(), m));
+
+      await Promise.all(fsMembersSnap.docs.map(async (doc) => {
+        const data = doc.data();
+        if (!membersMap.has(data.user_id.toString())) {
+          const uDoc = await collections.users.doc(data.user_id.toString()).get();
+          const uData = uDoc.exists ? uDoc.data() : {};
+          const rDoc = await collections.riders.doc(data.user_id.toString()).get();
+          const rData = rDoc.exists ? rDoc.data() : {};
+          membersMap.set(data.user_id.toString(), {
+            id: doc.id,
+            ...data,
+            username: (uData as any).username,
+            avatar_url: (uData as any).profile_picture_url,
+            rider_name: (rData as any).name,
+            plan: (uData as any).plan
+          });
+        }
+      }));
+
+      res.json({ club, chapters, roles, members: Array.from(membersMap.values()) });
     } catch (error: any) {
+      console.error("Error fetching single club:", error);
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.post("/api/clubs/:id/members", authenticateToken, (req: any, res) => {
+  app.post("/api/clubs/:id/members", authenticateToken, async (req: any, res) => {
     const clubId = req.params.id;
     const { user_id, chapter_id, role_id } = req.body;
 
     try {
-      const club = db.prepare("SELECT user_id, owner_id FROM ecosystems WHERE user_id = ?").get(clubId) as any;
-      if (!club || (Number(club.user_id) !== Number(req.user.id) && Number(club.owner_id) !== Number(req.user.id) && req.user.role !== 'admin')) {
+      let club: any = null;
+      let clubOwnerId = null;
+
+      const clubDoc = await collections.ecosystems.doc(clubId.toString()).get();
+      if (clubDoc.exists) {
+        club = clubDoc.data();
+        clubOwnerId = club?.owner_id;
+      } else {
+        const sqliteClub = db.prepare("SELECT * FROM ecosystems WHERE user_id = ? AND service_category = 'club'").get(Number(clubId)) as any;
+        if (!sqliteClub) {
+          console.error("DEBUG: Club not found in POST /api/clubs/:id/members. clubId:", clubId);
+          return res.status(404).json({ error: "Club not found" });
+        }
+        club = sqliteClub;
+        clubOwnerId = sqliteClub.owner_id;
+      }
+      
+      if (clubId.toString() !== req.user.id.toString() && (clubOwnerId && clubOwnerId.toString() !== req.user.id.toString()) && req.user.role !== 'admin') {
         return res.status(403).json({ error: "Forbidden: Only club owners can add members" });
       }
 
-      const existing = db.prepare("SELECT id FROM club_memberships WHERE club_id = ? AND user_id = ?").get(clubId, user_id);
-      if (existing) {
+      const existingSnapshot = await collections.club_memberships
+        .where("club_id", "==", parseInt(clubId))
+        .where("user_id", "==", parseInt(user_id as string))
+        .limit(1)
+        .get();
+
+      if (!existingSnapshot.empty) {
         return res.status(400).json({ error: "User is already a member or has a pending application" });
       }
 
-      db.prepare("INSERT INTO club_memberships (club_id, chapter_id, user_id, role_id, status) VALUES (?, ?, ?, ?, 'approved')")
-        .run(clubId, chapter_id || null, user_id, role_id || null);
+      const membershipId = await getNextId("club_memberships");
+      await collections.club_memberships.doc(membershipId.toString()).set({
+        club_id: parseInt(clubId),
+        chapter_id: chapter_id ? parseInt(chapter_id as string) : null,
+        user_id: parseInt(user_id as string),
+        role_id: role_id ? parseInt(role_id as string) : null,
+        status: 'approved',
+        created_at: new Date().toISOString()
+      });
+      
+      // Dual write to SQLite
+      try {
+        db.prepare("INSERT INTO club_memberships (club_id, chapter_id, user_id, role_id, status) VALUES (?, ?, ?, ?, 'approved')")
+          .run(parseInt(clubId), chapter_id || null, user_id, role_id || null);
+      } catch (sqe) {}
       
       res.json({ success: true });
     } catch (error: any) {
+      console.error("Error adding club member in Firestore:", error);
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.post("/api/clubs/:id/apply", authenticateToken, (req: any, res) => {
+  app.post("/api/clubs/:id/apply", authenticateToken, async (req: any, res) => {
     const clubId = req.params.id;
     const userId = req.user.id;
     const { chapter_id } = req.body;
 
     try {
-      const existing = db.prepare("SELECT id FROM club_memberships WHERE club_id = ? AND user_id = ?").get(clubId, userId);
-      if (existing) {
+      const existingSnapshot = await collections.club_memberships
+        .where("club_id", "==", parseInt(clubId))
+        .where("user_id", "==", parseInt(userId as string))
+        .limit(1)
+        .get();
+
+      if (!existingSnapshot.empty) {
         return res.status(400).json({ error: "Application already exists or you are already a member" });
       }
 
-      db.prepare("INSERT INTO club_memberships (club_id, chapter_id, user_id, status) VALUES (?, ?, ?, 'pending')")
-        .run(clubId, chapter_id || null, userId);
+      const membershipId = await getNextId("club_memberships");
+      await collections.club_memberships.doc(membershipId.toString()).set({
+        club_id: parseInt(clubId),
+        chapter_id: chapter_id ? parseInt(chapter_id as string) : null,
+        user_id: parseInt(userId as string),
+        status: 'pending',
+        created_at: new Date().toISOString()
+      });
+
+      // Dual write to SQLite
+      try {
+        db.prepare("INSERT INTO club_memberships (club_id, chapter_id, user_id, status) VALUES (?, ?, ?, 'pending')")
+          .run(parseInt(clubId), chapter_id || null, userId);
+      } catch (sqe) {}
+
       res.json({ success: true });
     } catch (error: any) {
+      console.error("Error applying to club in Firestore:", error);
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.put("/api/clubs/:id/members/:membership_id", authenticateToken, (req: any, res) => {
+  app.put("/api/clubs/:id/members/:membership_id", authenticateToken, async (req: any, res) => {
     const clubId = req.params.id;
     const membershipId = req.params.membership_id;
     const { status, role_id, chapter_id } = req.body;
     
     try {
-      const club = db.prepare("SELECT user_id, owner_id FROM ecosystems WHERE user_id = ?").get(clubId) as any;
-      if (!club || (Number(club.user_id) !== Number(req.user.id) && Number(club.owner_id) !== Number(req.user.id) && req.user.role !== 'admin')) {
+      let club: any = null;
+      let clubOwnerId = null;
+      const clubDoc = await collections.ecosystems.doc(clubId.toString()).get();
+      if (clubDoc.exists) {
+        club = clubDoc.data();
+        clubOwnerId = club?.owner_id;
+      } else {
+        const sqliteClub = db.prepare("SELECT * FROM ecosystems WHERE user_id = ?").get(Number(clubId)) as any;
+        if (!sqliteClub) {
+          console.error("DEBUG: Club not found in PUT /api/clubs/:id/members. clubId:", clubId);
+          return res.status(404).json({ error: "Club not found" });
+        }
+        club = sqliteClub;
+        clubOwnerId = sqliteClub.owner_id;
+      }
+      
+      if (clubId.toString() !== req.user.id.toString() && (clubOwnerId && clubOwnerId.toString() !== req.user.id.toString()) && req.user.role !== 'admin') {
         return res.status(403).json({ error: "Forbidden: Only club owners can manage members" });
       }
 
-      const updates = [];
-      const params = [];
-      if (status) { updates.push("status = ?"); params.push(status); }
-      if (role_id !== undefined) { updates.push("role_id = ?"); params.push(role_id); }
-      if (chapter_id !== undefined) { updates.push("chapter_id = ?"); params.push(chapter_id); }
+      const updates: any = {};
+      if (status) updates.status = status;
+      if (role_id !== undefined) updates.role_id = role_id ? parseInt(role_id as string) : null;
+      if (chapter_id !== undefined) updates.chapter_id = chapter_id ? parseInt(chapter_id as string) : null;
       
-      if (updates.length > 0) {
-        params.push(membershipId, clubId);
-        db.prepare(`UPDATE club_memberships SET ${updates.join(", ")} WHERE id = ? AND club_id = ?`).run(...params);
+      if (Object.keys(updates).length > 0) {
+        try {
+          await collections.club_memberships.doc(membershipId.toString()).set(updates, { merge: true });
+        } catch (fbErr) {
+          console.error('Firestore membership update error:', fbErr);
+        }
+        
+        // Dual write to SQLite
+        try {
+          const sqlUpdates = [];
+          const params = [];
+          if (status) { sqlUpdates.push("status = ?"); params.push(status); }
+          if (role_id !== undefined) { sqlUpdates.push("role_id = ?"); params.push(role_id); }
+          if (chapter_id !== undefined) { sqlUpdates.push("chapter_id = ?"); params.push(chapter_id); }
+          params.push(membershipId, parseInt(clubId));
+          db.prepare(`UPDATE club_memberships SET ${sqlUpdates.join(", ")} WHERE id = ? AND club_id = ?`).run(...params);
+        } catch (sqe) {}
       }
       res.json({ success: true });
     } catch (error: any) {
+      console.error("Error updating club membership in Firestore:", error);
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.delete("/api/clubs/:id/members/:membership_id", authenticateToken, (req: any, res) => {
+  app.delete("/api/clubs/:id/members/:membership_id", authenticateToken, async (req: any, res) => {
     const clubId = req.params.id;
     const membershipId = req.params.membership_id;
     const userId = req.user.id;
 
     try {
-      // Check if the membership belongs to the user OR if the user is the club owner/admin
-      const membership = db.prepare("SELECT user_id FROM club_memberships WHERE id = ? AND club_id = ?").get(membershipId, clubId);
-      
+      let membership: any = null;
+      const memDoc = await collections.club_memberships.doc(membershipId.toString()).get();
+      if (memDoc.exists) {
+        membership = memDoc.data();
+      } else {
+        membership = db.prepare("SELECT * FROM club_memberships WHERE id = ?").get(membershipId) as any;
+      }
+
       if (!membership) {
         return res.status(404).json({ error: "Membership not found" });
       }
 
-      if (membership.user_id !== userId && Number(clubId) !== Number(userId) && req.user.role !== 'admin') {
+      const clubDoc = await collections.ecosystems.doc(clubId.toString()).get();
+      const clubData = clubDoc.exists ? (clubDoc.data() as any) : (db.prepare("SELECT owner_id FROM ecosystems WHERE user_id = ?").get(clubId) || {});
+
+      const isOwner = clubId.toString() === userId.toString() || (clubData.owner_id && clubData.owner_id.toString() === userId.toString());
+      
+      if (membership.user_id.toString() !== userId.toString() && !isOwner && req.user.role !== 'admin') {
         return res.status(403).json({ error: "Forbidden: You can only cancel your own membership" });
       }
 
-      db.prepare("DELETE FROM club_memberships WHERE id = ? AND club_id = ?").run(membershipId, clubId);
+      try {
+        await collections.club_memberships.doc(membershipId.toString()).delete();
+      } catch (e) {}
+      
+      // Dual delete SQLite
+      try {
+        db.prepare("DELETE FROM club_memberships WHERE id = ? AND club_id = ?").run(membershipId, parseInt(clubId));
+      } catch (sqe) {}
+
       res.json({ success: true });
     } catch (error: any) {
+      console.error("Error deleting club membership in Firestore:", error);
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.post("/api/clubs/:id/roles", authenticateToken, (req: any, res) => {
+  app.post("/api/clubs/:id/roles", authenticateToken, async (req: any, res) => {
     const clubId = req.params.id;
     const { name, description, permissions } = req.body;
 
     try {
-      const club = db.prepare("SELECT user_id, owner_id FROM ecosystems WHERE user_id = ?").get(clubId) as any;
+      let club = db.prepare("SELECT user_id, owner_id FROM ecosystems WHERE user_id = ?").get(clubId) as any;
+      if (!club) {
+        const clubDoc = await collections.ecosystems.doc(clubId.toString()).get();
+        if (clubDoc.exists) club = { user_id: clubDoc.id, owner_id: clubDoc.data()?.owner_id };
+      }
       if (!club || (Number(club.user_id) !== Number(req.user.id) && Number(club.owner_id) !== Number(req.user.id) && req.user.role !== 'admin')) {
         return res.status(403).json({ error: "Forbidden: Only club owners can manage roles" });
       }
 
+      // Ensure club exists in SQLite users to avoid FOREIGN KEY errors
+      try {
+        db.prepare("INSERT OR IGNORE INTO users (id, username, email, type, status) VALUES (?, ?, ?, 'ecosystem', 'active')").run(parseInt(clubId), `club_${clubId}`, `club_${clubId}@temp.com`);
+      } catch (sqErr) {}
+
       const info = db.prepare("INSERT INTO club_roles (club_id, name, description, permissions) VALUES (?, ?, ?, ?)")
-        .run(clubId, name, description, JSON.stringify(permissions || []));
-      res.json({ success: true, role_id: info.lastInsertRowid });
+        .run(parseInt(clubId), name, description, JSON.stringify(permissions || []));
+      
+      const roleId = info.lastInsertRowid;
+      
+      try {
+        await collections.club_roles.doc(roleId.toString()).set({
+          id: roleId,
+          club_id: parseInt(clubId),
+          name,
+          description,
+          permissions: JSON.stringify(permissions || []),
+          hierarchy_order: 0
+        });
+      } catch (fbErr) {
+        console.error("Failed to write role to Firestore", fbErr);
+      }
+
+      res.json({ success: true, role_id: roleId });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.put("/api/clubs/:id/roles/reorder", authenticateToken, (req: any, res) => {
+  app.put("/api/clubs/:id/roles/reorder", authenticateToken, async (req: any, res) => {
     const clubId = req.params.id;
     const { roles } = req.body; // Array of { id, hierarchy_order }
 
     try {
-      const club = db.prepare("SELECT user_id, owner_id FROM ecosystems WHERE user_id = ?").get(clubId) as any;
+      let club = db.prepare("SELECT user_id, owner_id FROM ecosystems WHERE user_id = ?").get(clubId) as any;
+      if (!club) {
+        const clubDoc = await collections.ecosystems.doc(clubId.toString()).get();
+        if (clubDoc.exists) club = { user_id: clubDoc.id, owner_id: clubDoc.data()?.owner_id };
+      }
       if (!club || (Number(club.user_id) !== Number(req.user.id) && Number(club.owner_id) !== Number(req.user.id) && req.user.role !== 'admin')) {
         return res.status(403).json({ error: "Forbidden: Only club owners can manage roles" });
       }
@@ -4275,62 +6794,115 @@ async function startServer() {
       const updateStmt = db.prepare("UPDATE club_roles SET hierarchy_order = ? WHERE id = ? AND club_id = ?");
       const transaction = db.transaction((rolesToUpdate) => {
         for (const role of rolesToUpdate) {
-          updateStmt.run(role.hierarchy_order, role.id, clubId);
+          updateStmt.run(role.hierarchy_order, role.id, parseInt(clubId));
         }
       });
 
       transaction(roles);
+      
+      try {
+        const batch = firestore.batch();
+        for (const role of roles) {
+          batch.update(collections.club_roles.doc(role.id.toString()), {
+            hierarchy_order: role.hierarchy_order
+          });
+        }
+        await batch.commit();
+      } catch (fbErr) {
+        console.error("Failed to sync role reorder to Firestore", fbErr);
+      }
+
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.put("/api/clubs/:id/roles/:role_id", authenticateToken, (req: any, res) => {
+  app.put("/api/clubs/:id/roles/:role_id", authenticateToken, async (req: any, res) => {
     const clubId = req.params.id;
     const roleId = req.params.role_id;
     const { name, description, permissions } = req.body;
 
     try {
-      const club = db.prepare("SELECT user_id, owner_id FROM ecosystems WHERE user_id = ?").get(clubId) as any;
+      let club = db.prepare("SELECT user_id, owner_id FROM ecosystems WHERE user_id = ?").get(clubId) as any;
+      if (!club) {
+        const clubDoc = await collections.ecosystems.doc(clubId.toString()).get();
+        if (clubDoc.exists) club = { user_id: clubDoc.id, owner_id: clubDoc.data()?.owner_id };
+      }
       if (!club || (Number(club.user_id) !== Number(req.user.id) && Number(club.owner_id) !== Number(req.user.id) && req.user.role !== 'admin')) {
         return res.status(403).json({ error: "Forbidden: Only club owners can manage roles" });
       }
 
       db.prepare("UPDATE club_roles SET name = ?, description = ?, permissions = ? WHERE id = ? AND club_id = ?")
-        .run(name, description, JSON.stringify(permissions || []), roleId, clubId);
+        .run(name, description, JSON.stringify(permissions || []), roleId, parseInt(clubId));
+
+      try {
+        await collections.club_roles.doc(roleId.toString()).update({
+          name,
+          description,
+          permissions: JSON.stringify(permissions || [])
+        });
+      } catch (fbErr) {
+        console.error("Failed to update role in Firestore", fbErr);
+      }
+
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.delete("/api/clubs/:id/roles/:role_id", authenticateToken, (req: any, res) => {
+  app.delete("/api/clubs/:id/roles/:role_id", authenticateToken, async (req: any, res) => {
     const clubId = req.params.id;
     const roleId = req.params.role_id;
 
     try {
-      const club = db.prepare("SELECT user_id, owner_id FROM ecosystems WHERE user_id = ?").get(clubId) as any;
+      let club = db.prepare("SELECT user_id, owner_id FROM ecosystems WHERE user_id = ?").get(clubId) as any;
+      if (!club) {
+        const clubDoc = await collections.ecosystems.doc(clubId.toString()).get();
+        if (clubDoc.exists) club = { user_id: clubDoc.id, owner_id: clubDoc.data()?.owner_id };
+      }
       if (!club || (Number(club.user_id) !== Number(req.user.id) && Number(club.owner_id) !== Number(req.user.id) && req.user.role !== 'admin')) {
         return res.status(403).json({ error: "Forbidden: Only club owners can manage roles" });
       }
 
-      db.prepare("UPDATE club_memberships SET role_id = NULL WHERE role_id = ? AND club_id = ?").run(roleId, clubId);
-      db.prepare("DELETE FROM club_roles WHERE id = ? AND club_id = ?").run(roleId, clubId);
+      // SQLite modifications
+      db.prepare("UPDATE club_memberships SET role_id = NULL WHERE role_id = ? AND club_id = ?").run(roleId, parseInt(clubId));
+      db.prepare("DELETE FROM club_roles WHERE id = ? AND club_id = ?").run(roleId, parseInt(clubId));
+
+      try {
+        // Find memberships with this role in Firestore and nullify it
+        const membershipsSnap = await collections.club_memberships.where("club_id", "==", parseInt(clubId)).where("role_id", "==", parseInt(roleId)).get();
+        if (!membershipsSnap.empty) {
+          const batch = firestore.batch();
+          membershipsSnap.docs.forEach(doc => {
+            batch.update(doc.ref, { role_id: null });
+          });
+          await batch.commit();
+        }
+        await collections.club_roles.doc(roleId.toString()).delete();
+      } catch (fbErr) {
+        console.error("Failed to update/delete role in Firestore", fbErr);
+      }
+
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.put("/api/clubs/:id/settings", authenticateToken, (req: any, res) => {
+  app.put("/api/clubs/:id/settings", authenticateToken, async (req: any, res) => {
     const clubId = req.params.id;
     const userId = req.user.id;
     const { chapter_label, company_name, details } = req.body;
 
     try {
-      const club = db.prepare("SELECT user_id, owner_id FROM ecosystems WHERE user_id = ?").get(clubId) as any;
-      if (!club) return res.status(404).json({ error: "Club not found" });
+      let club = db.prepare("SELECT user_id, owner_id FROM ecosystems WHERE user_id = ?").get(clubId) as any;
+      if (!club) {
+        const clubDoc = await collections.ecosystems.doc(clubId.toString()).get();
+        if (clubDoc.exists) club = { user_id: clubDoc.id, owner_id: clubDoc.data()?.owner_id };
+        if (!club) return res.status(404).json({ error: "Club not found" });
+      }
       if (Number(club.user_id) !== Number(userId) && Number(club.owner_id) !== Number(userId) && req.user.role !== 'admin') {
         return res.status(403).json({ error: "Not authorized to manage this club" });
       }
@@ -4344,13 +6916,20 @@ async function startServer() {
     }
   });
 
-  app.post("/api/clubs/create", authenticateToken, (req: any, res) => {
+  app.post("/api/clubs/create", authenticateToken, async (req: any, res) => {
     const userId = req.user.id;
-    const { name, description, location } = req.body;
+    const { name, description, location, chapter_label, external_link } = req.body;
 
     try {
       // Check if user is an approved ambassador
-      const ambassador = db.prepare("SELECT * FROM ambassadors WHERE user_id = ?").get(userId);
+      let ambassador = db.prepare("SELECT * FROM ambassadors WHERE user_id = ?").get(userId);
+      if (!ambassador) {
+         try {
+           const doc = await collections.ambassadors.doc(userId.toString()).get();
+           if (doc.exists && doc.data()?.is_active) ambassador = true;
+         } catch(e) {}
+      }
+
       if (!ambassador && req.user.role !== 'admin') {
         return res.status(400).json({ error: "Only approved ambassadors can create clubs" });
       }
@@ -4363,34 +6942,87 @@ async function startServer() {
       const clubUserId = result.lastInsertRowid;
 
       // Create ecosystem entry
-      db.prepare("INSERT INTO ecosystems (user_id, company_name, details, full_address, service_category, owner_id) VALUES (?, ?, ?, ?, 'club', ?)")
-        .run(clubUserId, name, description, location, userId);
+      db.prepare("INSERT INTO ecosystems (user_id, company_name, details, full_address, service_category, owner_id, chapter_label, website) VALUES (?, ?, ?, ?, 'club', ?, ?, ?)")
+        .run(clubUserId, name, description, location || null, userId, chapter_label || 'Chapter', external_link || null);
+        
+      // Write to Firestore User
+      const nowInt = Math.floor(Date.now() / 1000);
+      await collections.users.doc(clubUserId.toString()).set({
+          username,
+          email,
+          type: 'ecosystem',
+          role: 'user',
+          status: 'active',
+          plan: 'freemium',
+          fullName: name || '',
+          bio: description || '',
+          location: location || '',
+          created_at: nowInt,
+          updated_at: nowInt
+      });
+
+      // Write to Firestore Ecosystems
+      await collections.ecosystems.doc(clubUserId.toString()).set({
+          company_name: name || '',
+          details: description || '',
+          full_address: location || '',
+          service_category: 'club',
+          owner_id: parseInt(userId as string),
+          chapter_label: chapter_label || 'Chapter',
+          website: external_link || ''
+      });
 
       res.json({ success: true, club_id: clubUserId });
     } catch (error: any) {
+      console.error("Error creating club:", error);
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.post("/api/clubs/:id/chapters", authenticateToken, (req: any, res) => {
+  app.post("/api/clubs/:id/chapters", authenticateToken, async (req: any, res) => {
     const clubId = req.params.id;
     const { name, city, country, description } = req.body;
 
     try {
-      const club = db.prepare("SELECT user_id, owner_id FROM ecosystems WHERE user_id = ?").get(clubId) as any;
+      let club = db.prepare("SELECT user_id, owner_id FROM ecosystems WHERE user_id = ?").get(clubId) as any;
+      if (!club) {
+        const clubDoc = await collections.ecosystems.doc(clubId.toString()).get();
+        if (clubDoc.exists) club = { user_id: clubDoc.id, owner_id: clubDoc.data()?.owner_id };
+      }
       if (!club || (Number(club.user_id) !== Number(req.user.id) && Number(club.owner_id) !== Number(req.user.id) && req.user.role !== 'admin')) {
         return res.status(403).json({ error: "Forbidden: Only club owners can manage chapters" });
       }
 
+      // Ensure club exists in SQLite users to avoid FOREIGN KEY errors
+      try {
+        db.prepare("INSERT OR IGNORE INTO users (id, username, email, type, status) VALUES (?, ?, ?, 'ecosystem', 'active')").run(parseInt(clubId), `club_${clubId}`, `club_${clubId}@temp.com`);
+      } catch (sqErr) {}
+
       const info = db.prepare("INSERT INTO club_chapters (club_id, name, city, country, description) VALUES (?, ?, ?, ?, ?)")
-        .run(clubId, name, city, country, description);
-      res.json({ success: true, chapter_id: info.lastInsertRowid });
+        .run(parseInt(clubId), name, city, country, description);
+      
+      const chapterId = info.lastInsertRowid;
+      
+      try {
+        await collections.club_chapters.doc(chapterId.toString()).set({
+          id: chapterId,
+          club_id: parseInt(clubId),
+          name,
+          city: city || '',
+          country: country || '',
+          description: description || ''
+        });
+      } catch (fbErr) {
+        console.error("Failed to write chapter to Firestore", fbErr);
+      }
+
+      res.json({ success: true, chapter_id: chapterId });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.delete("/api/clubs/:id/chapters/:chapter_id", authenticateToken, (req: any, res) => {
+  app.delete("/api/clubs/:id/chapters/:chapter_id", authenticateToken, async (req: any, res) => {
     const clubId = req.params.id;
     const chapterId = req.params.chapter_id;
 
@@ -4399,34 +7031,163 @@ async function startServer() {
     }
 
     try {
-      db.prepare("DELETE FROM club_chapters WHERE id = ? AND club_id = ?").run(chapterId, clubId);
+      db.prepare("DELETE FROM club_chapters WHERE id = ? AND club_id = ?").run(chapterId, parseInt(clubId));
+      
+      try {
+        await collections.club_chapters.doc(chapterId.toString()).delete();
+      } catch (fbErr) {
+        console.error("Failed to delete chapter in Firestore", fbErr);
+      }
+
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Ambassador Invite Links
+  app.post("/api/ambassadors/invites", authenticateToken, checkAmbassador, async (req: any, res) => {
+    try {
+      const code = Math.random().toString(36).substring(2, 10).toUpperCase();
+      const inviteId = await getNextId("invite_links");
+      const inviteData = {
+        id: inviteId,
+        code,
+        sponsor_id: req.user.id,
+        is_used: 0,
+        used_by_user_id: null,
+        created_at: new Date().toISOString()
+      };
+      await collections.invite_links.doc(inviteId.toString()).set(inviteData);
+      
+      // Dual write to SQLite
+      try {
+        db.prepare("INSERT INTO invite_links (id, code, sponsor_id, is_used, created_at) VALUES (?, ?, ?, ?, ?)").run(inviteId, code, req.user.id, 0, inviteData.created_at);
+      } catch (sqe) {}
+      
+      res.json({ success: true, code, inviteData });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/ambassadors/invites", authenticateToken, checkAmbassador, async (req: any, res) => {
+    try {
+      const fbInvites = await collections.invite_links.where("sponsor_id", "==", req.user.id).orderBy("created_at", "desc").get();
+      if (!fbInvites.empty) {
+        return res.json(fbInvites.docs.map(doc => doc.data()));
+      }
+      
+      const invites = db.prepare("SELECT * FROM invite_links WHERE sponsor_id = ? ORDER BY created_at DESC").all(req.user.id);
+      res.json(invites);
+    } catch (error: any) {
+      if (!error.message?.includes('PERMISSION_DENIED')) {
+         console.error("Error fetching invites:", error);
+      }
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/invites/:code/verify", async (req, res) => {
+    try {
+      let invite: any = null;
+      try {
+        invite = db.prepare("SELECT * FROM invite_links WHERE code = ?").get(req.params.code) as any;
+      } catch (sqe) {}
+      
+      if (!invite) {
+        try {
+          const inviteDocs = await collections.invite_links.where("code", "==", req.params.code).get();
+          if (!inviteDocs.empty) {
+             invite = inviteDocs.docs[0].data();
+          }
+        } catch (fbErr: any) {
+          console.error("Invite Firestore Error:", fbErr);
+        }
+      }
+
+      if (!invite) return res.status(404).json({ valid: false, error: "Invite code not found" });
+      if (invite.is_used === 1) return res.status(400).json({ valid: false, error: "Invite code already used" });
+      
+      let sponsor: any = null;
+      try {
+        sponsor = db.prepare(`SELECT a.*, u.username, u.profile_picture_url FROM ambassadors a JOIN users u ON a.user_id = u.id WHERE a.user_id = ?`).get(invite.sponsor_id);
+      } catch (sqe) {}
+      
+      if (!sponsor) {
+        try {
+          const aDoc = await collections.ambassadors.doc(invite.sponsor_id.toString()).get();
+          const uDoc = await collections.users.doc(invite.sponsor_id.toString()).get();
+          if (aDoc.exists && uDoc.exists) {
+             sponsor = { ...aDoc.data(), username: uDoc.data()?.username, profile_picture_url: uDoc.data()?.profile_picture_url };
+          }
+        } catch (fbErr) {}
+      }
+      
+      res.json({ valid: true, sponsor });
+    } catch (error: any) {
+      res.status(500).json({ valid: false, error: error.message });
     }
   });
 
   // Ambassador Network Endpoints
-  app.post("/api/ambassadors/apply", authenticateToken, checkFeatureAccess('create_club'), (req: any, res) => {
+  app.post("/api/ambassadors/apply", authenticateToken, checkFeatureAccess('create_club'), async (req: any, res) => {
     const { user_id, category, name, location, description, photos, links, proof_of_legitimacy } = req.body;
     
-    if (user_id !== req.user.id && req.user.role !== 'admin' && req.user.role !== 'moderator') {
+    if (user_id.toString() !== req.user.id.toString() && req.user.role !== 'admin' && req.user.role !== 'moderator') {
       return res.status(403).json({ error: "Forbidden: You can only apply for yourself" });
     }
 
     try {
-      db.prepare(`
-        INSERT INTO ambassador_applications (user_id, category, name, location, description, photos, links, proof_of_legitimacy)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(user_id, category, name, location, description, JSON.stringify(photos || []), JSON.stringify(links || []), proof_of_legitimacy);
-      res.json({ success: true });
+      const appId = await getNextId("ambassador_applications");
+      const appData = {
+        user_id: parseInt(user_id as string),
+        category,
+        name,
+        location,
+        description,
+        photos: photos || [],
+        links: links || [],
+        proof_of_legitimacy,
+        status: 'pending',
+        created_at: new Date().toISOString()
+      };
+
+      await collections.ambassador_applications.doc(appId.toString()).set(appData);
+
+      // Dual write to SQLite
+      try {
+        db.prepare(`
+          INSERT INTO ambassador_applications (user_id, category, name, location, description, photos, links, proof_of_legitimacy)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(user_id, category, name, location, description, JSON.stringify(photos || []), JSON.stringify(links || []), proof_of_legitimacy);
+      } catch (sqe) {}
+
+      res.json({ success: true, id: appId });
     } catch (error: any) {
+      console.error("Error submitting ambassador application in Firestore:", error);
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.get("/api/ambassadors/applications", authenticateToken, checkAdmin, (req, res) => {
+  app.get("/api/ambassadors/applications", authenticateToken, checkAdmin, async (req, res) => {
     try {
+      const snapshot = await collections.ambassador_applications.orderBy("created_at", "desc").get();
+      const applications = await Promise.all(snapshot.docs.map(async (doc) => {
+        const app = doc.data() as any;
+        const userDoc = await collections.users.doc(app.user_id.toString()).get();
+        const userData = userDoc.exists ? userDoc.data() as any : {};
+        return {
+          ...app,
+          id: doc.id,
+          username: userData.username,
+          email: userData.email
+        };
+      }));
+      res.json(applications);
+    } catch (error: any) {
+      console.error("Error fetching ambassador applications from Firestore:", error);
+      // Fallback
       const applications = db.prepare(`
         SELECT a.*, u.username, u.email 
         FROM ambassador_applications a
@@ -4434,54 +7195,101 @@ async function startServer() {
         ORDER BY a.created_at DESC
       `).all();
       res.json(applications);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
     }
   });
 
-  app.post("/api/ambassadors/applications/:id/approve", authenticateToken, checkAdmin, (req, res) => {
+  app.post("/api/ambassadors/applications/:id/approve", authenticateToken, checkAdmin, async (req, res) => {
     const { id } = req.params;
     try {
-      db.transaction(() => {
-        const app = db.prepare("SELECT * FROM ambassador_applications WHERE id = ?").get(id) as any;
-        if (!app) throw new Error("Application not found");
-        
-        db.prepare("UPDATE ambassador_applications SET status = 'approved' WHERE id = ?").run(id);
-        db.prepare("INSERT OR IGNORE INTO ambassadors (user_id, category) VALUES (?, ?)").run(app.user_id, app.category);
-        
-        // Notify user
-        db.prepare("INSERT INTO notifications (user_id, type, content, link) VALUES (?, ?, ?, ?)").run(
-          app.user_id, 'system', 'Your ambassador application has been approved!', `/profile`
-        );
-      })();
+      const appRef = collections.ambassador_applications.doc(id);
+      const appDoc = await appRef.get();
+      if (!appDoc.exists) throw new Error("Application not found");
+      const app = appDoc.data() as any;
+      
+      const now = new Date().toISOString();
+      await appRef.update({ status: 'approved' });
+      
+      const ambassadorData = {
+        user_id: app.user_id,
+        category: app.category,
+        is_active: 1,
+        reputation: 0,
+        level: 1,
+        created_at: now
+      };
+      await collections.ambassadors.doc(app.user_id.toString()).set(ambassadorData);
+      
+      // Notify user
+      const notifId = Math.random().toString(36).substring(2, 15);
+      await collections.notifications.doc(notifId).set({
+        user_id: app.user_id,
+        type: 'system',
+        content: 'Your ambassador application has been approved!',
+        link: `/profile`,
+        is_read: 0,
+        created_at: now
+      });
+
+      // Dual write to SQLite
+      try {
+        db.transaction(() => {
+          db.prepare("UPDATE ambassador_applications SET status = 'approved' WHERE id = ?").run(id);
+          db.prepare("INSERT OR IGNORE INTO ambassadors (user_id, category) VALUES (?, ?)").run(app.user_id, app.category);
+          db.prepare("INSERT INTO notifications (user_id, type, content, link) VALUES (?, ?, ?, ?)").run(
+            app.user_id, 'system', 'Your ambassador application has been approved!', `/profile`
+          );
+        })();
+      } catch (sqe) {}
+
       res.json({ success: true });
     } catch (error: any) {
+      console.error("Error approving ambassador application in Firestore:", error);
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.post("/api/ambassadors/applications/:id/reject", authenticateToken, checkAdmin, (req, res) => {
+  app.post("/api/ambassadors/applications/:id/reject", authenticateToken, checkAdmin, async (req, res) => {
     const { id } = req.params;
     try {
-      db.transaction(() => {
-        const app = db.prepare("SELECT * FROM ambassador_applications WHERE id = ?").get(id) as any;
-        if (!app) throw new Error("Application not found");
-        
-        db.prepare("UPDATE ambassador_applications SET status = 'rejected' WHERE id = ?").run(id);
-        
-        // Notify user
-        db.prepare("INSERT INTO notifications (user_id, type, content, link) VALUES (?, ?, ?, ?)").run(
-          app.user_id, 'system', 'Your ambassador application has been reviewed but not approved at this time.', `/ambassador`
-        );
-      })();
+      const appRef = collections.ambassador_applications.doc(id);
+      const appDoc = await appRef.get();
+      if (!appDoc.exists) throw new Error("Application not found");
+      const app = appDoc.data() as any;
+      
+      const now = new Date().toISOString();
+      await appRef.update({ status: 'rejected' });
+      
+      // Notify user
+      const notifId = Math.random().toString(36).substring(2, 15);
+      await collections.notifications.doc(notifId).set({
+        user_id: app.user_id,
+        type: 'system',
+        content: 'Your ambassador application has been reviewed but not approved at this time.',
+        link: `/ambassador`,
+        is_read: 0,
+        created_at: now
+      });
+
+      // Dual write to SQLite
+      try {
+        db.transaction(() => {
+          db.prepare("UPDATE ambassador_applications SET status = 'rejected' WHERE id = ?").run(id);
+          db.prepare("INSERT INTO notifications (user_id, type, content, link) VALUES (?, ?, ?, ?)").run(
+            app.user_id, 'system', 'Your ambassador application has been reviewed but not approved at this time.', `/ambassador`
+          );
+        })();
+      } catch (sqe) {}
+
       res.json({ success: true });
     } catch (error: any) {
+      console.error("Error rejecting ambassador application in Firestore:", error);
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.get("/api/ambassadors", (req, res) => {
+  app.get("/api/ambassadors", async (req, res) => {
     try {
+      // Try SQLite first
       const ambassadors = db.prepare(`
         SELECT a.*, u.username, u.profile_picture_url,
                COALESCE(e.company_name, r.name) as display_name,
@@ -4493,33 +7301,90 @@ async function startServer() {
         LEFT JOIN riders r ON u.id = r.user_id
         WHERE a.is_active = 1
       `).all();
-      res.json(ambassadors);
+
+      if (ambassadors.length > 0) {
+        return res.json(ambassadors);
+      }
+
+      // Fallback to Firestore
+      try {
+        const snapshot = await collections.ambassadors.where("is_active", "==", 1).get();
+        const firestoreAmbassadors = await Promise.all(snapshot.docs.map(async (doc) => {
+          const a = doc.data() as any;
+          const userDoc = await collections.users.doc(a.user_id.toString()).get();
+          const userData = userDoc.exists ? userDoc.data() as any : {};
+          
+          let profileDetails: any = {};
+          if (userData.type === 'ecosystem') {
+            const ecoDoc = await collections.ecosystems.doc(a.user_id.toString()).get();
+            if (ecoDoc.exists) profileDetails = ecoDoc.data();
+          } else {
+            const riderDoc = await collections.riders.doc(a.user_id.toString()).get();
+            if (riderDoc.exists) profileDetails = riderDoc.data();
+          }
+
+          return {
+            ...a,
+            id: doc.id,
+            username: userData.username,
+            profile_picture_url: userData.profile_picture_url,
+            display_name: profileDetails.company_name || profileDetails.name || userData.username,
+            location: profileDetails.full_address || profileDetails.city || 'Unknown',
+            lat: profileDetails.lat || null,
+            lng: profileDetails.lng || null
+          };
+        }));
+        res.json(firestoreAmbassadors);
+      } catch (err: any) {
+        if (!err.message?.includes('PERMISSION_DENIED')) {
+          console.error("Error fetching ambassadors from Firestore:", err.message);
+        }
+        res.json([]);
+      }
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      console.error("Error fetching ambassadors:", error.message);
+      res.status(500).json({ error: "Failed to fetch ambassadors" });
     }
   });
 
-  app.get("/api/ambassadors/:id/application-status", authenticateToken, (req: any, res) => {
+  app.get("/api/ambassadors/:id/application-status", authenticateToken, async (req: any, res) => {
     const { id } = req.params;
-    if (id !== req.user.id.toString() && id !== req.user.id && req.user.role !== 'admin' && req.user.role !== 'moderator') {
+    if (id.toString() !== req.user.id.toString() && req.user.role !== 'admin' && req.user.role !== 'moderator') {
       return res.status(403).json({ error: "Forbidden" });
     }
     try {
-      const application = db.prepare(`
-        SELECT status 
-        FROM ambassador_applications 
-        WHERE user_id = ? 
-        ORDER BY created_at DESC 
-        LIMIT 1
-      `).get(id) as any;
+      let snapshot = await collections.ambassador_applications
+        .where("user_id", "==", typeof id === 'string' && !isNaN(Number(id)) ? parseInt(id) : id)
+        .get();
+        
+      if (snapshot.empty) {
+         snapshot = await collections.ambassador_applications
+           .where("user_id", "==", id.toString())
+           .get();
+      }
       
-      res.json(application || { status: 'none' });
+      if (!snapshot.empty) {
+        const apps = snapshot.docs.map(doc => doc.data() as any);
+        apps.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        res.json({ status: apps[0].status });
+      } else {
+        // Fallback
+        const application = db.prepare(`
+          SELECT status 
+          FROM ambassador_applications 
+          WHERE user_id = ? 
+          ORDER BY created_at DESC 
+          LIMIT 1
+        `).get(id) as any;
+        res.json(application || { status: 'none' });
+      }
     } catch (error: any) {
+      console.error("Error fetching application status from Firestore:", error);
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.get("/api/ambassadors/:id", (req, res) => {
+  app.get("/api/ambassadors/:id", async (req, res) => {
     const { id } = req.params;
     try {
       const ambassador = db.prepare(`
@@ -4533,8 +7398,44 @@ async function startServer() {
         LEFT JOIN riders r ON u.id = r.user_id
         WHERE a.user_id = ?
       `).get(id);
-      res.json(ambassador || null);
+
+      if (ambassador) {
+        return res.json(ambassador);
+      }
+
+      // Fallback
+      const doc = await collections.ambassadors.doc(id.toString()).get();
+      if (doc.exists) {
+        const a = doc.data() as any;
+        const userDoc = await collections.users.doc(id.toString()).get();
+        const userData = userDoc.exists ? userDoc.data() as any : {};
+        
+        let profileDetails: any = {};
+        if (userData.type === 'ecosystem') {
+          const ecoDoc = await collections.ecosystems.doc(id.toString()).get();
+          if (ecoDoc.exists) profileDetails = ecoDoc.data();
+        } else {
+          const riderDoc = await collections.riders.doc(id.toString()).get();
+          if (riderDoc.exists) profileDetails = riderDoc.data();
+        }
+
+        return res.json({
+          ...a,
+          id: doc.id,
+          username: userData.username,
+          profile_picture_url: userData.profile_picture_url,
+          display_name: profileDetails.company_name || profileDetails.name || userData.username,
+          location: profileDetails.full_address || profileDetails.city || 'Unknown',
+          lat: profileDetails.lat || null,
+          lng: profileDetails.lng || null
+        });
+      }
+
+      res.json(null);
     } catch (error: any) {
+      if (!error.message?.includes('PERMISSION_DENIED')) {
+          console.error("Error fetching ambassador:", error.message);
+      }
       res.status(500).json({ error: error.message });
     }
   });
@@ -4561,7 +7462,8 @@ async function startServer() {
     }
   });
 
-  app.get("/api/ambassadors/:id/stamps", (req, res) => {
+  // Tracking protection bypass: changed from /api/ambassadors/:id/stamps
+  app.get(["/api/ambassadors/:id/passport-tokens", "/api/ambassadors/:id/stamps"], (req, res) => {
     const { id } = req.params;
     try {
       const stamps = db.prepare("SELECT * FROM passport_stamps WHERE ambassador_id = ?").all(id);
@@ -4571,52 +7473,69 @@ async function startServer() {
     }
   });
 
-  app.post("/api/stamps/scan", authenticateToken, (req: any, res) => {
+  app.post("/api/stamps/scan", authenticateToken, async (req: any, res) => {
     const { user_id, stamp_id, location_lat, location_lng } = req.body;
     
-    if (user_id !== req.user.id && req.user.role !== 'admin' && req.user.role !== 'moderator') {
+    if (user_id.toString() !== req.user.id.toString() && req.user.role !== 'admin' && req.user.role !== 'moderator') {
       return res.status(403).json({ error: "Forbidden: You can only scan stamps for yourself" });
     }
 
     try {
-      const stamp = db.prepare("SELECT ambassador_id, creator_type, creator_id FROM passport_stamps WHERE id = ?").get(stamp_id) as any;
-      if (!stamp) {
+      const stampDoc = await collections.passport_stamps.doc(stamp_id.toString()).get();
+      if (!stampDoc.exists) {
         return res.status(404).json({ error: "Stamp not found" });
       }
-      const ambassador_id = stamp.ambassador_id;
+      const stamp = stampDoc.data() as any;
+      const ambassador_id = stamp.ambassador_id || 0;
       const creator_type = stamp.creator_type;
       const creator_id = stamp.creator_id;
 
       if (ambassador_id > 0) {
-        const ambassador = db.prepare("SELECT location_lat, location_lng FROM ambassadors WHERE user_id = ?").get(ambassador_id) as any;
+        const ambassadorDoc = await collections.ambassadors.doc(ambassador_id.toString()).get();
+        const ambassador = ambassadorDoc.exists ? ambassadorDoc.data() as any : null;
         
-        // Anti-fraud: Distance validation (e.g., within 1km)
+        // Anti-fraud: Distance validation
         if (location_lat && location_lng && ambassador && ambassador.location_lat && ambassador.location_lng) {
           const distance = getDistanceFromLatLonInKm(location_lat, location_lng, ambassador.location_lat, ambassador.location_lng);
-          if (distance > 1) { // 1 km radius
+          if (distance > 1) {
             return res.status(403).json({ error: "You are too far from the ambassador to collect this stamp." });
           }
         }
       }
 
-      db.transaction(() => {
+      const userStampId = `${user_id}_${stamp_id}`;
+      const existingDoc = await collections.user_passport_stamps.doc(userStampId).get();
+      if (existingDoc.exists) {
+        return res.status(400).json({ error: "You already have this stamp!" });
+      }
+
+      await collections.user_passport_stamps.doc(userStampId).set({
+        user_id: parseInt(user_id as string),
+        stamp_id: parseInt(stamp_id as string),
+        ambassador_id,
+        location_lat: location_lat || 0,
+        location_lng: location_lng || 0,
+        creator_type,
+        creator_id,
+        created_at: new Date().toISOString()
+      });
+      
+      // Dual write to SQLite
+      try {
         db.prepare(`
           INSERT INTO user_passport_stamps (user_id, stamp_id, ambassador_id, location_lat, location_lng, creator_type, creator_id)
           VALUES (?, ?, ?, ?, ?, ?, ?)
         `).run(user_id, stamp_id, ambassador_id, location_lat || 0, location_lng || 0, creator_type, creator_id);
-      })();
+      } catch (sqe) {}
       
       if (ambassador_id > 0) {
-        updateAmbassadorReputation(ambassador_id);
+        await updateAmbassadorReputation(ambassador_id);
       }
       
       res.json({ success: true });
     } catch (error: any) {
-      if (error.message.includes('UNIQUE constraint failed')) {
-        res.status(400).json({ error: "You already have this stamp!" });
-      } else {
-        res.status(500).json({ error: error.message });
-      }
+      console.error("Error scanning stamp in Firestore:", error);
+      res.status(500).json({ error: error.message });
     }
   });
 
@@ -4668,12 +7587,17 @@ async function startServer() {
     }
   });
 
-  app.post("/api/upload", authenticateToken, upload.single("file"), (req: any, res) => {
+  app.post("/api/upload", authenticateToken, upload.single("file"), async (req: any, res) => {
     if (!req.file) {
       return res.status(400).json({ error: "No file uploaded" });
     }
-    const fileUrl = `/uploads/${req.file.filename}`;
-    res.json({ url: fileUrl });
+    try {
+      const fileUrl = await uploadToFirebase(req.file, "general");
+      res.json({ url: fileUrl });
+    } catch (err) {
+      console.error("General upload error:", err);
+      res.status(500).json({ error: "Upload failed" });
+    }
   });
 
   // Admin: User Plan Management
@@ -4694,7 +7618,12 @@ async function startServer() {
   });
 
   // Admin: Feature Access Configuration
-  app.get("/api/feature-access", (req, res) => {
+  app.get("/api/test-db-info", (req, res) => {
+    res.json({ dbPath: isProd ? '/tmp/cafe777.db' : 'cafe777.db' });
+  });
+
+  // Tracking protection bypass: changed from /api/feature-access
+  app.get("/api/f-access", (req, res) => {
     try {
       const settings = db.prepare("SELECT key, value FROM settings WHERE key LIKE 'feature_%'").all() as any[];
       const access: Record<string, string> = {};
@@ -4746,13 +7675,24 @@ async function startServer() {
       console.error("Register validation failed:", JSON.stringify(validation.error.format(), null, 2));
       return res.status(400).json({ error: "Invalid input", details: validation.error.format() });
     }
-    const { username, email, password, type, fullName, location, bio, motorcycle, businessName, businessType, interests, services, referralCode } = validation.data;
+    const { username, email, password, type, fullName, location, bio, motorcycle, bloodType, businessName, businessType, interests, services, referralCode } = validation.data;
 
     const interestsStr = Array.isArray(interests) ? interests.join(',') : interests;
     const servicesStr = Array.isArray(services) ? services.join(',') : services;
 
     try {
-      let userId;
+      // Check if user already exists in Firestore!
+      const firestoreEmailCheck = await collections.users.where("email", "==", email).limit(1).get();
+      if (!firestoreEmailCheck.empty) {
+        return res.status(400).json({ error: "Email already exists" });
+      }
+
+      const firestoreUsernameCheck = await collections.users.where("username", "==", username).limit(1).get();
+      if (!firestoreUsernameCheck.empty) {
+        return res.status(400).json({ error: "Username already exists" });
+      }
+
+      let userId: any;
       const initialStatus = type === 'rider' ? 'active' : 'pending';
       const newReferralCode = Math.random().toString(36).substring(2, 10).toUpperCase();
       
@@ -4761,17 +7701,27 @@ async function startServer() {
         hashedPassword = await bcrypt.hash(password, 10);
       }
       
+      // Dual write to SQLite for backward compatibility
       db.transaction(() => {
         let referredBy = null;
+        let isAmbassadorInvite = false;
         if (referralCode) {
           const referrer = db.prepare("SELECT id FROM users WHERE referral_code = ?").get(referralCode) as any;
-          if (referrer) referredBy = referrer.id;
+          if (referrer) {
+            referredBy = referrer.id;
+          } else {
+            const inviteLink = db.prepare("SELECT * FROM invite_links WHERE code = ? AND is_used = 0").get(referralCode) as any;
+            if (inviteLink) {
+              referredBy = inviteLink.sponsor_id;
+              isAmbassadorInvite = true;
+            }
+          }
         }
 
-        const userResult = insertUser.run(
+        const result = insertUser.run(
           username, 
           email,
-          hashedPassword, // Allow null for Google Auth
+          hashedPassword, 
           type, 
           `https://picsum.photos/seed/${username}/200/200`,
           "user",
@@ -4790,24 +7740,65 @@ async function startServer() {
           servicesStr || null,
           newReferralCode
         );
-        userId = userResult.lastInsertRowid;
+        userId = result.lastInsertRowid;
 
         if (type === "rider") {
-          insertRider.run(userId, fullName, null, location); // age is null for now
-          
-          // Optional: Handle motorcycle and interests if you have tables for them
-          // For now, we'll just log them or ignore if tables don't exist
-          console.log(`Rider ${username} registered with motorcycle: ${motorcycle}, interests: ${interests}`);
+          insertRider.run(userId, fullName || username, null, location || null);
+          if (bloodType) {
+            db.prepare("UPDATE riders SET blood_type = ? WHERE user_id = ?").run(bloodType, userId);
+          }
         } else {
-          insertEco.run(userId, businessName, location, businessType, bio, null, null, userId); // lat, lng are null for now
-          
-          // Optional: Handle services
-          console.log(`Ecosystem ${username} registered with services: ${services}`);
+          insertEco.run(userId, businessName || 'Unknown Business', location || null, businessType || null, bio || null, null, null, userId);
+        }
+        
+        if (isAmbassadorInvite) {
+          db.prepare("UPDATE invite_links SET is_used = 1, used_by_user_id = ? WHERE code = ?").run(userId, referralCode);
         }
       })();
-      const user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as any;
-      res.json({ success: true, username, id: userId, token: jwt.sign({ id: userId, username, role: 'user', plan: user.plan }, JWT_SECRET, { expiresIn: '24h' }) });
+
+      const userDoc = {
+        id: userId,
+        username,
+        email,
+        password: hashedPassword,
+        type,
+        profile_picture_url: `https://picsum.photos/seed/${username}/200/200`,
+        role: "user",
+        status: initialStatus,
+        referral_code: newReferralCode,
+        referred_by: db.prepare("SELECT referred_by FROM users WHERE id = ?").get(userId)?.referred_by || null,
+        plan: 'freemium',
+        reputation: 0,
+        fullName: fullName || null,
+        location: location || null,
+        bio: bio || null,
+        motorcycle: motorcycle || null,
+        businessName: businessName || null,
+        businessType: businessType || null,
+        interests: Array.isArray(interests) ? interests : [],
+        services: Array.isArray(services) ? services : [],
+        created_at: new Date().toISOString()
+      };
+      await collections.users.doc(userId.toString()).set(userDoc);
+      
+      const isAmbassadorInvite = db.prepare("SELECT 1 FROM invite_links WHERE used_by_user_id = ?").get(userId);
+      if (isAmbassadorInvite && referralCode) {
+        const inviteQuery = await collections.invite_links.where("code", "==", referralCode).get();
+        if (!inviteQuery.empty) {
+          await collections.invite_links.doc(inviteQuery.docs[0].id).update({
+            is_used: 1,
+            used_by_user_id: userId
+          });
+        }
+      }
+
+      if (userDoc.referred_by) {
+        updateAmbassadorReputation(userDoc.referred_by).catch(e => console.error(e));
+      }
+
+      res.json({ success: true, username, id: userId, token: jwt.sign({ id: userId, username, role: 'user', plan: 'freemium' }, JWT_SECRET, { expiresIn: '24h' }) });
     } catch (error: any) {
+      console.error("Register error:", error);
       res.status(400).json({ error: error.message });
     }
   });
@@ -4822,9 +7813,18 @@ async function startServer() {
     try {
       db.transaction(() => {
         let referredBy = null;
+        let isAmbassadorInvite = false;
         if (referralCode) {
           const referrer = db.prepare("SELECT id FROM users WHERE referral_code = ?").get(referralCode) as any;
-          if (referrer) referredBy = referrer.id;
+          if (referrer) {
+            referredBy = referrer.id;
+          } else {
+            const inviteLink = db.prepare("SELECT * FROM invite_links WHERE code = ? AND is_used = 0").get(referralCode) as any;
+            if (inviteLink) {
+              referredBy = inviteLink.sponsor_id;
+              isAmbassadorInvite = true;
+            }
+          }
         }
 
         // Update user type and status based on type
@@ -4874,15 +7874,24 @@ async function startServer() {
           // Check if eco record exists, if not create it, else update
           const eco = db.prepare("SELECT * FROM ecosystems WHERE user_id = ?").get(userId);
           if (eco) {
-            db.prepare("UPDATE ecosystems SET company_name = ?, full_address = ?, service_category = ?, details = ? WHERE user_id = ?").run(businessName || null, location || null, businessType || null, bio || null, userId);
+            db.prepare("UPDATE ecosystems SET company_name = ?, full_address = ?, service_category = ?, details = ? WHERE user_id = ?").run(businessName || 'Unknown Business', location || null, businessType || null, bio || null, userId);
           } else {
-            insertEco.run(userId, businessName || null, location || null, businessType || null, bio || null, null, null, userId);
+            insertEco.run(userId, businessName || 'Unknown Business', location || null, businessType || null, bio || null, null, null, userId);
           }
           console.log(`Ecosystem updated with services: ${services}`);
+        }
+        
+        if (isAmbassadorInvite) {
+          db.prepare("UPDATE invite_links SET is_used = 1, used_by_user_id = ? WHERE code = ?").run(userId, referralCode);
         }
       })();
       
       const user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as any;
+      
+      if (user.referred_by) {
+        updateAmbassadorReputation(user.referred_by).catch(e => console.error("Could not update reputation", e));
+      }
+
       res.json({ success: true, username: user.username, type: user.type });
     } catch (error: any) {
       res.status(400).json({ error: error.message });
@@ -4903,7 +7912,16 @@ async function startServer() {
         db.prepare("DELETE FROM user_route_progress WHERE user_id = ?").run(userId);
         db.prepare("DELETE FROM reviews WHERE reviewer_user_id = ?").run(userId);
         db.prepare("DELETE FROM recommendations WHERE user_id = ?").run(userId);
-        db.prepare("DELETE FROM followers WHERE follower_id = ? OR following_id = ?").run(userId, userId);
+        db.prepare("DELETE FROM followers WHERE follower_id = ? OR user_id = ?").run(userId, userId);
+        db.prepare("DELETE FROM post_likes WHERE user_id = ?").run(userId);
+        db.prepare("DELETE FROM post_comments WHERE user_id = ?").run(userId);
+        db.prepare("DELETE FROM comments WHERE user_id = ?").run(userId);
+        db.prepare("DELETE FROM user_pinned_posts WHERE user_id = ?").run(userId);
+        db.prepare("DELETE FROM motorcycles WHERE rider_id = ?").run(userId);
+        db.prepare("DELETE FROM events WHERE user_id = ?").run(userId);
+        db.prepare("DELETE FROM submissions WHERE user_id = ?").run(userId);
+        db.prepare("DELETE FROM votes WHERE user_id = ?").run(userId);
+        db.prepare("DELETE FROM user_reports WHERE reporter_id = ? OR reported_id = ?").run(userId, userId);
         db.prepare("DELETE FROM riders WHERE user_id = ?").run(userId);
         db.prepare("DELETE FROM ecosystems WHERE user_id = ?").run(userId);
         db.prepare("DELETE FROM ambassadors WHERE user_id = ?").run(userId);
@@ -5100,6 +8118,7 @@ async function startServer() {
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
+    fs.appendFileSync('server_reboots.log', `[${new Date().toISOString()}] Server listening on ${PORT}\n`);
   });
 }
 

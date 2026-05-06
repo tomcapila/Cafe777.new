@@ -149,6 +149,9 @@ export default function EventDetails() {
       location: event.location,
       image_url: event.image_url,
       category: event.category || 'road_trip',
+      price: event.price || '',
+      price_starting_from: !!event.price_starting_from,
+      external_link: event.external_link || '',
       participation_stamp_id: event.participation_stamp_id
     });
     setIsEditing(true);
@@ -161,17 +164,22 @@ export default function EventDetails() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          username: currentUser.username,
+          username: currentUser?.username,
           ...editEventData
         }),
       });
 
       if (res.ok) {
+        showNotification('success', t('events.updateSuccess') || 'Event updated successfully');
         setIsEditing(false);
         fetchEvent();
+      } else {
+        const errorData = await res.json();
+        showNotification('error', errorData.error || t('events.updateError') || 'Failed to update event');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      showNotification('error', err.message || t('events.updateError') || 'Failed to update event');
     }
   };
 
@@ -385,6 +393,39 @@ export default function EventDetails() {
     }
   };
 
+  const formatDate = (dateValue: any) => {
+    if (!dateValue) return '';
+    try {
+      let d: Date;
+      if (typeof dateValue === 'string') {
+        d = new Date(dateValue);
+      } else if (typeof dateValue === 'number') {
+        d = new Date(dateValue);
+      } else if (dateValue._seconds) {
+        d = new Date(dateValue._seconds * 1000);
+      } else if (dateValue.seconds) {
+        d = new Date(dateValue.seconds * 1000);
+      } else if (dateValue.toDate) {
+        d = dateValue.toDate();
+      } else {
+        d = new Date(dateValue);
+      }
+      return isNaN(d.getTime()) ? '' : d.toLocaleDateString(locale);
+    } catch (e) {
+      return '';
+    }
+  };
+
+  const formatLongDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    try {
+      const d = new Date(dateStr + 'T12:00:00');
+      return isNaN(d.getTime()) ? '' : d.toLocaleDateString(locale, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    } catch (e) {
+      return '';
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-[calc(100dvh-5rem)] flex items-center justify-center">
@@ -434,7 +475,7 @@ export default function EventDetails() {
                   {event.service_category ? t(`category.${event.service_category}`) : t('event.details.communityEvent')}
                 </span>
                 <span className="text-steel text-[10px] font-mono uppercase tracking-widest">
-                  {t('event.details.posted')} {new Date(event.created_at).toLocaleDateString(locale)}
+                  {t('event.details.posted')} {formatDate(event.created_at)}
                 </span>
               </div>
               <h1 className="text-5xl sm:text-7xl font-display font-black uppercase italic tracking-tighter mb-10 leading-[0.85] text-chrome">
@@ -448,7 +489,7 @@ export default function EventDetails() {
                   </div>
                   <div>
                     <div className="text-[10px] font-mono font-black text-steel uppercase tracking-widest mb-1">{t('eventDetails.date')}</div>
-                    <div className="font-display font-black uppercase italic text-lg tracking-tight">{new Date(event.date + 'T12:00:00').toLocaleDateString(locale, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</div>
+                    <div className="font-display font-black uppercase italic text-lg tracking-tight">{formatLongDate(event.date)}</div>
                   </div>
                 </div>
                 <div className="flex items-center gap-5 group">
@@ -478,17 +519,41 @@ export default function EventDetails() {
                     <div className="font-display font-black uppercase italic text-lg tracking-tight">{event.location}</div>
                   </div>
                 </div>
-                {event.rsvp_count > 0 && (
+                {event.price && (
                   <div className="flex items-center gap-5 group">
-                    <div className="w-14 h-14 rounded-2xl bg-engine border border-inverse/5 flex items-center justify-center text-primary group-hover:border-primary/30 transition-all shadow-xl shadow-primary/5">
-                      <Users className="w-7 h-7" />
+                    <div className="w-14 h-14 rounded-2xl bg-engine border border-inverse/5 flex items-center justify-center text-primary group-hover:border-primary/30 transition-all shadow-xl">
+                      <span className="font-display font-black text-2xl">$</span>
                     </div>
                     <div>
-                      <div className="text-[10px] font-mono font-black text-steel uppercase tracking-widest mb-1">{t('eventDetails.attendance')}</div>
-                      <div className="font-display font-black uppercase italic text-lg tracking-tight text-chrome group-hover:text-primary transition-colors">{event.rsvp_count} {t('eventDetails.riders')}</div>
+                      <div className="text-[10px] font-mono font-black text-steel uppercase tracking-widest mb-1">{t('event.field.price') || 'Price'}</div>
+                      <div className="font-display font-black uppercase italic text-lg tracking-tight text-primary">
+                        {event.price_starting_from ? `${t('event.field.priceStartingFrom')} ` : ''}{event.price}
+                      </div>
                     </div>
                   </div>
                 )}
+                {event.external_link && (
+                  <div className="flex items-center gap-5 group col-span-1 sm:col-span-2 mt-4 cursor-pointer" onClick={() => window.open(event.external_link, '_blank')}>
+                    <div className="relative overflow-hidden w-full h-14 rounded-2xl bg-primary flex items-center justify-center transition-all shadow-xl hover:shadow-primary/20 hover:bg-primary/90">
+                      <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20 mix-blend-overlay"></div>
+                      <span className="font-display font-black italic uppercase text-lg text-inverse relative z-10 flex items-center gap-2">
+                        {t('event.field.externalLink') || 'Event Link'}
+                        <ArrowLeft className="w-5 h-5 rotate-135" style={{transform: "rotate(135deg)"}} />
+                      </span>
+                    </div>
+                  </div>
+                )}
+                <div className="flex items-center gap-5 group">
+                  <div className="w-14 h-14 rounded-2xl bg-engine border border-inverse/5 flex items-center justify-center text-primary group-hover:border-primary/30 transition-all shadow-xl shadow-primary/5">
+                    <Users className="w-7 h-7" />
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-mono font-black text-steel uppercase tracking-widest mb-1">{t('eventDetails.attendance')}</div>
+                    <div className="font-display font-black uppercase italic text-lg tracking-tight text-chrome group-hover:text-primary transition-colors">
+                      {event.rsvp_count + 1} { (event.rsvp_count + 1) === 1 ? t('eventDetails.rider') : t('eventDetails.riders') }
+                    </div>
+                  </div>
+                </div>
                 {event.participation_badge_name && (
                   <div className="flex items-center gap-5 group">
                     <div className="w-14 h-14 rounded-2xl bg-engine border border-inverse/5 flex items-center justify-center text-primary group-hover:border-primary/30 transition-all shadow-xl">
@@ -753,13 +818,35 @@ export default function EventDetails() {
                 <option value="other">{t('events.category.other')}</option>
               </select>
               <input type="date" value={editEventData.date || ''} onChange={e => setEditEventData({...editEventData, date: e.target.value})} className="input-field" required />
-              <input type="text" autoCapitalize="sentences" value={editEventData.time || ''} onChange={e => setEditEventData({...editEventData, time: e.target.value})} className="input-field" placeholder={t('event.field.time')} />
+              <input type="time" value={editEventData.time || ''} onChange={e => setEditEventData({...editEventData, time: e.target.value})} className="input-field" required />
               <LocationAutocomplete
                 value={editEventData.location}
                 onChange={(value) => setEditEventData({...editEventData, location: value})}
                 placeholder={t('event.field.location')}
               />
               
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between ml-1">
+                    <label className="text-[10px] font-mono font-bold text-steel uppercase tracking-widest">{t('event.field.price') || 'Price'}</label>
+                    <label className="flex items-center gap-1.5 cursor-pointer group">
+                      <input
+                        type="checkbox"
+                        checked={editEventData.price_starting_from}
+                        onChange={(e) => setEditEventData({...editEventData, price_starting_from: e.target.checked})}
+                        className="w-3.5 h-3.5 rounded border-inverse/10 bg-engine/50 text-primary focus:ring-0 focus:ring-offset-0 transition-all cursor-pointer"
+                      />
+                      <span className="text-[9px] font-mono font-bold text-steel group-hover:text-chrome transition-colors uppercase tracking-wider">{t('event.field.priceStartingFrom') || 'Starting from'}</span>
+                    </label>
+                  </div>
+                  <input type="text" placeholder={t('event.modal.pricePlaceholder') || 'Free, $20, etc.'} value={editEventData.price || ''} onChange={e => setEditEventData({...editEventData, price: e.target.value})} className="input-field" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-mono font-bold text-steel uppercase tracking-widest ml-1">{t('event.field.externalLink') || 'External Link'}</label>
+                  <input type="url" placeholder={t('event.modal.externalLinkPlaceholder') || 'https://...'} value={editEventData.external_link || ''} onChange={e => setEditEventData({...editEventData, external_link: e.target.value})} className="input-field" />
+                </div>
+              </div>
+
               <div className="space-y-4">
                 <label className="text-[10px] font-mono font-bold text-steel uppercase tracking-widest ml-1">{t('event.field.coverImage')}</label>
                 <div className="flex items-center gap-6">

@@ -57,6 +57,8 @@ export default function AmbassadorDashboard() {
   const [showCreateClub, setShowCreateClub] = useState(false);
   const [newClub, setNewClub] = useState({ name: '', description: '', location: '' });
 
+  const [invites, setInvites] = useState<any[]>([]);
+
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
@@ -67,8 +69,38 @@ export default function AmbassadorDashboard() {
       fetchRoutes();
       fetchEvents(parsedUser.id);
       fetchMyClubs();
+      fetchInvites();
     }
   }, []);
+
+  const fetchInvites = async () => {
+    try {
+      const res = await fetchWithAuth('/api/ambassadors/invites');
+      if (res.ok) {
+        const data = await res.json();
+        setInvites(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch invites', err);
+    }
+  };
+
+  const generateInvite = async () => {
+    try {
+      const res = await fetchWithAuth('/api/ambassadors/invites', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        showNotification('success', 'Invite link generated successfully!');
+        setInvites([data.inviteData, ...invites]);
+      } else {
+        const errData = await res.json();
+        showNotification('error', errData.error || 'Failed to generate invite');
+      }
+    } catch (err) {
+      console.error(err);
+      showNotification('error', 'An error occurred');
+    }
+  };
 
   const fetchMyClubs = async () => {
     try {
@@ -253,7 +285,7 @@ export default function AmbassadorDashboard() {
         setStamps(data);
       }
       
-      const badgesRes = await fetchWithAuth(`/api/badges?creator_id=${userId}`);
+      const badgesRes = await fetchWithAuth(`/api/achievements?creator_id=${userId}`);
       if (badgesRes.ok) {
         const badgesData = await badgesRes.json();
         setCreatedBadges(badgesData);
@@ -497,7 +529,7 @@ export default function AmbassadorDashboard() {
             Ambassador Dashboard
             {user.plan === 'premium' && <PremiumBadge size={20} />}
           </h1>
-          <p className="text-steel capitalize">{ambassador.category} Ambassador • Reputation: {ambassador.reputation_score}</p>
+          <p className="text-steel capitalize">{ambassador?.category || 'Unknown'} Ambassador • Reputation: {ambassador?.reputation_score || 0}</p>
         </div>
       </div>
 
@@ -593,10 +625,10 @@ export default function AmbassadorDashboard() {
           </section>
 
           {/* Stats Section */}
-          <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <section className="grid grid-cols-1 sm:grid-cols-4 gap-4">
             <div className="bg-oil rounded-3xl p-6 border border-inverse/10 text-center">
               <Users className="w-8 h-8 text-info mx-auto mb-2" />
-              <div className="text-3xl font-display font-black text-chrome">{ambassador.reputation_score * 3}</div>
+              <div className="text-3xl font-display font-black text-chrome">{Number.isNaN(Number(ambassador?.reputation_score)) ? (Number(ambassador?.reputation) || 0) * 3 : (Number(ambassador?.reputation_score) || 0) * 3}</div>
               <div className="text-xs text-steel uppercase tracking-wider mt-1">Riders Verified</div>
             </div>
             <div className="bg-oil rounded-3xl p-6 border border-inverse/10 text-center">
@@ -605,10 +637,76 @@ export default function AmbassadorDashboard() {
               <div className="text-xs text-steel uppercase tracking-wider mt-1">Active Stamps</div>
             </div>
             <div className="bg-oil rounded-3xl p-6 border border-inverse/10 text-center">
+              <LinkIcon className="w-8 h-8 text-primary mx-auto mb-2" />
+              <div className="text-3xl font-display font-black text-chrome">{invites.filter(i => i.is_used === 1).length}</div>
+              <div className="text-xs text-steel uppercase tracking-wider mt-1">Successful Invites</div>
+            </div>
+            <div className="bg-oil rounded-3xl p-6 border border-inverse/10 text-center">
               <Star className="w-8 h-8 text-warning mx-auto mb-2" />
-              <div className="text-3xl font-display font-black text-chrome">{ambassador.reputation_score}</div>
+              <div className="text-3xl font-display font-black text-chrome">{Number.isNaN(Number(ambassador?.reputation_score)) ? (Number(ambassador?.reputation) || 0) : (Number(ambassador?.reputation_score) || 0)}</div>
               <div className="text-xs text-steel uppercase tracking-wider mt-1">Reputation Score</div>
             </div>
+          </section>
+
+          {/* Invites Section */}
+          <section className="bg-oil rounded-3xl p-8 border border-inverse/10 relative overflow-hidden">
+            <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+              <div>
+                <h2 className="text-2xl font-display font-black uppercase text-chrome">Referral Hub</h2>
+                <p className="text-sm text-steel">Generate one-time invite links to bring new riders to Cafe777 and build your network.</p>
+              </div>
+              <button 
+                onClick={generateInvite}
+                className="bg-primary text-white px-6 py-2 rounded-full font-bold hover:bg-inverse hover:text-primary transition-colors flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" /> Generate Invite Link
+              </button>
+            </div>
+
+            {invites.length === 0 ? (
+              <p className="text-steel italic">You haven't generated any invite links yet.</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {invites.map((invite) => {
+                  const inviteUrl = `${window.location.origin}/invite/${invite.code}`;
+                  return (
+                    <div key={invite.id} className="bg-engine rounded-2xl p-4 border border-inverse/5 flex flex-col justify-between">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <div className="font-mono text-lg font-bold text-chrome">{invite.code}</div>
+                          <div className="text-xs text-steel mt-1">{new Date(invite.created_at).toLocaleDateString()}</div>
+                        </div>
+                        {invite.is_used === 1 ? (
+                          <span className="bg-success/20 text-success px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
+                            <CheckCircle className="w-3 h-3" /> Used
+                          </span>
+                        ) : (
+                          <span className="bg-warning/20 text-warning px-3 py-1 rounded-full text-xs font-bold">Unused</span>
+                        )}
+                      </div>
+                      
+                      <div className="flex gap-2">
+                        <input 
+                          type="text" 
+                          readOnly 
+                          value={inviteUrl} 
+                          className="flex-1 bg-oil border border-inverse/10 rounded-lg px-3 py-2 text-xs text-chrome font-mono"
+                        />
+                        <button 
+                          onClick={() => {
+                            navigator.clipboard.writeText(inviteUrl);
+                            showNotification('success', 'Link copied to clipboard');
+                          }}
+                          className="bg-inverse/10 hover:bg-inverse/20 text-chrome px-3 py-2 rounded-lg text-xs font-bold transition-colors"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </section>
         </div>
 

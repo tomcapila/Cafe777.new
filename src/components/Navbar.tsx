@@ -35,7 +35,7 @@ export default function Navbar() {
 
   const fetchUnreadCount = async (userId: number) => {
     try {
-      const res = await fetchWithAuth(`/api/notifications?user_id=${userId}`);
+      const res = await fetchWithAuth(`/api/user-alerts?user_id=${userId}`);
       if (res.ok) {
         const data = await res.json();
         setUnreadCount(data.filter((n: any) => !n.is_read).length);
@@ -64,7 +64,7 @@ export default function Navbar() {
   const fetchNotifications = async () => {
     if (!user) return;
     try {
-      const res = await fetchWithAuth(`/api/notifications?user_id=${user.id}`);
+      const res = await fetchWithAuth(`/api/user-alerts?user_id=${user.id}`);
       if (res.ok) {
         const data = await res.json();
         setNotifications(data.filter((n: any) => !n.is_read));
@@ -77,7 +77,7 @@ export default function Navbar() {
   const fetchUnreadMessagesCount = async () => {
     if (!user) return;
     try {
-      const res = await fetchWithAuth('/api/chats');
+      const res = await fetchWithAuth('/api/conversations');
       if (res.ok) {
         const contentType = res.headers.get('content-type');
         if (contentType && contentType.includes('application/json')) {

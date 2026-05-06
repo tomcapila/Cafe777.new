@@ -2,7 +2,7 @@ import { fetchWithAuth } from '../utils/api';
 import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Clock, Heart, MessageSquare, Share2, Bike, Calendar, MapPin, ArrowRight, Search, Filter, Plus, X, ImageIcon, Send, Upload, ChevronRight, Pin, PinOff, CornerDownRight } from 'lucide-react';
+import { Clock, Heart, MessageSquare, Share2, Bike, Calendar, MapPin, ArrowRight, Search, Filter, Plus, X, ImageIcon, Send, Upload, ChevronRight, Pin, PinOff, CornerDownRight, Trash2 } from 'lucide-react';
 import { useNotification } from '../contexts/NotificationContext';
 
 import { useLanguage } from '../contexts/LanguageContext';
@@ -92,6 +92,30 @@ export default function MotorFeed() {
       console.error('Failed to fetch motorcycles:', err);
     }
   };
+
+  // Safe date parser
+  const safeFormatDate = (dateStr: any) => {
+    if (!dateStr) return '';
+    try {
+      // If it's an object with seconds/nanoseconds (Firestore timestamp)
+      if (dateStr && typeof dateStr === 'object' && dateStr._seconds) {
+        return new Date(dateStr._seconds * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      }
+      
+      let parsedDate = new Date(dateStr);
+      // Fallback for SQL strings YYYY-MM-DD HH:MM:SS
+      if (isNaN(parsedDate.getTime()) && typeof dateStr === 'string') {
+         parsedDate = new Date(dateStr.replace(' ', 'T') + (dateStr.includes('Z') ? '' : 'Z'));
+      }
+      if (isNaN(parsedDate.getTime())) return '';
+      return parsedDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    } catch (e) {
+      return '';
+    }
+  };
+
+  // Image Modal State
+  const [expandedImage, setExpandedImage] = useState<string | null>(null);
 
   useEffect(() => {
     fetchPosts();
@@ -232,6 +256,31 @@ export default function MotorFeed() {
       setPosts(previousPosts);
       console.error(err);
       showNotification('error', t('feed.post.pinErrorGeneric'));
+    }
+  };
+
+  const [postToDelete, setPostToDelete] = useState<number | null>(null);
+
+  const handleDeletePost = async (postId: number) => {
+    if (!currentUser) return;
+
+    try {
+      const res = await fetchWithAuth(`/api/posts/${postId}`, {
+        method: 'DELETE',
+      });
+
+      if (res.ok) {
+        showNotification('success', t('feed.post.deleteSuccess'));
+        setPosts(prev => prev.filter(p => p.id !== postId));
+      } else {
+        const err = await res.json();
+        showNotification('error', err.error || t('feed.post.deleteFailed'));
+      }
+    } catch (err) {
+      console.error(err);
+      showNotification('error', t('feed.post.deleteError'));
+    } finally {
+      setPostToDelete(null);
     }
   };
 
@@ -386,7 +435,7 @@ export default function MotorFeed() {
           </Link>
         );
       }
-      return part;
+      return <span key={index}>{part}</span>;
     });
   };
 
@@ -485,7 +534,15 @@ export default function MotorFeed() {
                     <Link to={`/profile/${post.username}`} className="flex items-center gap-3 group/author">
                       <div className="w-10 h-10 rounded-full bg-oil border border-inverse/10 overflow-hidden">
                         {post.profile_picture_url ? (
-                          <img src={post.profile_picture_url} alt={post.username} className="w-full h-full object-cover" />
+                          <img 
+                            src={post.profile_picture_url} 
+                            alt={post.username} 
+                            className="w-full h-full object-cover" 
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.src = 'https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?w=400&h=400&auto=format&fit=crop&q=80';
+                            }}
+                          />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-steel font-bold uppercase text-xs">
                             {post.username.charAt(0)}
@@ -510,7 +567,7 @@ export default function MotorFeed() {
                         </div>
                       )}
                       <Clock className="w-3 h-3" />
-                      <span>{post.created_at ? new Date(post.created_at.replace(' ', 'T') + 'Z').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''}</span>
+                      <span>{safeFormatDate(post.created_at)}</span>
                     </div>
                   </div>
                   
@@ -521,17 +578,41 @@ export default function MotorFeed() {
                   )}
                   
                   {post.image_url && (
-                    <div className="rounded-3xl overflow-hidden mb-6 border border-inverse/5 shadow-2xl relative group/img">
-                      <img src={post.image_url} alt="" className="w-full aspect-video object-cover grayscale group-hover/img:grayscale-0 transition-all duration-1000 scale-105 group-hover/img:scale-100" referrerPolicy="no-referrer" />
-                      <div className="absolute inset-0 bg-gradient-to-t from-oil/40 to-transparent opacity-0 group-hover/img:opacity-100 transition-opacity duration-500" />
+                    <div 
+                      className="rounded-3xl overflow-hidden mb-6 border border-inverse/5 shadow-2xl relative group/img cursor-pointer bg-oil/20"
+                      onClick={() => setExpandedImage(post.image_url)}
+                    >
+                      <img 
+                        src={post.image_url} 
+                        alt="" 
+                        className="w-full aspect-video object-cover transition-all duration-1000 scale-105 group-hover/img:scale-100" 
+                        referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.src = 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?w=800&auto=format&fit=crop&q=60';
+                          target.className = 'w-full aspect-video object-cover opacity-50 grayscale';
+                        }}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-oil/40 to-transparent opacity-0 group-hover/img:opacity-100 transition-opacity duration-500 flex items-center justify-center">
+                        <Search className="w-8 h-8 text-chrome/50 transform scale-50 group-hover/img:scale-100 transition-all duration-300 drop-shadow-xl" />
+                      </div>
                     </div>
                   )}
 
                   {post.shared_event_id && (
                     <Link to={`/events/${post.shared_event_id}`} className="block mb-6 group/event">
                       <div className="flex items-center gap-4 p-4 rounded-2xl border border-inverse/10 bg-oil/30 hover:bg-oil/60 hover:border-primary/30 transition-all duration-500 overflow-hidden relative group/card">
-                        <div className="w-20 h-20 shrink-0 rounded-xl overflow-hidden relative shadow-xl">
-                          <img src={post.shared_event_image_url} alt={post.shared_event_title} className="w-full h-full object-cover grayscale group-hover/event:grayscale-0 transition-all duration-700" referrerPolicy="no-referrer" />
+                        <div className="w-20 h-20 shrink-0 rounded-xl overflow-hidden relative shadow-xl bg-oil/20">
+                          <img 
+                            src={post.shared_event_image_url} 
+                            alt={post.shared_event_title} 
+                            className="w-full h-full object-cover grayscale group-hover/event:grayscale-0 transition-all duration-700" 
+                            referrerPolicy="no-referrer"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.src = 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?w=200&auto=format&fit=crop&q=60';
+                            }}
+                          />
                         </div>
                         
                         <div className="flex-1 min-w-0 py-1">
@@ -575,7 +656,11 @@ export default function MotorFeed() {
                     >
                       <Heart className={`w-4 h-4 transition-all ${post.has_liked ? 'fill-primary' : 'group-hover/btn:fill-primary'}`} />
                       <div className="flex flex-col items-start leading-none">
-                        <span className="text-[10px] font-mono font-black tracking-widest">{post.likes_count || 0}</span>
+                        <span className="text-[10px] font-mono font-black tracking-widest">
+                          {Number.isNaN(Number(post.likes_count)) 
+                            ? (post.respect_count || 0) 
+                            : (post.likes_count || post.respect_count || 0)}
+                        </span>
                         <span className="text-[8px] font-mono uppercase tracking-[0.2em] opacity-60">{t('feed.post.respect')}</span>
                       </div>
                     </button>
@@ -589,7 +674,7 @@ export default function MotorFeed() {
                     >
                       <MessageSquare className={`w-5 h-5 transition-all ${expandedComments[post.id] ? 'text-primary' : 'group-hover/btn:text-primary'}`} />
                       <div className="flex flex-col items-start leading-none">
-                        <span className="text-[10px] font-mono font-black tracking-widest">{post.comment_count || 0}</span>
+                        <span className="text-[10px] font-mono font-black tracking-widest">{Number.isNaN(Number(post.comment_count)) ? (Number.isNaN(Number(post.comments_count)) ? 0 : (post.comments_count || 0)) : (post.comment_count || 0)}</span>
                         <span className="text-[8px] font-mono uppercase tracking-[0.2em] opacity-60">{t('feed.post.comments')}</span>
                       </div>
                     </button>
@@ -611,6 +696,23 @@ export default function MotorFeed() {
                         <span className="text-[10px] font-mono font-black tracking-widest uppercase">
                           {post.is_pinned === 1 ? t('feed.post.unpin') : t('feed.post.pin')}
                         </span>
+                      </button>
+                    )}
+                    {currentUser && (post.user_id === currentUser.id || currentUser.role === 'admin') && (
+                      <button 
+                        onClick={() => {
+                          if (postToDelete === post.id) {
+                            handleDeletePost(post.id);
+                          } else {
+                            setPostToDelete(post.id);
+                            setTimeout(() => setPostToDelete(null), 3000);
+                          }
+                        }}
+                        className={`flex items-center gap-2 transition-all group/btn ml-4 ${postToDelete === post.id ? 'text-red-500' : 'text-steel hover:text-red-500'}`}
+                        title={t('common.delete')}
+                      >
+                        <Trash2 className="w-5 h-5" />
+                        {postToDelete === post.id && <span className="text-[10px] font-mono uppercase tracking-widest text-red-500">{t('common.confirm')}</span>}
                       </button>
                     )}
                     <button className="flex items-center gap-2 text-steel hover:text-chrome transition-all group/btn ml-auto">
@@ -689,7 +791,7 @@ export default function MotorFeed() {
                                           {comment.plan === 'premium' && <PremiumBadge size={10} />}
                                         </Link>
                                         <span className="text-[8px] font-mono text-steel uppercase tracking-widest">
-                                          {new Date(comment.created_at.replace(' ', 'T') + 'Z').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                          {safeFormatDate(comment.created_at)}
                                         </span>
                                       </div>
                                       <p className="text-sm text-chrome font-light leading-relaxed">
@@ -872,6 +974,39 @@ export default function MotorFeed() {
               </form>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {expandedImage && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setExpandedImage(null)}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-xl p-4 cursor-pointer"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              className="relative max-w-[90vw] max-h-[85vh] rounded-2xl shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <img
+                src={expandedImage}
+                alt="Expanded post"
+                className="w-auto h-auto max-w-full max-h-[85vh] rounded-2xl"
+              />
+              <button 
+                onClick={(e) => { e.stopPropagation(); setExpandedImage(null); }}
+                className="absolute -top-3 -right-3 p-2 bg-black/80 hover:bg-primary text-white hover:text-white backdrop-blur-md rounded-full shadow-lg border-2 border-white/20 transition-all z-[200]"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

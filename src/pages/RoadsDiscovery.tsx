@@ -477,9 +477,9 @@ export default function RoadsDiscovery() {
                 <h3 className="font-bold text-sm text-chrome leading-tight pr-4">{route.name}</h3>
                 <div 
                   className="flex items-center justify-center w-8 h-8 rounded-full font-mono font-bold text-xs shrink-0"
-                  style={{ backgroundColor: `${getScoreColor(route.road_score)}20`, color: getScoreColor(route.road_score) }}
+                  style={{ backgroundColor: `${getScoreColor(route.road_score || 0)}20`, color: getScoreColor(route.road_score || 0) }}
                 >
-                  {Math.round(route.road_score)}
+                  {Math.round(route.road_score || 0)}
                 </div>
               </div>
               
@@ -502,7 +502,7 @@ export default function RoadsDiscovery() {
                     item_id={route.route_id} 
                     item_name={route.name} 
                     type="road" 
-                    item_description={`${route.distance_km}km • ${route.difficulty} • Score: ${Math.round(route.road_score)}/100`}
+                    item_description={`${route.distance_km}km • ${route.difficulty} • Score: ${Math.round(route.road_score || 0)}/100`}
                     className="flex items-center gap-1 text-primary hover:text-oil font-display font-bold text-[10px] uppercase tracking-widest transition-all"
                   />
                 </div>
@@ -595,7 +595,7 @@ export default function RoadsDiscovery() {
                   item_id={selectedRoute.route_id || selectedRoute.id} 
                   item_name={selectedRoute.name} 
                   type="road" 
-                  item_description={`${selectedRoute.distance_km}km • ${selectedRoute.difficulty} • Score: ${Math.round(selectedRoute.road_score)}/100`}
+                  item_description={`${selectedRoute.distance_km}km • ${selectedRoute.difficulty} • Score: ${Math.round(selectedRoute.road_score || 0)}/100`}
                   className="flex-1 btn-primary py-2 text-[10px] flex items-center justify-center gap-1"
                 />
               </div>
@@ -715,9 +715,9 @@ export default function RoadsDiscovery() {
                     <div className="flex items-center gap-2 mb-3">
                       <div 
                         className="flex items-center justify-center w-6 h-6 rounded-full font-mono font-bold text-[10px] shrink-0"
-                        style={{ backgroundColor: `${getScoreColor(route.road_score)}20`, color: getScoreColor(route.road_score) }}
+                        style={{ backgroundColor: `${getScoreColor(route.road_score || 0)}20`, color: getScoreColor(route.road_score || 0) }}
                       >
-                        {Math.round(route.road_score)}
+                        {Math.round(route.road_score || 0)}
                       </div>
                       <span className="text-[10px] font-mono font-bold text-steel uppercase tracking-widest">{t('roads.filter.' + route.difficulty.toLowerCase()) || route.difficulty}</span>
                       <MapRating 

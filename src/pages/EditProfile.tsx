@@ -4,6 +4,7 @@ import { useNavigate, useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { User, Building2, ArrowLeft, Loader2, Save, ShieldAlert, Camera, Upload, Bike, Wrench, Plus, History, Calendar, MapPin, Clock } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
+import LocationAutocomplete from '../components/LocationAutocomplete';
 
 export default function EditProfile() {
   const { username } = useParams();
@@ -138,7 +139,12 @@ export default function EditProfile() {
       }
 
       // Update localStorage with new user data
-      const updatedUser = { ...currentUser, username: result.username };
+      const updatedUser = { 
+        ...currentUser, 
+        username: result.username,
+        profile_picture_url: result.profile_picture_url || currentUser.profile_picture_url,
+        cover_photo_url: result.cover_photo_url || currentUser.cover_photo_url
+      };
       localStorage.setItem('user', JSON.stringify(updatedUser));
       window.dispatchEvent(new Event('auth-change'));
 
@@ -318,15 +324,15 @@ export default function EditProfile() {
                 <input 
                   type="email" 
                   name="email" 
-                  required
                   defaultValue={data.email}
+                  placeholder={t('onboarding.emailPlaceholder')}
                   className="input-field"
                 />
               </div>
             )}
 
             {isRider ? (
-              <>
+               <>
                 <div>
                   <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-2">{t('profile.fullName')}</label>
                   <input 
@@ -334,7 +340,7 @@ export default function EditProfile() {
                     name="name" 
                     autoCapitalize="sentences"
                     required
-                    defaultValue={data.profile.name}
+                    defaultValue={data.profile?.name || ''}
                     className="input-field"
                   />
                 </div>
@@ -344,7 +350,7 @@ export default function EditProfile() {
                     <input 
                       type="number" 
                       name="age" 
-                      defaultValue={data.profile.age}
+                      defaultValue={data.profile?.age || ''}
                       className="input-field"
                     />
                   </div>
@@ -352,10 +358,23 @@ export default function EditProfile() {
                     <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-2">{t('profile.city')}</label>
                     <LocationAutocomplete 
                       name="city" 
-                      defaultValue={data.profile.city}
+                      defaultValue={data.profile?.city || ''}
                       className="input-field"
                       types={['(cities)']}
                     />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-2">{t('profile.bloodType') || 'Blood Type'}</label>
+                    <select 
+                      name="blood_type"
+                      defaultValue={data.profile?.blood_type || ''}
+                      className="input-field appearance-none"
+                    >
+                      <option value="">{t('onboarding.selectBloodType') || 'Select Blood Type'}</option>
+                      {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(type => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
                 <div>
@@ -400,7 +419,7 @@ export default function EditProfile() {
                     name="company_name" 
                     autoCapitalize="sentences"
                     required
-                    defaultValue={data.profile.company_name}
+                    defaultValue={data.profile?.company_name || ''}
                     className="input-field"
                   />
                 </div>
@@ -408,7 +427,7 @@ export default function EditProfile() {
                   <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-2">{t('profile.category')}</label>
                   <select 
                     name="service_category"
-                    defaultValue={data.profile.service_category}
+                    defaultValue={data.profile?.service_category || 'other'}
                     className="input-field appearance-none"
                   >
                     <option value="repair">{t('category.repair')}</option>
@@ -420,14 +439,14 @@ export default function EditProfile() {
                     <option value="other">{t('category.other')}</option>
                   </select>
                 </div>
-                {data.profile.service_category === 'club' && (
+                {data.profile?.service_category === 'club' && (
                   <div>
                     <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-2">Chapter Label (e.g. Chapter, Party, Faction)</label>
                     <input 
                       type="text" 
                       name="chapter_label" 
                       autoCapitalize="sentences"
-                      defaultValue={data.profile.chapter_label || 'Chapter'}
+                      defaultValue={data.profile?.chapter_label || 'Chapter'}
                       className="input-field"
                       placeholder="Chapter"
                     />
@@ -437,7 +456,7 @@ export default function EditProfile() {
                   <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-2">{t('profile.fullAddress')}</label>
                   <LocationAutocomplete 
                     name="full_address" 
-                    defaultValue={data.profile.full_address}
+                    defaultValue={data.profile?.full_address || ''}
                     className="input-field"
                     types={['address']}
                   />
@@ -448,7 +467,7 @@ export default function EditProfile() {
                     <input 
                       type="tel" 
                       name="phone" 
-                      defaultValue={data.profile.phone || ''}
+                      defaultValue={data.profile?.phone || ''}
                       className="input-field"
                       placeholder="+1 234 567 8900"
                     />
@@ -458,7 +477,7 @@ export default function EditProfile() {
                     <input 
                       type="url" 
                       name="website" 
-                      defaultValue={data.profile.website || ''}
+                      defaultValue={data.profile?.website || ''}
                       className="input-field"
                       placeholder="https://example.com"
                     />
@@ -470,7 +489,7 @@ export default function EditProfile() {
                     name="details" 
                     autoCapitalize="sentences"
                     rows={5}
-                    defaultValue={data.profile.details || ''}
+                    defaultValue={data.profile?.details || ''}
                     className="input-field resize-none"
                   />
                 </div>

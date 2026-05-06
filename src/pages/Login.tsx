@@ -28,11 +28,22 @@ export default function Login() {
     setLoading(true);
     setError('');
     try {
+      const referralCode = new URLSearchParams(window.location.search).get('ref');
       const res = await fetch('/api/auth/google', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credential: response.credential }),
+        body: JSON.stringify({ 
+          credential: response.credential,
+          referralCode
+        }),
       });
+
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await res.text();
+        console.error("Non-JSON response from Google Auth:", text);
+        throw new Error(`Server returned an error: ${res.statusText}. Check console.`);
+      }
 
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || 'Google login failed');
@@ -42,7 +53,7 @@ export default function Login() {
       window.dispatchEvent(new Event('auth-change'));
       
       if (result.isNewUser) {
-        navigate('/onboarding', { 
+        navigate(`/onboarding${window.location.search}`, { 
           state: { 
             fromGoogleAuth: true,
             googleData: result.googleData
@@ -61,41 +72,31 @@ export default function Login() {
   const handleGoogleResponseRef = useRef<any>(null);
   handleGoogleResponseRef.current = handleGoogleResponse;
 
-  useEffect(() => {
-    const initGoogle = () => {
-      if (!showVideo && typeof window !== 'undefined' && (window as any).google?.accounts?.id) {
-        // Initialize only once per session to avoid GSI_LOGGER warning
-        if (!(window as any).google_gsi_initialized) {
-          (window as any).google.accounts.id.initialize({
-            client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
-            callback: (response: any) => {
-              if (handleGoogleResponseRef.current) {
-                handleGoogleResponseRef.current(response);
-              }
-            },
-          });
-          (window as any).google_gsi_initialized = true;
-        }
-
-        const googleDiv = document.getElementById("googleSignInDiv");
-        if (googleDiv) {
-          (window as any).google.accounts.id.renderButton(
-            googleDiv,
-            { theme: "outline", size: "large", width: "100%" }
-          );
-          return true;
-        }
-      }
-      return false;
-    };
-
-    if (!initGoogle()) {
-      const interval = setInterval(() => {
-        if (initGoogle()) clearInterval(interval);
-      }, 500);
-      return () => clearInterval(interval);
+  const handleCustomGoogleLogin = () => {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    if (!clientId || clientId === "your-google-client-id.apps.googleusercontent.com") {
+      setError('Missing Google Client ID. Please configure VITE_GOOGLE_CLIENT_ID in AI Studio Config/Secrets.');
+      return;
     }
-  }, [t, showVideo]);
+    
+    const redirectUri = window.location.origin + '/auth/callback';
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=id_token&scope=openid%20email%20profile&nonce=random_nonce_${Date.now()}`;
+    
+    window.open(authUrl, 'google_oauth', 'width=500,height=600');
+  };
+
+  useEffect(() => {
+    const handleMessage = (e: MessageEvent) => {
+      // Validate origin strictly matching dev and preview bounds
+      if (!e.origin.includes('localhost') && !e.origin.endsWith('.run.app')) return;
+      
+      if (e.data?.type === 'OAUTH_AUTH_SUCCESS' && e.data?.credential) {
+        handleGoogleResponse({ credential: e.data.credential });
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
 
   const handleVideoEnd = () => {
     setShowVideo(false);
@@ -245,7 +246,7 @@ export default function Login() {
                     placeholder="••••••••"
                   />
                   <div className="text-right mt-2">
-                    <a href="/forgot-password" className="text-xs text-primary hover:underline">Forgot password?</a>
+                    <a href="/forgot-password" className="text-xs text-primary hover:underline">{t('login.forgotPassword') || 'Forgot password?'}</a>
                   </div>
                 </div>
 
@@ -276,14 +277,26 @@ export default function Login() {
                 </div>
 
                 <div className="mt-6">
-                  <div id="googleSignInDiv" className="min-h-[44px] flex justify-center"></div>
+                  <button
+                    type="button"
+                    onClick={handleCustomGoogleLogin}
+                    className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-inverse/20 shadow-sm rounded-lg hover:bg-inverse/5 hover:border-primary/50 transition-all text-inverse font-medium"
+                  >
+                    <svg viewBox="0 0 24 24" className="w-5 h-5">
+                      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+                      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                    </svg>
+                    <span>{t('login.signInWithGoogle') || 'Sign in with Google'}</span>
+                  </button>
                 </div>
               </div>
 
               <div className="mt-8 pt-6 border-t border-inverse/5 text-center space-y-4">
                 <p className="text-steel text-sm">
                   {t('login.noAccount')}{' '}
-                  <Link to="/onboarding" className="text-primary hover:text-accent font-medium">
+                  <Link to={`/onboarding${window.location.search}`} className="text-primary hover:text-accent font-medium">
                     {t('nav.join')}
                   </Link>
                 </p>
@@ -292,7 +305,7 @@ export default function Login() {
                     {t('login.admin')}
                   </Link>
                   <Link to="/privacy" className="text-steel/50 hover:text-primary text-[10px] font-mono uppercase tracking-widest transition-colors">
-                    Privacy Policy
+                    {t('login.privacyPolicy') || 'Privacy Policy'}
                   </Link>
                 </div>
               </div>

@@ -1,7 +1,7 @@
 import { fetchWithAuth } from '../utils/api';
 
 export const createChat = async (participantIds: number[], type: 'one-on-one' | 'group', title?: string) => {
-  const res = await fetchWithAuth('/api/chats', {
+  const res = await fetchWithAuth('/api/conversations', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ participantIds, type, title })
@@ -12,7 +12,7 @@ export const createChat = async (participantIds: number[], type: 'one-on-one' | 
 };
 
 export const sendMessage = async (chatId: number, senderId: number, text: string) => {
-  const res = await fetchWithAuth(`/api/chats/${chatId}/messages`, {
+  const res = await fetchWithAuth(`/api/conversations/${chatId}/messages`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text })
@@ -28,7 +28,7 @@ export const subscribeToMessages = (chatId: number, callback: (messages: any[]) 
   const fetchMessages = async () => {
     if (!isSubscribed) return;
     try {
-      const res = await fetchWithAuth(`/api/chats/${chatId}/messages`);
+      const res = await fetchWithAuth(`/api/conversations/${chatId}/messages`);
       if (res.ok) {
         const data = await res.json();
         if (isSubscribed) callback(data);
@@ -51,7 +51,7 @@ export const subscribeToMessages = (chatId: number, callback: (messages: any[]) 
 
 export const markAsRead = async (chatId: number, messageId: number, userId: number) => {
   try {
-    await fetchWithAuth(`/api/chats/${chatId}/read`, {
+    await fetchWithAuth(`/api/conversations/${chatId}/read`, {
       method: 'POST'
     });
   } catch (err: any) {
@@ -62,7 +62,7 @@ export const markAsRead = async (chatId: number, messageId: number, userId: numb
 };
 
 export const findChat = async (participantIds: number[]) => {
-  const res = await fetchWithAuth('/api/chats/find', {
+  const res = await fetchWithAuth('/api/conversations/find', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ participantIds })
@@ -79,7 +79,7 @@ export const subscribeToUserChats = (userId: number, callback: (chats: any[]) =>
   const fetchChats = async () => {
     if (!isSubscribed) return;
     try {
-      const res = await fetchWithAuth('/api/chats');
+      const res = await fetchWithAuth('/api/conversations');
       if (res.ok) {
         const data = await res.json();
         if (isSubscribed) callback(data);

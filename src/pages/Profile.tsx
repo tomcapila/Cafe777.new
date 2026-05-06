@@ -49,6 +49,9 @@ export default function Profile() {
     location: '', 
     image_url: '', 
     category: 'road_trip',
+    price: '',
+    price_starting_from: false,
+    external_link: '',
     participation_badge_id: null as number | null,
     participation_stamp_id: null as number | null
   });
@@ -73,7 +76,8 @@ export default function Profile() {
     if (existingChatId) {
       setChatId(existingChatId);
     } else {
-      const newChatId = await createChat(participantIds, 'one-on-one', `${data.type === 'rider' ? data.profile.name : data.profile.company_name}`);
+      const chatName = data.type === 'rider' ? (data.profile?.name || data.username) : (data.profile?.company_name || data.username);
+      const newChatId = await createChat(participantIds, 'one-on-one', chatName);
       setChatId(newChatId);
     }
     setIsChatOpen(true);
@@ -152,7 +156,7 @@ export default function Profile() {
 
   const fetchCreatedBadges = async () => {
     try {
-      const res = await fetchWithAuth(`/api/badges?creator_id=${currentUser.id}`);
+      const res = await fetchWithAuth(`/api/achievements?creator_id=${currentUser.id}`);
       if (res.ok) {
         const data = await res.json();
         setCreatedBadges(data);
@@ -164,7 +168,7 @@ export default function Profile() {
 
   const fetchCreatedStamps = async () => {
     try {
-      const res = await fetchWithAuth(`/api/ambassadors/${currentUser.id}/stamps`);
+      const res = await fetchWithAuth(`/api/ambassadors/${currentUser.id}/passport-tokens`);
       if (res.ok) {
         const data = await res.json();
         setCreatedStamps(data);
@@ -222,7 +226,7 @@ export default function Profile() {
 
   const fetchBadges = async () => {
     try {
-      const res = await fetchWithAuth(`/api/users/${username}/badges`);
+      const res = await fetchWithAuth(`/api/users/${username}/achievements`);
       if (res.ok) {
         const result = await res.json();
         setBadges(result);
@@ -397,19 +401,69 @@ export default function Profile() {
     }
   };
 
+  const [postToDelete, setPostToDelete] = useState<number | null>(null);
+
+  const handleDeletePost = async (postId: number) => {
+    if (!currentUser) return;
+
+    try {
+      const res = await fetchWithAuth(`/api/posts/${postId}`, {
+        method: 'DELETE',
+      });
+
+      if (res.ok) {
+        showNotification('success', t('feed.post.deleteSuccess'));
+        if (data) {
+          setData({ ...data, posts: data.posts.filter((p: any) => p.id !== postId) });
+        }
+      } else {
+        const err = await res.json();
+        showNotification('error', err.error || t('feed.post.deleteFailed'));
+      }
+    } catch (err) {
+      console.error(err);
+      showNotification('error', t('feed.post.deleteError'));
+    } finally {
+      setPostToDelete(null);
+    }
+  };
+
   const handleFollow = async () => {
     if (!currentUser || !data) return;
+    
+    // Optimistic UI update
+    const wasFollowing = data.is_following;
+    const previousFollowers = data.followers_count || 0;
+    
+    setData(prev => prev ? {
+      ...prev,
+      is_following: !wasFollowing,
+      followers_count: wasFollowing ? Math.max(0, previousFollowers - 1) : previousFollowers + 1
+    } : null);
+
     try {
       const res = await fetchWithAuth(`/api/users/${data.id}/follow`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ follower_id: currentUser.id }),
       });
-      if (res.ok) {
-        fetchProfile();
+      if (!res.ok) {
+        // Revert on failure
+        setData(prev => prev ? {
+          ...prev,
+          is_following: wasFollowing,
+          followers_count: previousFollowers
+        } : null);
+        console.error('Follow failed, reverted optimistic update');
       }
     } catch (err) {
       console.error(err);
+      // Revert on exception
+      setData(prev => prev ? {
+        ...prev,
+        is_following: wasFollowing,
+        followers_count: previousFollowers
+      } : null);
     }
   };
 
@@ -457,6 +511,9 @@ export default function Profile() {
           location: '', 
           image_url: '', 
           category: 'road_trip',
+          price: '',
+          price_starting_from: false,
+          external_link: '',
           participation_badge_id: null,
           participation_stamp_id: null
         });
@@ -509,6 +566,9 @@ export default function Profile() {
       location: event.location,
       image_url: event.image_url,
       category: event.category || 'road_trip',
+      price: event.price || '',
+      price_starting_from: !!event.price_starting_from,
+      external_link: event.external_link || '',
       participation_badge_id: event.participation_badge_id,
       participation_stamp_id: event.participation_stamp_id
     });
@@ -584,8 +644,9 @@ export default function Profile() {
     }
   };
 
+  const [motoToDelete, setMotoToDelete] = useState<number | null>(null);
+
   const handleDeleteMoto = async (motoId: number) => {
-    if (!window.confirm(t('profile.confirmDeleteMoto') || 'Are you sure you want to delete this motorcycle?')) return;
     try {
       const res = await fetchWithAuth(`/api/motorcycles/${motoId}`, {
         method: 'DELETE',
@@ -595,6 +656,8 @@ export default function Profile() {
       }
     } catch (err) {
       console.error('Failed to delete motorcycle:', err);
+    } finally {
+      setMotoToDelete(null);
     }
   };
 
@@ -727,7 +790,7 @@ export default function Profile() {
           </Link>
         );
       }
-      return part;
+      return <span key={index}>{part}</span>;
     });
   };
 
@@ -777,7 +840,7 @@ export default function Profile() {
             {/* Avatar */}
             <div className="w-32 h-32 sm:w-48 sm:h-48 rounded-[2rem] border-4 border-asphalt bg-oil overflow-hidden shrink-0 shadow-2xl relative group">
               <img 
-                src={data.profile_picture_url} 
+                src={data.profile_picture_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`} 
                 alt={username} 
                 className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700 scale-110 group-hover:scale-100"
                 referrerPolicy="no-referrer"
@@ -789,7 +852,7 @@ export default function Profile() {
             <div className="flex-1 pb-2">
               <div className="flex flex-wrap items-center gap-3 mb-2">
                 <h1 className="text-4xl sm:text-6xl font-display font-black tracking-tighter uppercase italic leading-none flex items-center gap-3">
-                  {data.profile ? (isRider ? data.profile.name : data.profile.company_name) : data.username}
+                  {data.profile ? (isRider ? data.profile?.name : data.profile?.company_name) : data.username}
                   {data.plan === 'premium' && <PremiumBadge size={24} className="ml-2" />}
                 </h1>
                 {isRider && !data.ambassador && (
@@ -821,6 +884,11 @@ export default function Profile() {
                   <div className="flex items-center gap-1.5">
                     <Calendar className="w-3 h-3 text-steel" />
                     <span className="text-chrome">{data.profile.age} {t('profile.yearsOld')}</span>
+                  </div>
+                )}
+                {isRider && data.profile?.blood_type && (
+                  <div className="flex items-center gap-1.5 ml-2">
+                    <span className="text-primary font-bold text-xs uppercase" title={t('profile.bloodType') || 'Blood Type'}>{data.profile.blood_type}</span>
                   </div>
                 )}
                 <div className="flex items-center gap-4 ml-auto">
@@ -908,7 +976,7 @@ export default function Profile() {
 
             {/* Action Buttons */}
             <div className="flex gap-2 pb-2">
-              {canEdit ? (
+              {canEdit && (
                 <Link 
                   to={`/edit-profile/${username}`} 
                   className="btn-secondary py-2 px-4 text-xs flex items-center gap-2 group"
@@ -916,7 +984,8 @@ export default function Profile() {
                   <Wrench className="w-4 h-4 text-steel group-hover:text-primary transition-colors" />
                   {t('profile.edit')}
                 </Link>
-              ) : (
+              )}
+              {!isOwner && currentUser && (
                 <>
                   <button onClick={handleFollow} className="btn-primary py-2 px-6 text-xs flex items-center gap-2">
                     <Plus className="w-4 h-4" />
@@ -941,7 +1010,7 @@ export default function Profile() {
                         navigate(`/profile/${data.username}`);
                       }}
                     >
-                      {data.profile ? (isRider ? data.profile.name : data.profile.company_name) : data.username}
+                      {data.profile ? (isRider ? data.profile?.name : data.profile?.company_name) : data.username}
                     </h3>
                     <button onClick={() => setIsChatOpen(false)} className="text-steel hover:text-chrome">
                       <X className="w-5 h-5" />
@@ -1267,11 +1336,19 @@ export default function Profile() {
                                   <Edit2 className="w-4 h-4" />
                                 </button>
                                 <button 
-                                  onClick={() => handleDeleteMoto(moto.id)}
-                                  className="p-2 bg-oil/80 backdrop-blur-md rounded-lg border border-inverse/5 text-steel hover:text-error transition-all"
+                                  onClick={() => {
+                                    if (motoToDelete === moto.id) {
+                                      handleDeleteMoto(moto.id);
+                                    } else {
+                                      setMotoToDelete(moto.id);
+                                      setTimeout(() => setMotoToDelete(null), 3000);
+                                    }
+                                  }}
+                                  className={`p-2 backdrop-blur-md rounded-lg border border-inverse/5 transition-all ${motoToDelete === moto.id ? 'bg-red-500/10 text-red-500' : 'bg-oil/80 text-steel hover:text-error'}`}
                                   title={t('profile.deleteMoto') || 'Delete Motorcycle'}
                                 >
                                   <Trash2 className="w-4 h-4" />
+                                  {motoToDelete === moto.id && <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] font-mono text-red-500 bg-red-500/10 px-2 py-1 rounded">{t('common.confirm')}</span>}
                                 </button>
                                 <button 
                                   onClick={() => setActiveMaintenanceMotoId(activeMaintenanceMotoId === moto.id ? null : moto.id)}
@@ -1468,9 +1545,8 @@ export default function Profile() {
                             className="input-field"
                           />
                           <input
-                            type="text"
-                            placeholder={t('profile.eventTimePlaceholder')}
-                            autoCapitalize="sentences"
+                            type="time"
+                            required
                             value={eventData.time || ''}
                             onChange={(e) => setEventData({...eventData, time: e.target.value})}
                             className="input-field"
@@ -1480,6 +1556,39 @@ export default function Profile() {
                             onChange={(value) => setEventData({...eventData, location: value})}
                             placeholder={t('profile.eventLocation')}
                           />
+                          
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between ml-1">
+                              <label className="text-[10px] font-mono font-bold text-steel uppercase tracking-widest">{t('event.field.price')}</label>
+                              <label className="flex items-center gap-1.5 cursor-pointer group">
+                                <input
+                                  type="checkbox"
+                                  checked={eventData.price_starting_from}
+                                  onChange={(e) => setEventData({...eventData, price_starting_from: e.target.checked})}
+                                  className="w-3.5 h-3.5 rounded border-inverse/10 bg-engine/50 text-primary focus:ring-0 focus:ring-offset-0 transition-all cursor-pointer"
+                                />
+                                <span className="text-[9px] font-mono font-bold text-steel group-hover:text-chrome transition-colors uppercase tracking-wider">{t('event.field.priceStartingFrom')}</span>
+                              </label>
+                            </div>
+                            <input
+                              type="text"
+                              placeholder={t('event.modal.pricePlaceholder')}
+                              value={eventData.price || ''}
+                              onChange={(e) => setEventData({...eventData, price: e.target.value})}
+                              className="input-field"
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="block text-[10px] font-mono font-bold text-steel uppercase tracking-widest ml-1">{t('event.field.externalLink')}</label>
+                            <input
+                              type="url"
+                              placeholder={t('event.modal.externalLinkPlaceholder')}
+                              value={eventData.external_link || ''}
+                              onChange={(e) => setEventData({...eventData, external_link: e.target.value})}
+                              className="input-field"
+                            />
+                          </div>
                           
                           <div className="space-y-2">
                             <label className="block text-[10px] font-mono font-bold text-steel uppercase tracking-widest ml-1">{t('event.field.participationBadge')}</label>
@@ -1790,13 +1899,46 @@ export default function Profile() {
                             className="w-full bg-engine border border-inverse/10 rounded-xl py-3 px-4 text-chrome focus:outline-none focus:border-primary transition-all"
                           />
                           <input
-                            type="text"
-                            placeholder={t('event.field.time')}
-                            autoCapitalize="sentences"
+                            type="time"
+                            required
                             value={eventData.time || ''}
                             onChange={(e) => setEventData({...eventData, time: e.target.value})}
                             className="w-full bg-engine border border-inverse/10 rounded-xl py-3 px-4 text-chrome focus:outline-none focus:border-primary transition-all"
                           />
+                          <div className="space-y-4 col-span-full">
+                            <div className="grid sm:grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between ml-1">
+                                  <label className="text-[10px] font-mono font-bold text-steel uppercase tracking-widest">{t('event.field.price')}</label>
+                                  <label className="flex items-center gap-1.5 cursor-pointer group">
+                                    <input
+                                      type="checkbox"
+                                      checked={eventData.price_starting_from}
+                                      onChange={(e) => setEventData({...eventData, price_starting_from: e.target.checked})}
+                                      className="w-3.5 h-3.5 rounded border-inverse/10 bg-engine/50 text-primary focus:ring-0 focus:ring-offset-0 transition-all cursor-pointer"
+                                    />
+                                    <span className="text-[9px] font-mono font-bold text-steel group-hover:text-chrome transition-colors uppercase tracking-wider">{t('event.field.priceStartingFrom')}</span>
+                                  </label>
+                                </div>
+                                <input
+                                  type="text"
+                                  placeholder={t('event.modal.pricePlaceholder')}
+                                  value={eventData.price || ''}
+                                  onChange={(e) => setEventData({...eventData, price: e.target.value})}
+                                  className="w-full bg-engine border border-inverse/10 rounded-xl py-3 px-4 text-chrome focus:outline-none focus:border-primary transition-all"
+                                />
+                              </div>
+                              <div className="space-y-2 pt-5">
+                                <input
+                                  type="url"
+                                  placeholder={t('event.modal.externalLinkPlaceholder')}
+                                  value={eventData.external_link || ''}
+                                  onChange={(e) => setEventData({...eventData, external_link: e.target.value})}
+                                  className="w-full bg-engine border border-inverse/10 rounded-xl py-3 px-4 text-chrome focus:outline-none focus:border-primary transition-all"
+                                />
+                              </div>
+                            </div>
+                          </div>
                           <LocationAutocomplete
                             value={eventData.location}
                             onChange={(value) => setEventData({...eventData, location: value})}
@@ -2000,19 +2142,19 @@ export default function Profile() {
                       }}
                       className="glass-card overflow-hidden group hover:border-inverse/10 transition-all"
                     >
-                      <div className="p-6 sm:p-10">
-                        <div className="flex items-start sm:items-center justify-between mb-8 sm:mb-10 gap-4">
-                          <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-[10px] font-mono font-black uppercase tracking-[0.2em] text-steel">
+                      <div className="p-6 sm:p-8">
+                        <div className="flex items-center justify-between mb-6">
+                          <div className="flex items-center gap-2 text-[10px] font-mono font-black uppercase tracking-widest text-steel">
                             {post.is_pinned_by_owner === 1 && (
                               <div className="flex items-center gap-1 text-primary mr-2">
                                 <Pin className="w-3 h-3 fill-primary" />
                                 <span>{t('profile.pinned')}</span>
                               </div>
                             )}
-                            <Clock className="w-4 h-4" />
+                            <Clock className="w-3 h-3" />
                             <span>{new Date(post.created_at).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}</span>
                             {post.privacy_level === 'followers' && (
-                              <span className="bg-engine text-steel px-2 py-1 rounded ml-2">{t('profile.followersOnly')}</span>
+                              <span className="bg-engine px-2 py-1 rounded ml-2">{t('profile.followersOnly')}</span>
                             )}
                           </div>
                           <button className="text-steel hover:text-chrome transition-colors p-2 hover:bg-inverse/5 rounded-lg">
@@ -2021,122 +2163,131 @@ export default function Profile() {
                         </div>
                         
                         {post.content && (
-                          <p className="text-chrome leading-relaxed whitespace-pre-wrap mb-8 sm:mb-10 font-light text-lg sm:text-2xl break-words">
+                          <p className="text-chrome leading-relaxed whitespace-pre-wrap mb-6 font-light text-lg">
                             {renderPostContent(post.content)}
                           </p>
                         )}
                         
                         {post.image_url && (
-                          <div className="rounded-[2.5rem] overflow-hidden mb-10 border border-inverse/5 shadow-2xl relative group/img">
-                            <img src={post.image_url} alt="" className="w-full aspect-video object-cover grayscale group-hover/img:grayscale-0 transition-all duration-1000 scale-105 group-hover/img:scale-100" referrerPolicy="no-referrer" />
+                          <div className="rounded-3xl overflow-hidden mb-6 border border-inverse/5 shadow-2xl relative group/img cursor-pointer bg-oil/20">
+                            <img src={post.image_url} alt="" className="w-full aspect-video object-cover transition-all duration-1000 scale-105 group-hover/img:scale-100" referrerPolicy="no-referrer" />
                             <div className="absolute inset-0 bg-gradient-to-t from-oil/40 to-transparent opacity-0 group-hover/img:opacity-100 transition-opacity duration-500" />
                           </div>
                         )}
 
                         {post.shared_event_id && (
-                          <Link to={`/events/${post.shared_event_id}`} className="block mb-10 group/event">
-                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-8 p-4 sm:p-6 rounded-[2rem] border border-inverse/10 bg-oil/30 hover:bg-oil/60 hover:border-primary/30 transition-all duration-500 overflow-hidden relative group/card">
-                              <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-500" />
-                              
-                              <div className="w-full sm:w-32 h-48 sm:h-32 shrink-0 rounded-2xl overflow-hidden relative shadow-2xl">
-                                <img src={post.shared_event_image_url} alt={post.shared_event_title} className="w-full h-full object-cover grayscale group-hover/event:grayscale-0 transition-all duration-700 scale-110 group-hover/card:scale-100" referrerPolicy="no-referrer" />
-                                <div className="absolute inset-0 ring-1 ring-inset ring-inverse/10 rounded-2xl" />
+                          <Link to={`/events/${post.shared_event_id}`} className="block mb-6 group/event">
+                            <div className="flex items-center gap-4 p-4 rounded-2xl border border-inverse/10 bg-oil/30 hover:bg-oil/60 hover:border-primary/30 transition-all duration-500 overflow-hidden relative group/card">
+                              <div className="w-20 h-20 shrink-0 rounded-xl overflow-hidden relative shadow-xl bg-oil/20">
+                                <img src={post.shared_event_image_url} alt={post.shared_event_title} className="w-full h-full object-cover grayscale group-hover/event:grayscale-0 transition-all duration-700" referrerPolicy="no-referrer" />
                               </div>
                               
-                              <div className="flex-1 min-w-0 py-2 relative z-10">
-                                <div className="flex items-center gap-3 mb-3">
-                                  <div className="text-[10px] font-mono font-black text-primary uppercase tracking-[0.2em] px-3 py-1 rounded-full bg-primary/10 border border-primary/20">{t('profile.eventLabel')}</div>
-                                  <div className="h-px w-8 bg-inverse/10" />
-                                </div>
+                              <div className="flex-1 min-w-0 py-1">
+                                <div className="text-[9px] font-mono font-black text-primary uppercase tracking-widest mb-1">{t('profile.eventLabel')}</div>
                                 
-                                <h4 className="text-2xl sm:text-3xl font-display font-black uppercase italic tracking-tight text-chrome group-hover/card:text-primary transition-colors duration-500 mb-4 line-clamp-1">
+                                <h4 className="text-lg font-display font-black uppercase italic tracking-tight text-chrome group-hover/card:text-primary transition-colors duration-500 mb-2 line-clamp-1">
                                   {post.shared_event_title}
                                 </h4>
                                 
-                                <div className="flex flex-wrap items-center gap-6 text-steel text-xs font-mono uppercase tracking-widest">
+                                <div className="flex items-center gap-4 text-steel text-[9px] font-mono uppercase tracking-widest">
                                   {post.shared_event_date && (
-                                    <span className="flex items-center gap-2 text-steel">
-                                      <Calendar className="w-4 h-4 text-primary" /> 
+                                    <span className="flex items-center gap-1 text-steel">
+                                      <Calendar className="w-3 h-3 text-primary" /> 
                                       {new Date(post.shared_event_date + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
                                     </span>
                                   )}
                                   {post.shared_event_location && (
-                                    <span className="flex items-center gap-2 truncate max-w-[200px]">
-                                      <MapPin className="w-4 h-4 text-primary" /> 
+                                    <span className="flex items-center gap-1 truncate max-w-[200px]">
+                                      <MapPin className="w-3 h-3 text-primary" /> 
                                       {post.shared_event_location}
                                     </span>
                                   )}
                                 </div>
                               </div>
-                              
-                              <div className="absolute right-8 top-1/2 -translate-y-1/2 opacity-0 group-hover/card:opacity-100 group-hover/card:translate-x-0 translate-x-4 transition-all duration-500">
-                                <ArrowRight className="w-8 h-8 text-primary" />
-                              </div>
+                              <ArrowRight className="w-5 h-5 text-primary opacity-0 group-hover/card:opacity-100 transition-all -translate-x-2 group-hover:translate-x-0" />
                             </div>
                           </Link>
                         )}
 
                         {post.tagged_motorcycle_id && (
-                          <div className="flex items-center gap-3 text-[10px] font-mono font-black text-primary bg-primary/5 px-4 sm:px-6 py-3 sm:py-4 rounded-2xl border border-primary/10 w-fit max-w-full uppercase tracking-[0.2em] italic mt-6">
-                            <Bike className="w-4 h-4 shrink-0" />
+                          <div className="flex items-center gap-2 text-[9px] font-mono font-black text-primary bg-primary/5 px-4 py-2 rounded-xl border border-primary/10 w-fit max-w-full uppercase tracking-widest italic mb-6">
+                            <Bike className="w-3 h-3 shrink-0" />
                             <span className="truncate">{post.year} {post.make} {post.model}</span>
                           </div>
                         )}
                       </div>
                       
-                      <div className="px-6 sm:px-10 py-6 sm:py-8 border-t border-inverse/5 flex flex-wrap items-center gap-6 sm:gap-12 bg-engine/30">
-                        <button 
-                          onClick={() => handleLike(post.id)}
-                          className={`flex items-center gap-3 transition-all group/btn px-4 py-2 rounded-full ${
-                            post.has_liked 
-                              ? 'bg-primary/10 text-primary border border-primary/20' 
-                              : 'text-steel hover:text-primary hover:bg-primary/5 border border-transparent'
-                          }`}
-                        >
-                          <Heart className={`w-5 h-5 transition-all ${post.has_liked ? 'fill-primary' : 'group-hover/btn:fill-primary'}`} />
-                          <div className="flex flex-col items-start leading-none">
-                            <span className="text-[11px] font-mono font-black tracking-widest">{post.likes_count || 0}</span>
-                            <span className="text-[9px] font-mono uppercase tracking-[0.2em] opacity-60">{t('profile.respect')}</span>
-                          </div>
-                        </button>
-                        <button 
-                          onClick={() => toggleComments(post.id)}
-                          className={`flex items-center gap-3 transition-all group/btn px-4 py-2 rounded-full ${
-                            expandedComments[post.id]
-                              ? 'bg-primary/10 text-primary border border-primary/20'
-                              : 'text-steel hover:text-chrome hover:bg-inverse/5 border border-transparent'
-                          }`}
-                        >
-                          <MessageSquare className={`w-6 h-6 transition-all ${expandedComments[post.id] ? 'text-primary' : 'group-hover/btn:text-primary'}`} />
-                          <div className="flex flex-col items-start leading-none">
-                            <span className="text-[11px] font-mono font-black tracking-widest">{post.comment_count || 0}</span>
-                            <span className="text-[9px] font-mono uppercase tracking-[0.2em] opacity-60">{t('profile.comments') || 'Comments'}</span>
-                          </div>
-                        </button>
-                        {canEdit && (
+                      <div className="px-6 py-4 border-t border-inverse/5 flex flex-col bg-engine/30">
+                        <div className="flex items-center gap-8">
                           <button 
-                            onClick={() => handlePin(post.id)}
-                            className={`flex items-center gap-3 transition-all group/btn px-4 py-2 rounded-full ${
-                              post.is_pinned === 1
-                                ? 'bg-primary/10 text-primary border border-primary/20'
+                            onClick={() => handleLike(post.id)}
+                            className={`flex items-center gap-2 transition-all group/btn px-3 py-1.5 rounded-full ${
+                              post.has_liked 
+                                ? 'bg-primary/10 text-primary border border-primary/20' 
                                 : 'text-steel hover:text-primary hover:bg-primary/5 border border-transparent'
                             }`}
-                            title={post.is_pinned === 1 ? t('profile.unpinPost') : t('profile.pinPost')}
                           >
-                            {post.is_pinned === 1 ? (
-                              <PinOff className="w-5 h-5 transition-all fill-primary" />
-                            ) : (
-                              <Pin className={`w-5 h-5 transition-all group-hover/btn:fill-primary`} />
-                            )}
-                            <span className="text-sm font-mono font-black tracking-widest uppercase">
-                              {post.is_pinned === 1 ? t('profile.unpin') : t('profile.pin')}
-                            </span>
+                            <Heart className={`w-4 h-4 transition-all ${post.has_liked ? 'fill-primary' : 'group-hover/btn:fill-primary'}`} />
+                            <div className="flex flex-col items-start leading-none">
+                              <span className="text-[10px] font-mono font-black tracking-widest">{Number.isNaN(Number(post.likes_count)) ? (post.respect_count || 0) : (post.likes_count || post.respect_count || 0)}</span>
+                              <span className="text-[8px] font-mono uppercase tracking-[0.2em] opacity-60">{t('profile.respect')}</span>
+                            </div>
                           </button>
-                        )}
-                        <button className="flex items-center gap-3 text-steel hover:text-chrome transition-all group/btn ml-auto">
-                          <Share2 className="w-6 h-6 group-hover/btn:text-primary transition-all" />
-                        </button>
-                      </div>
+                          <button 
+                            onClick={() => toggleComments(post.id)}
+                            className={`flex items-center gap-2 transition-all group/btn px-3 py-1.5 rounded-full ${
+                              expandedComments[post.id]
+                                ? 'bg-primary/10 text-primary border border-primary/20'
+                                : 'text-steel hover:text-chrome hover:bg-inverse/5 border border-transparent'
+                            }`}
+                          >
+                            <MessageSquare className={`w-5 h-5 transition-all ${expandedComments[post.id] ? 'text-primary' : 'group-hover/btn:text-primary'}`} />
+                            <div className="flex flex-col items-start leading-none">
+                              <span className="text-[10px] font-mono font-black tracking-widest">{post.comment_count || 0}</span>
+                              <span className="text-[8px] font-mono uppercase tracking-[0.2em] opacity-60">{t('profile.comments') || 'Comments'}</span>
+                            </div>
+                          </button>
+                          {canEdit && (
+                            <button 
+                              onClick={() => handlePin(post.id)}
+                              className={`flex items-center gap-2 transition-all group/btn px-3 py-1.5 rounded-full ${
+                                post.is_pinned_by_owner === 1
+                                  ? 'bg-primary/10 text-primary border border-primary/20'
+                                  : 'text-steel hover:text-primary hover:bg-primary/5 border border-transparent'
+                              }`}
+                              title={post.is_pinned_by_owner === 1 ? t('profile.unpinPost') : t('profile.pinPost')}
+                            >
+                              {post.is_pinned_by_owner === 1 ? (
+                                <PinOff className="w-4 h-4 transition-all fill-primary" />
+                              ) : (
+                                <Pin className={`w-4 h-4 transition-all group-hover/btn:fill-primary`} />
+                              )}
+                              <span className="text-[10px] font-mono font-black tracking-widest uppercase">
+                                {post.is_pinned_by_owner === 1 ? t('profile.unpin') : t('profile.pin')}
+                              </span>
+                            </button>
+                          )}
+                          {currentUser && (post.user_id === currentUser.id || currentUser.role === 'admin' || currentUser.role === 'moderator') && (
+                            <button 
+                              onClick={() => {
+                                if (postToDelete === post.id) {
+                                  handleDeletePost(post.id);
+                                } else {
+                                  setPostToDelete(post.id);
+                                  setTimeout(() => setPostToDelete(null), 3000);
+                                }
+                              }}
+                              className={`flex items-center gap-2 transition-all group/btn ml-4 ${postToDelete === post.id ? 'text-red-500' : 'text-steel hover:text-red-500'}`}
+                              title={t('common.delete')}
+                            >
+                              <Trash2 className="w-5 h-5" />
+                              {postToDelete === post.id && <span className="text-[10px] font-mono uppercase tracking-widest text-red-500 hidden sm:inline">{t('common.confirm')}</span>}
+                            </button>
+                          )}
+                          <button className="flex items-center gap-2 text-steel hover:text-chrome transition-all group/btn ml-auto">
+                            <Share2 className="w-5 h-5 group-hover/btn:text-primary transition-all" />
+                          </button>
+                        </div>
 
                       {/* Comments Section */}
                       <AnimatePresence>
@@ -2145,33 +2296,35 @@ export default function Profile() {
                             initial={{ height: 0, opacity: 0 }}
                             animate={{ height: 'auto', opacity: 1 }}
                             exit={{ height: 0, opacity: 0 }}
-                            className="border-t border-inverse/5 bg-oil/20 overflow-hidden"
+                            className="overflow-hidden"
                           >
-                            <div className="p-6 sm:p-10 space-y-8">
+                            <div className="pt-6 space-y-4">
                               {/* Comment Input */}
                               {currentUser && (
-                                <div className="flex gap-4">
-                                  <div className="w-10 h-10 rounded-xl bg-engine shrink-0 overflow-hidden border border-inverse/5">
-                                    <img src={currentUser.profile_picture_url} alt="" className="w-full h-full object-cover" />
+                                <div className="flex gap-3">
+                                  <div className="w-8 h-8 rounded-full bg-oil border border-inverse/10 overflow-hidden shrink-0">
+                                    {currentUser.profile_picture_url ? (
+                                      <img src={currentUser.profile_picture_url} alt={currentUser.username} className="w-full h-full object-cover" />
+                                    ) : (
+                                      <div className="w-full h-full flex items-center justify-center text-steel font-bold uppercase text-[10px]">
+                                        {currentUser.username.charAt(0)}
+                                      </div>
+                                    )}
                                   </div>
                                   <div className="flex-1 relative">
-                                    <textarea
+                                    <input
+                                      type="text"
+                                      autoCapitalize="sentences"
                                       value={newComment[post.id] || ''}
                                       onChange={(e) => setNewComment(prev => ({ ...prev, [post.id]: e.target.value }))}
+                                      onKeyDown={(e) => e.key === 'Enter' && handleAddComment(post.id)}
                                       placeholder={t('feed.writeComment') || "Write a comment..."}
-                                      className="w-full bg-engine/50 border border-inverse/10 rounded-2xl py-3 px-4 text-sm text-chrome placeholder:text-steel focus:outline-none focus:border-primary/50 transition-all resize-none"
-                                      rows={1}
-                                      onKeyDown={(e) => {
-                                        if (e.key === 'Enter' && !e.shiftKey) {
-                                          e.preventDefault();
-                                          handleAddComment(post.id);
-                                        }
-                                      }}
+                                      className="w-full bg-oil/50 border border-inverse/5 rounded-xl px-4 py-2 text-sm text-chrome placeholder:text-steel focus:border-primary/50 transition-all outline-none pr-10"
                                     />
-                                    <button
+                                    <button 
                                       onClick={() => handleAddComment(post.id)}
                                       disabled={isCommenting[post.id] || !newComment[post.id]?.trim()}
-                                      className="absolute right-2 bottom-2 p-1.5 text-primary hover:text-accent disabled:opacity-50 transition-colors"
+                                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-primary hover:text-chrome disabled:opacity-50 transition-colors"
                                     >
                                       <Send className="w-4 h-4" />
                                     </button>
@@ -2180,39 +2333,45 @@ export default function Profile() {
                               )}
 
                               {/* Comments List */}
-                              <div className="space-y-6">
+                              <div className="space-y-4 max-h-64 overflow-y-auto no-scrollbar">
                                 {commentLoading[post.id] ? (
                                   <div className="flex justify-center py-4">
-                                    <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                                    <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                                   </div>
                                 ) : postComments[post.id]?.length > 0 ? (
                                   postComments[post.id].map((comment: any) => (
-                                    <div key={comment.id} className="flex gap-4 group/comment">
+                                    <div key={comment.id} className="flex gap-3 group/comment">
                                       <Link to={`/profile/${comment.username}`} className="shrink-0">
-                                        <div className="w-10 h-10 rounded-xl bg-engine overflow-hidden border border-inverse/5 group-hover/comment:border-primary/30 transition-colors">
-                                          <img src={comment.profile_picture_url} alt="" className="w-full h-full object-cover" />
+                                        <div className="w-8 h-8 rounded-full bg-oil border border-inverse/10 overflow-hidden">
+                                          {comment.profile_picture_url ? (
+                                            <img src={comment.profile_picture_url} alt={comment.username} className="w-full h-full object-cover" />
+                                          ) : (
+                                            <div className="w-full h-full flex items-center justify-center text-steel font-bold uppercase text-[10px]">
+                                              {comment.username.charAt(0)}
+                                            </div>
+                                          )}
                                         </div>
                                       </Link>
-                                      <div className="flex-1 space-y-1">
-                                        <div className="flex items-center justify-between">
-                                          <Link to={`/profile/${comment.username}`} className="text-xs font-mono font-black text-chrome hover:text-primary transition-colors uppercase tracking-widest">
-                                            {comment.name || comment.username}
-                                          </Link>
-                                          <span className="text-[9px] font-mono text-steel uppercase">
-                                            {new Date(comment.created_at).toLocaleDateString()}
-                                          </span>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="bg-oil/50 rounded-2xl px-4 py-2 border border-inverse/5">
+                                          <div className="flex items-center justify-between mb-0.5">
+                                            <Link to={`/profile/${comment.username}`} className="text-xs font-bold text-chrome hover:text-primary transition-colors flex items-center gap-1.5">
+                                              {comment.username}
+                                            </Link>
+                                            <span className="text-[8px] font-mono text-steel uppercase tracking-widest">
+                                              {new Date(comment.created_at).toLocaleDateString()}
+                                            </span>
+                                          </div>
+                                          <p className="text-sm text-chrome font-light leading-relaxed">
+                                            {comment.content}
+                                          </p>
                                         </div>
-                                        <p className="text-sm text-steel leading-relaxed">
-                                          {comment.content}
-                                        </p>
                                       </div>
                                     </div>
                                   ))
                                 ) : (
-                                  <div className="text-center py-8">
-                                    <p className="text-xs font-mono text-steel uppercase tracking-widest opacity-40">
-                                      {t('feed.noComments') || "No comments yet"}
-                                    </p>
+                                  <div className="text-center py-4">
+                                    <p className="text-[10px] font-mono text-steel uppercase tracking-widest">{t('feed.noComments') || "No comments yet"}</p>
                                   </div>
                                 )}
                               </div>
@@ -2220,6 +2379,7 @@ export default function Profile() {
                           </motion.div>
                         )}
                       </AnimatePresence>
+                      </div>
                     </motion.article>
                   ))
                 ) : (
@@ -2743,7 +2903,7 @@ function EventCard({ event, onRSVP, onEdit, isOwner, currentUsername, hasRSVPd, 
           </div>
           <div className="flex items-center gap-2.5 text-primary">
             <Users className="w-3.5 h-3.5" />
-            <span>{event.rsvp_count || 0} {t('profile.rsvps')}</span>
+            <span>{ (event.rsvp_count || 0) + 1 } { ((event.rsvp_count || 0) + 1) === 1 ? t('event.details.riderAttending') : t('event.details.ridersAttending') }</span>
           </div>
         </div>
       </div>

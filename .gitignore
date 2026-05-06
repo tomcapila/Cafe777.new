@@ -9,3 +9,4 @@ coverage/
 *.db
 *.sqlite
 public/uploads/
+serviceAccountKey.json
