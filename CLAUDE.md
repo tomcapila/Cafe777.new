@@ -27,6 +27,7 @@ Most write paths touch **both** libsql (SQLite) and Firestore. SQLite is the pri
 - `authenticateToken` middleware reads SQLite first, falls back to Firestore. JWTs are signed with `JWT_SECRET` (dev default if unset).
 - **`PRAGMA foreign_keys = OFF` is intentional** (server.ts ~line 194). Turso enforces FKs by default but better-sqlite3 did not, and this codebase's INSERT/DELETE ordering was not written to satisfy them. Do not enable FKs.
 - `db.transaction` is monkey-patched (~line 199) to work around a libsql 0.5.x bug where ROLLBACK failure swallows the original error. Use the patched version, not raw `BEGIN`/`COMMIT`.
+- **libsql runs in REMOTE mode, not embedded-replica.** When `TURSO_DB_URL` is set, `new Database(tursoUrl, { authToken })` opens a direct connection — there is no local `cafe777.db` replica. Embedded replicas were tried and abandoned because writes diverged from Turso under FK pressure: the local replica would apply two writes, Turso would reject the second (FK or constraint), and a subsequent sync would revert both locally, leaving orphan rows from earlier failed attempts. Remote mode trades ~50ms per query for correctness. Local-only mode (no `TURSO_DB_URL`) still uses a `cafe777.db` file for dev without Turso.
 
 ### Client-side offline layer
 `src/services/db.ts` defines a Dexie (IndexedDB) schema `Cafe777OfflineDB` with `users`, `sessions`, `profiles`, `sync_queue`. `src/services/syncEngine.ts` is a skeleton — `processItem` is mocked and does **not** actually POST to the backend yet. Treat the offline path as partially built.
@@ -62,3 +63,53 @@ See `.env.example`. The non-obvious ones:
 - Many root-level `replace_*.cjs` and `fix_*.ts` files are one-shot codemods that have already been applied. Treat them as history, not active tools.
 - `cafe777.db`, `cafe777.db-shm`, `cafe777.db-wal`, `cafe777.db-info` are the local Turso replica artifacts — they appear modified in `git status` because `*.db` is gitignored but the `-shm`/`-wal`/`-info` siblings are not always covered. Don't commit them.
 - Numeric user IDs come from SQLite `AUTOINCREMENT`; Firestore stores the same user under `users/<id-as-string>`. When crossing the two, always `.toString()` for Firestore and parse back to number for SQLite.
+
+## Conventions
+
+### Design tokens (Tailwind v4 + CSS variables)
+The theme is defined in `src/index.css` via `@theme` and CSS variables, with `.dark` on `<html>` toggling dark mode (managed by `ThemeContext`, persisted to `localStorage.theme`). The motorcycle-themed color tokens are: `primary`, `accent`, `chrome`, `steel`, `asphalt`, `carbon`, `engine`, `oil`, `inverse`, plus standard `error`/`success`/`info`/`warning`. Light mode is a beige/red palette; dark mode is the original orange/black. **Always use these tokens, not raw hex values or default Tailwind colors** — the `replace_*.cjs` codemods in the repo exist precisely because raw colors were swept out.
+
+Reusable component classes in the `@layer components` block: `glass-card`, `btn-primary`, `btn-secondary`, `input-field`, `badge-primary`, `badge-chrome`, `no-scrollbar`, plus utilities `grid-pattern` and `mask-linear-fade`. Fonts: `font-sans` (Inter), `font-display` (Space Grotesk, used for headings), `font-mono` (JetBrains Mono).
+
+### i18n
+Default language is **`pt`** (Portuguese), not English. `useLanguage()` exposes `t(key, params?)` where params interpolate as `{name}`. All ~700 translation keys live inline in `src/contexts/LanguageContext.tsx` — add new ones there (both `en` and `pt`). Missing keys log a warning and fall through to the key name.
+
+### User feedback
+For toasts/snackbars, use `useNotification().showNotification(type, message)` with type `'success' | 'error' | 'info' | 'warning'`. They auto-dismiss after 5s and stack in the bottom-right. **Don't use `alert()`, `confirm()`, or ad-hoc toast components.**
+
+### Roles and permissions
+DB roles: `user` / `admin` / `moderator`. Plans: `freemium` / `premium`.
+- `authenticateToken` → attaches `req.user`.
+- `checkAdmin` → admin **or** moderator (used after `authenticateToken`).
+- `checkAmbassador` → must have active `ambassadors` row (SQLite or Firestore), admins/moderators also pass.
+- Every admin write must call `logAdminAction(req.user.id, 'ACTION_NAME', targetType, targetId, details?)` — writes to the `admin_logs` SQLite table.
+
+### Feature gating
+The `settings` table holds rows with keys like `feature_create_event` and value `freemium` or `premium`. Client reads them from `GET /api/f-access` via `useFeatureAccess()`. Use `canAccess(feature, userPlan, userRole, userType?)` — admins always pass. Special case hardcoded: `create_event` for `ecosystem` users always requires `premium`.
+
+### Schema migrations
+There are **48 inline `CREATE TABLE IF NOT EXISTS`** and **53 inline `try { ALTER TABLE ... ADD COLUMN ... } catch {}`** blocks in `server.ts` startup. Follow this pattern — do not introduce a migration framework. New columns are added by appending another `try/catch` block.
+
+### Background jobs
+`setInterval(checkContests, 60000)` runs at module load (~line 1449), picks contest winners whose `end_date` has passed, and awards prizes. It runs in **every** server instance — keep this in mind if scaling horizontally (you'd get duplicate winner picks).
+
+### Realtime is polling, not subscriptions
+Chat messages use `setInterval(fetchMessages, 3000)` in `subscribeToMessages` (`src/services/messagingService.ts`) — a 3-second REST poll. Despite Firestore being available client-side via `src/services/firebase.ts`, no `onSnapshot` listeners are wired up. New realtime features should follow the polling pattern unless explicitly migrating to Firestore listeners.
+
+### Rate limits and body size
+- `/api/*` global: 1000 req / 15 min per IP.
+- `/api/login`, `/api/register`, `/api/forgot-password`, `/api/reset-password`: 10 req / hour per IP.
+- `express.json` and `express.urlencoded` are capped at **10MB**.
+- Image uploads: 10MB, allowlist `jpe?g|png|gif|webp|avif|heic|heif|jfif` on **both** extension and MIME.
+
+### Capacitor / mobile
+Only `@capacitor/network` is actually consumed (`src/hooks/useNetwork.ts`), which triggers `SyncEngine.sync()` when connectivity returns. The sync engine itself is a stub (see Architecture). `@capacitor/splash-screen` and `@capacitor/android` are wired but unused in TS code.
+
+### Gemini AI
+`@google/genai` is in `package.json` and `GEMINI_API_KEY` is exposed via Vite `define`, but **no source file imports or uses it yet**. Don't assume AI features exist — they're scaffolding.
+
+### OSM Overpass quirks
+`fetchOSMPlaces` (`src/services/osmService.ts`) caps radius at **5km** regardless of input — larger queries time out on public Overpass instances. Results are cached in-memory for 15 minutes, keyed by `lat.toFixed(3),lng.toFixed(3),radius`. The `mapCategory()` function is the canonical mapping from OSM tags to app categories (`parts_store`, `repair`, `biker_cafe`, `biker_bar`, `ride_stop`, `meeting_spot`, `motoclub`, `gear_shop`).
+
+### Profile redirect pattern
+`/profile` (no username) reads `localStorage.user` and redirects to `/profile/:username` or `/login`. See `ProfileRedirect` in `App.tsx`. Use the same pattern for any new "current user" landing route.
