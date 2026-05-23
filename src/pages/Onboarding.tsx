@@ -127,7 +127,8 @@ export default function Onboarding() {
 
   useEffect(() => {
     const handleMessage = (e: MessageEvent) => {
-      if (!e.origin.includes('localhost') && !e.origin.endsWith('.run.app')) return;
+      // The /auth/callback page is always served from this origin, so only same-origin messages are valid.
+      if (e.origin !== window.location.origin) return;
       if (e.data?.type === 'OAUTH_AUTH_SUCCESS' && e.data?.credential) {
         handleGoogleResponse({ credential: e.data.credential });
       }

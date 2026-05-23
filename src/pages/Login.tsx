@@ -87,9 +87,9 @@ export default function Login() {
 
   useEffect(() => {
     const handleMessage = (e: MessageEvent) => {
-      // Validate origin strictly matching dev and preview bounds
-      if (!e.origin.includes('localhost') && !e.origin.endsWith('.run.app')) return;
-      
+      // The /auth/callback page is always served from this origin, so only same-origin messages are valid.
+      if (e.origin !== window.location.origin) return;
+
       if (e.data?.type === 'OAUTH_AUTH_SUCCESS' && e.data?.credential) {
         handleGoogleResponse({ credential: e.data.credential });
       }
