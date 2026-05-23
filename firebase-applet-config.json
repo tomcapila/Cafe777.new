@@ -1,10 +1,10 @@
 {
-  "projectId": "gen-lang-client-0159130172",
-  "appId": "1:527206804667:web:083ddf2f52c947b093cd9e",
-  "apiKey": "AIzaSyAnDCR8O8Ce2D8nTuaDbUm2CfMN0o80x1I",
-  "authDomain": "gen-lang-client-0159130172.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-885387b2-7414-4986-9edc-d7fba55ba586",
-  "storageBucket": "gen-lang-client-0159130172.firebasestorage.app",
-  "messagingSenderId": "527206804667",
-  "measurementId": ""
+  "projectId": "cafe777-new",
+  "appId": "1:1040160100859:web:398f87cccbdeb234267b5e",
+  "apiKey": "AIzaSyCSOeBgCmF3XnNZbGnS7yRG0ZR3oQDIf1M",
+  "authDomain": "cafe777-new.firebaseapp.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "cafe777-new.firebasestorage.app",
+  "messagingSenderId": "1040160100859",
+  "measurementId": "G-MHXNXKPPJ2"
 }

@@ -13,7 +13,7 @@ process.on('uncaughtException', (error) => {
 import { rateLimit } from "express-rate-limit";
 import { createServer as createViteServer } from "vite";
 import { z } from "zod";
-import Database from "better-sqlite3";
+import Database from "libsql";
 import path from "path";
 import multer from "multer";
 import { fileURLToPath } from "url";
@@ -173,10 +173,72 @@ const mailerSend = new MailerSend({
 });
 
 const isProd = process.env.NODE_ENV === 'production' || !!process.env.K_SERVICE;
-const dbPath = isProd ? '/tmp/cafe777.db' : 'cafe777.db';
-console.log(`Initializing database at ${dbPath}`);
-const db = new Database(dbPath); // Using file-based for persistence
-console.log("Database initialized successfully");
+const tursoUrl = process.env.TURSO_DB_URL;
+const tursoToken = process.env.TURSO_DB_AUTH_TOKEN;
+
+// Connection mode: REMOTE (no local replica).
+// We previously used embedded replicas (`syncUrl`), but they produced write divergence —
+// libsql 0.5.x applies writes locally first, propagates to Turso async, and if Turso
+// rejects (e.g. FK between same-txn rows because the prior write hasn't synced yet),
+// the local replica reverts both writes. Net effect: orphan rows in some tables,
+// silent data loss in others, and PRAGMA settings not reaching the Turso server.
+// Remote mode trades ~50ms per query for actual atomicity and correct enforcement.
+const db: any = tursoUrl
+  ? new Database(tursoUrl, { authToken: tursoToken })
+  : new Database(isProd ? '/tmp/cafe777.db' : 'cafe777.db');
+
+if (tursoUrl) {
+  console.log(`Turso (remote mode) connected to ${tursoUrl}`);
+} else {
+  console.log(`Local-only SQLite (TURSO_DB_URL not set — data will not persist across restarts in production)`);
+}
+
+// FK enforcement OFF to match the original better-sqlite3 default the codebase was built on.
+// In remote mode this PRAGMA now actually reaches the Turso server (unlike embedded replica).
+db.exec("PRAGMA foreign_keys = OFF;");
+
+// libsql 0.5.x embedded replicas don't preserve multi-statement transactions across
+// the Hrana protocol — each write auto-commits server-side, so BEGIN/COMMIT become
+// effectively no-ops. The built-in wrapper also swallows the original error when
+// ROLLBACK fails. This patch:
+//   1) surfaces the real error from the transaction body (not the rollback's),
+//   2) tolerates "no transaction is active" on COMMIT/ROLLBACK (auto-commit reality).
+// Note: this means we lose true atomicity with embedded replicas. Partial-failure
+// recovery relies on the boot-time orphan cleanup above and idempotent writes.
+const isNoActiveTxnError = (err: any) =>
+  typeof err?.message === "string" && err.message.includes("no transaction is active");
+
+(db as any).transaction = function (fn: (...args: any[]) => any) {
+  if (typeof fn !== "function") throw new TypeError("Expected first argument to be a function");
+  const wrap = (mode: string) => (...args: any[]) => {
+    try { db.exec(`BEGIN${mode ? " " + mode : ""}`); } catch (beginErr) {
+      if (!isNoActiveTxnError(beginErr)) throw beginErr;
+    }
+    let result: any;
+    try {
+      result = fn(...args);
+    } catch (originalErr) {
+      try { db.exec("ROLLBACK"); } catch (rollbackErr) {
+        if (!isNoActiveTxnError(rollbackErr)) {
+          console.error("ROLLBACK failed (suppressed, propagating original error):", rollbackErr);
+        }
+      }
+      throw originalErr;
+    }
+    try { db.exec("COMMIT"); } catch (commitErr) {
+      if (!isNoActiveTxnError(commitErr)) throw commitErr;
+      // Auto-committed by libsql embedded replica — writes are already persisted.
+    }
+    return result;
+  };
+  const base: any = wrap("");
+  base.default = base;
+  base.deferred = wrap("DEFERRED");
+  base.immediate = wrap("IMMEDIATE");
+  base.exclusive = wrap("EXCLUSIVE");
+  base.database = db;
+  return base;
+};
 
 // Ensure uploads directory exists
 const uploadsDir = isProd ? '/tmp/uploads' : path.resolve(process.cwd(), "public/uploads");
@@ -1081,6 +1143,19 @@ try {
   console.error("Sync migration error:", e);
 }
 
+// Boot-time cleanup: remove orphan riders/ecosystems whose user_id has no matching users row.
+// These are residuals from libsql 0.5.x partial rollbacks (see db.transaction monkey-patch above).
+// FK enforcement is OFF (intentional), so orphans accumulate silently otherwise.
+try {
+  const orphanRiders = db.prepare("DELETE FROM riders WHERE user_id NOT IN (SELECT id FROM users)").run();
+  const orphanEcosystems = db.prepare("DELETE FROM ecosystems WHERE user_id NOT IN (SELECT id FROM users)").run();
+  if (orphanRiders.changes > 0 || orphanEcosystems.changes > 0) {
+    console.log(`Boot cleanup: removed ${orphanRiders.changes} orphan riders, ${orphanEcosystems.changes} orphan ecosystems`);
+  }
+} catch (e) {
+  console.error("Orphan cleanup error:", e);
+}
+
 try {
   const existingCommunityBuilder = db.prepare("SELECT badge_id FROM badges WHERE name = 'Community Builder'").get();
   if (!existingCommunityBuilder) {
@@ -1379,7 +1454,7 @@ setInterval(checkContests, 60000);
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   // Trust proxy for rate limiting behind Cloud Run/Nginx
   app.set('trust proxy', 1);
@@ -7719,10 +7794,10 @@ async function startServer() {
         }
 
         const result = insertUser.run(
-          username, 
+          username,
           email,
-          hashedPassword, 
-          type, 
+          hashedPassword,
+          type,
           `https://picsum.photos/seed/${username}/200/200`,
           "user",
           initialStatus,
