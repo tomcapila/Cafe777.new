@@ -1241,21 +1241,22 @@ const insertBadge = db.prepare("INSERT INTO badges (name, description, icon, cat
 const insertUserBadge = db.prepare("INSERT INTO user_badges (user_id, badge_id, awarded_by) VALUES (?, ?, ?)");
 const insertAmbassador = db.prepare("INSERT INTO ambassadors (user_id, category, reputation_score, is_active) VALUES (?, ?, ?, ?)");
 
-db.transaction(() => {
-  const userCount = (db.prepare("SELECT COUNT(*) as count FROM users").get() as any).count;
-  if (userCount > 0) return;
+// Default app settings (idempotent). Always runs.
+([
+  ["fullscreen_enabled", "true"],
+  ["feature_create_event", "freemium"],
+  ["feature_promote_event", "premium"],
+  ["feature_create_motoclub", "premium"],
+  ["feature_promote_photo_contest", "premium"],
+  ["photo_contest_enabled", "true"],
+  ["photo_contest_allowed_types", JSON.stringify(['premium'])],
+  ["api_google_maps", "true"],
+  ["api_osm", "true"],
+] as [string, string][]).forEach(([k, v]) => insertSetting.run(k, v));
 
-  // Default Settings
-  insertSetting.run("fullscreen_enabled", "true");
-  insertSetting.run("feature_create_event", "freemium");
-  insertSetting.run("feature_promote_event", "premium");
-  insertSetting.run("feature_create_motoclub", "premium");
-  insertSetting.run("feature_promote_photo_contest", "premium");
-  insertSetting.run("photo_contest_enabled", "true");
-  insertSetting.run("photo_contest_allowed_types", JSON.stringify(['premium']));
-  insertSetting.run("api_google_maps", "true");
-  insertSetting.run("api_osm", "true");
-  
+// Mock seed (28+ users, 50 ecosystems, motos with "Oil Change" logs, etc.)
+// disabled. Real data only — comes from /api/register and /api/auth/google.
+if (false as boolean) {
   // --- TEST USERS ---
   // 1. Normal Rider
   const tr = insertUser.run("test_rider", "rider@test.com", "password123", "rider", "https://picsum.photos/seed/test_rider/200/200", "user", "active", "TESTRIDER", null, "freemium", 0, "Test Rider", "New York", "I love riding!", "Honda CB500X", null, null, null, null, "TESTRIDER").lastInsertRowid;
@@ -1426,7 +1427,7 @@ db.transaction(() => {
   insertRoute.run("rt_9922", "Pacific Coast Highway - Big Sur", 120.5, "hard", 98.2, JSON.stringify(["scenic", "coastal", "legendary"]), JSON.stringify([[36.2704, -121.8081], [36.2500, -121.7800], [35.8561, -121.3262]]), 36.2704, -121.8081, 70, 50, 100, 60, 95);
   insertRoute.run("rt_9923", "Tail of the Dragon", 17.7, "hard", 99.5, JSON.stringify(["twisty", "legendary", "mountain"]), JSON.stringify([[35.4761, -83.9205], [35.5000, -83.9500], [35.5261, -83.9805]]), 35.4761, -83.9205, 100, 80, 70, 20, 100);
   insertRoute.run("rt_9924", "Hidden Valley Run", 45.2, "easy", 82.4, JSON.stringify(["hidden", "forest"]), JSON.stringify([[40.7128, -74.0060], [40.7200, -74.0100], [40.7300, -74.0200]]), 40.7128, -74.0060, 60, 40, 85, 10, 15);
-})();
+}
 
 const updateAmbassadorReputation = async (userId: number | string) => {
   try {
@@ -3795,6 +3796,66 @@ async function startServer() {
       } catch (sqe) {
         res.status(500).json({ error: error.message });
       }
+    }
+  });
+
+  app.get("/api/trending-routes", async (req, res) => {
+    const limit = Math.min(parseInt(req.query.limit as string) || 5, 20);
+    try {
+      const routes = db.prepare(
+        "SELECT id, name, distance_km, difficulty, road_score, popularity FROM discovered_routes ORDER BY popularity DESC, road_score DESC LIMIT ?"
+      ).all(limit) as any[];
+      res.json(routes.map((r) => ({
+        id: r.id,
+        name: r.name,
+        distance_km: r.distance_km,
+        difficulty: r.difficulty,
+        road_score: r.road_score,
+      })));
+    } catch (err: any) {
+      console.error("trending-routes failed:", err.message);
+      res.json([]);
+    }
+  });
+
+  app.get("/api/nearby-pit-stops", async (req, res) => {
+    const limit = Math.min(parseInt(req.query.limit as string) || 6, 20);
+    const lat = parseFloat(req.query.lat as string);
+    const lng = parseFloat(req.query.lng as string);
+    const bikerCategories = ["biker_cafe", "biker_bar", "ride_stop", "meeting_spot", "motoclub", "repair", "gear_shop"];
+    try {
+      const cats = bikerCategories.map(() => "?").join(",");
+      let rows: any[];
+      if (!isNaN(lat) && !isNaN(lng)) {
+        // Rough distance ordering via squared-deg (good enough for "nearby").
+        rows = db.prepare(
+          `SELECT place_id, name, lat, lng, category, full_address,
+                  ((lat - ?) * (lat - ?) + (lng - ?) * (lng - ?)) AS dist_sq
+           FROM places_cache
+           WHERE category IN (${cats})
+           ORDER BY dist_sq ASC
+           LIMIT ?`
+        ).all(lat, lat, lng, lng, ...bikerCategories, limit) as any[];
+      } else {
+        rows = db.prepare(
+          `SELECT place_id, name, lat, lng, category, full_address
+           FROM places_cache
+           WHERE category IN (${cats})
+           ORDER BY (rating * reviews) DESC
+           LIMIT ?`
+        ).all(...bikerCategories, limit) as any[];
+      }
+      res.json(rows.map((r) => ({
+        id: r.place_id,
+        name: r.name,
+        category: r.category,
+        full_address: r.full_address,
+        lat: r.lat,
+        lng: r.lng,
+      })));
+    } catch (err: any) {
+      console.error("nearby-pit-stops failed:", err.message);
+      res.json([]);
     }
   });
 

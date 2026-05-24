@@ -657,10 +657,11 @@ const translations: Translations = {
   'myEvents.noEventsDesc': { en: 'You haven\'t created or RSVP\'d to any events.', pt: 'Você ainda não criou nem confirmou presença em nenhum evento.' },
   'myEvents.browse': { en: 'Browse Events', pt: 'Ver Eventos' },
 
+    // About Page
   'about.title': { en: 'About', pt: 'Sobre o' },
   'about.subtitle': { en: 'Connecting riders, businesses, and motorcycle culture worldwide.', pt: 'Conectando motociclistas, empresas e a cultura da motocicleta no mundo todo.' },
   'about.ourMission': { en: 'Our Mission', pt: 'Nossa Missão' },
-  'about.missionText': { en: 'CAFE777 was built for the rider. We believe the motorcycle community deserves a dedicated, modern platform where enthusiasts can log rides, join clubs, find the best scenic routes, and connect with mechanics, gear shops, and cafes. We bridge the gap between individual riders and the wider motorcycle ecosystem.', pt: 'O CAFE777 foi construído para o motociclista. Acreditamos que a comunidade merece uma plataforma dedicada e moderna, onde os entusiastas possam registrar passeios, entrar em clubes, encontrar as melhores rotas cênicas e se conectar com mecânicos, lojas de equipamentos e cafés. Preenchemos a lacuna entre os pilotos individuais e o ecossistema mais amplo de motocicletas.' },
+  'about.missionText': { en: 'CAFE777 is being built for motorcyclists and by motorcyclists. We believe the motorcycle community deserves a dedicated, modern platform where enthusiasts can log rides, join clubs, find the best scenic routes, and connect with mechanics, gear shops, and cafes. We bridge the gap between individual riders and the wider motorcycle ecosystem.', pt: 'O CAFE777 está sendo construído para os motociclistas e por motociclistas. Acreditamos que a comunidade merece uma plataforma dedicada e moderna, onde os entusiastas possam registrar passeios, entrar em clubes, encontrar as melhores rotas cênicas e se conectar com mecânicos, lojas de equipamentos e cafés. Preenchemos a lacuna entre os pilotos individuais e o ecossistema mais amplo de motocicletas.' },
   'about.whatWeDo': { en: 'What We Do', pt: 'O Que Fazemos' },
   'about.feat1.title': { en: 'Route Discovery', pt: 'Descoberta de Rotas' },
   'about.feat1.desc': { en: 'Find, rate, and share the most epic rides in your country.', pt: 'Encontre, avalie e compartilhe os passeios mais épicos no seu país.' },

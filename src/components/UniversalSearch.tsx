@@ -18,8 +18,40 @@ export default function UniversalSearch() {
     riders: [],
     locations: []
   });
+  const [trendingRoutes, setTrendingRoutes] = useState<any[]>([]);
+  const [nearbyPitStops, setNearbyPitStops] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!isFocused) return;
+    let cancelled = false;
+
+    fetchWithAuth('/api/trending-routes?limit=3')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => { if (!cancelled) setTrendingRoutes(Array.isArray(data) ? data : []); })
+      .catch(() => { if (!cancelled) setTrendingRoutes([]); });
+
+    const loadPitStops = (lat?: number, lng?: number) => {
+      const qs = lat !== undefined && lng !== undefined ? `&lat=${lat}&lng=${lng}` : '';
+      fetchWithAuth(`/api/nearby-pit-stops?limit=3${qs}`)
+        .then((r) => (r.ok ? r.json() : []))
+        .then((data) => { if (!cancelled) setNearbyPitStops(Array.isArray(data) ? data : []); })
+        .catch(() => { if (!cancelled) setNearbyPitStops([]); });
+    };
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => loadPitStops(pos.coords.latitude, pos.coords.longitude),
+        () => loadPitStops(),
+        { timeout: 3000, maximumAge: 60000 }
+      );
+    } else {
+      loadPitStops();
+    }
+
+    return () => { cancelled = true; };
+  }, [isFocused]);
 
   // Dynamic placeholder based on time of day
   const getPlaceholder = () => {
@@ -184,41 +216,56 @@ export default function UniversalSearch() {
                     </button>
                   </div>
 
-                  <div>
-                    <h3 className="text-xs font-mono font-bold text-steel uppercase tracking-widest mb-3 flex items-center gap-2">
-                      <TrendingUp className="w-3 h-3" /> Trending Twisties
-                    </h3>
-                    <div className="space-y-2">
-                      {['Tail of the Dragon', 'Pacific Coast Highway', 'Angeles Crest'].map((route, i) => (
-                        <button key={i} onClick={() => setSearchQuery(route)} className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-inverse/5 transition-colors group">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-                              <Route className="w-4 h-4" />
+                  {trendingRoutes.length > 0 && (
+                    <div>
+                      <h3 className="text-xs font-mono font-bold text-steel uppercase tracking-widest mb-3 flex items-center gap-2">
+                        <TrendingUp className="w-3 h-3" /> Trending Twisties
+                      </h3>
+                      <div className="space-y-2">
+                        {trendingRoutes.map((route: any) => (
+                          <button
+                            key={route.id}
+                            onClick={() => { setIsFocused(false); navigate(`/roads?routeId=${route.id}`); }}
+                            className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-inverse/5 transition-colors group"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                                <Route className="w-4 h-4" />
+                              </div>
+                              <div className="flex flex-col items-start">
+                                <span className="text-sm text-chrome font-medium group-hover:text-primary transition-colors">{route.name}</span>
+                                <span className="text-[10px] text-steel font-mono">{route.distance_km}km • {route.difficulty}</span>
+                              </div>
                             </div>
-                            <span className="text-sm text-chrome font-medium group-hover:text-primary transition-colors">{route}</span>
-                          </div>
-                          <ChevronRight className="w-4 h-4 text-steel opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </button>
-                      ))}
+                            <ChevronRight className="w-4 h-4 text-steel opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
-                  <div>
-                    <h3 className="text-xs font-mono font-bold text-steel uppercase tracking-widest mb-3 flex items-center gap-2">
-                      <MapPin className="w-3 h-3" /> Pit Stops Near You
-                    </h3>
-                    <div className="flex gap-3 overflow-x-auto pb-2 custom-scrollbar">
-                      {['Ace Cafe', 'Deus Ex Machina', 'Iron Horse Saloon'].map((stop, i) => (
-                        <button key={i} onClick={() => setSearchQuery(stop)} className="shrink-0 w-32 p-3 rounded-xl bg-inverse/5 hover:bg-inverse/10 transition-colors text-left border border-inverse/5">
-                          <div className="w-full h-20 rounded-lg bg-engine mb-2 flex items-center justify-center">
-                            <MapPin className="w-6 h-6 text-steel" />
-                          </div>
-                          <span className="text-xs text-chrome font-medium block truncate">{stop}</span>
-                          <span className="text-[10px] text-steel">Biker Cafe</span>
-                        </button>
-                      ))}
+                  {nearbyPitStops.length > 0 && (
+                    <div>
+                      <h3 className="text-xs font-mono font-bold text-steel uppercase tracking-widest mb-3 flex items-center gap-2">
+                        <MapPin className="w-3 h-3" /> Pit Stops Near You
+                      </h3>
+                      <div className="flex gap-3 overflow-x-auto pb-2 custom-scrollbar">
+                        {nearbyPitStops.map((stop: any) => (
+                          <button
+                            key={stop.id}
+                            onClick={() => { setIsFocused(false); navigate(`/map?placeId=${stop.id}`); }}
+                            className="shrink-0 w-32 p-3 rounded-xl bg-inverse/5 hover:bg-inverse/10 transition-colors text-left border border-inverse/5"
+                          >
+                            <div className="w-full h-20 rounded-lg bg-engine mb-2 flex items-center justify-center">
+                              <MapPin className="w-6 h-6 text-steel" />
+                            </div>
+                            <span className="text-xs text-chrome font-medium block truncate">{stop.name}</span>
+                            <span className="text-[10px] text-steel capitalize">{(stop.category || '').replace(/_/g, ' ')}</span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               ) : (
                 <div className="p-2 space-y-1">
