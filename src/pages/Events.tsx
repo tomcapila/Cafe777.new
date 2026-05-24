@@ -158,7 +158,7 @@ export default function Events() {
       });
       if (res.ok) {
         setShowModal(false);
-        setEventData({ title: '', description: '', date: '', time: '', location: '', image_url: '', category: 'road_trip', price: '', external_link: '', participation_stamp_id: null });
+        setEventData({ title: '', description: '', date: '', time: '', location: '', image_url: '', category: 'road_trip', price: '', price_starting_from: false, external_link: '', participation_stamp_id: null });
         setStampSearchTerm('');
         setIsStampSelectorOpen(false);
         fetchEvents();
@@ -249,7 +249,7 @@ export default function Events() {
                 if (canAccess('create_event', currentUser.plan, currentUser.role, currentUser.type)) {
                   setShowModal(true);
                 } else {
-                  showNotification(t('admin.featureAccess.allowedPlan'), 'error');
+                  showNotification('error', t('admin.featureAccess.allowedPlan'));
                 }
               }}
               className="btn-primary"

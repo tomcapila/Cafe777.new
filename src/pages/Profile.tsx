@@ -1496,7 +1496,7 @@ export default function Profile() {
                           setIsCreatingEvent(!isCreatingEvent);
                           if (isCreatingEvent) {
                             setEditingEventId(null);
-                            setEventData({ title: '', description: '', date: '', time: '', location: '', image_url: '', category: 'road_trip' });
+                            setEventData({ title: '', description: '', date: '', time: '', location: '', image_url: '', category: 'road_trip', price: '', price_starting_from: false, external_link: '', participation_badge_id: null, participation_stamp_id: null });
                           }
                         }}
                         className="flex items-center gap-2 text-primary hover:text-oil font-display font-bold text-xs uppercase tracking-widest transition-all"

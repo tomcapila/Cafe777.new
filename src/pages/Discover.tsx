@@ -751,7 +751,9 @@ export default function MapView() {
                   <div className="flex items-start justify-between gap-2 mb-1">
                     <h3 className="font-display font-black uppercase italic text-inverse leading-none tracking-tight">{place.name}</h3>
                     {place.needs_revision && (
-                      <AlertCircle className="w-4 h-4 text-error shrink-0 animate-pulse" title="Needs Revision" />
+                      <span title="Needs Revision" className="shrink-0">
+                        <AlertCircle className="w-4 h-4 text-error animate-pulse" aria-label="Needs Revision" />
+                      </span>
                     )}
                   </div>
                   <div className="flex items-center gap-2 mb-2">

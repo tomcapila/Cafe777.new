@@ -227,7 +227,7 @@ export default function EventDetails() {
 
   const handlePromotePhoto = async (photoId: number) => {
     if (!canAccess('promote_contest', currentUser?.plan, currentUser?.role)) {
-      showNotification(t('admin.featureAccess.allowedPlan'), 'error');
+      showNotification('error', t('admin.featureAccess.allowedPlan'));
       return;
     }
     try {
