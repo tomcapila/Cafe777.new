@@ -140,6 +140,63 @@ async function ensureSqliteUserExists(userId: number | string) {
   }
 }
 
+// SQLite-first user lookups with Firestore fallback. Use these instead of
+// querying collections.users directly: Turso is the source of truth for users
+// (it survived the Firebase project migration; Firestore was reset). Firestore
+// remains a fallback so legacy / dual-written rows still resolve.
+const isPermissionDeniedErr = (e: any) =>
+  typeof e?.message === "string" && e.message.includes("PERMISSION_DENIED");
+
+async function findUserByUsername(username: string): Promise<any | null> {
+  if (!username) return null;
+  const sq = db.prepare("SELECT * FROM users WHERE username = ?").get(username) as any;
+  if (sq) return sq;
+  try {
+    const snap = await collections.users.where("username", "==", username).limit(1).get();
+    if (!snap.empty) {
+      const raw = snap.docs[0].data() as any;
+      const id = isNaN(Number(snap.docs[0].id)) ? snap.docs[0].id : Number(snap.docs[0].id);
+      return { id, ...raw };
+    }
+  } catch (e: any) {
+    if (!isPermissionDeniedErr(e)) console.warn("findUserByUsername Firestore fallback failed:", e.message);
+  }
+  return null;
+}
+
+async function findUserByEmail(email: string): Promise<any | null> {
+  if (!email) return null;
+  const sq = db.prepare("SELECT * FROM users WHERE email = ?").get(email) as any;
+  if (sq) return sq;
+  try {
+    const snap = await collections.users.where("email", "==", email).limit(1).get();
+    if (!snap.empty) {
+      const raw = snap.docs[0].data() as any;
+      const id = isNaN(Number(snap.docs[0].id)) ? snap.docs[0].id : Number(snap.docs[0].id);
+      return { id, ...raw };
+    }
+  } catch (e: any) {
+    if (!isPermissionDeniedErr(e)) console.warn("findUserByEmail Firestore fallback failed:", e.message);
+  }
+  return null;
+}
+
+async function findUserById(userId: number | string): Promise<any | null> {
+  if (userId === undefined || userId === null) return null;
+  const parsedId = isNaN(Number(userId)) ? userId : Number(userId);
+  const sq = db.prepare("SELECT * FROM users WHERE id = ?").get(parsedId) as any;
+  if (sq) return sq;
+  try {
+    const doc = await collections.users.doc(userId.toString()).get();
+    if (doc.exists) {
+      return { id: parsedId, ...(doc.data() as any) };
+    }
+  } catch (e: any) {
+    if (!isPermissionDeniedErr(e)) console.warn("findUserById Firestore fallback failed:", e.message);
+  }
+  return null;
+}
+
 const JWT_SECRET = process.env.JWT_SECRET || 'cafe777-super-secret-key-for-dev';
 console.log(`JWT_SECRET initialized (length: ${JWT_SECRET.length})`);
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -1710,28 +1767,32 @@ async function startServer() {
       let user: any = null;
       let isNewUser = false;
       
-      try {
-        // Try Firestore first to handle SQLite ephemeral storage loss
-        const fsUserSnap = await collections.users.where("google_id", "==", googleId).limit(1).get();
-        if (!fsUserSnap.empty) {
-          user = { id: parseInt(fsUserSnap.docs[0].id), ...fsUserSnap.docs[0].data() };
-        } else {
-          const fsEmailSnap = await collections.users.where("email", "==", email).limit(1).get();
-          if (!fsEmailSnap.empty) {
-            user = { id: parseInt(fsEmailSnap.docs[0].id), ...fsEmailSnap.docs[0].data() };
-          }
-        }
-      } catch (e) {}
+      // SQLite first (source of truth post-Firebase-migration), Firestore fallback.
+      user = db.prepare("SELECT * FROM users WHERE google_id = ? OR email = ?").get(googleId, email) as any;
 
       if (!user) {
-        user = db.prepare("SELECT * FROM users WHERE google_id = ? OR email = ?").get(googleId, email) as any;
-      } else {
-        // Hydrate SQLite if needed
         try {
-          db.prepare("INSERT OR REPLACE INTO users (id, username, email, google_id, role, type, profile_picture_url, status, fullName, referral_code, referralCode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(
-            user.id, user.username, user.email, googleId, user.role || 'user', user.type || 'rider', picture || user.profile_picture_url || null, user.status || 'active', name || user.fullName || null, user.referral_code || null, user.referralCode || null
-          );
-        } catch (e) {}
+          const fsUserSnap = await collections.users.where("google_id", "==", googleId).limit(1).get();
+          if (!fsUserSnap.empty) {
+            user = { id: parseInt(fsUserSnap.docs[0].id), ...fsUserSnap.docs[0].data() };
+          } else {
+            const fsEmailSnap = await collections.users.where("email", "==", email).limit(1).get();
+            if (!fsEmailSnap.empty) {
+              user = { id: parseInt(fsEmailSnap.docs[0].id), ...fsEmailSnap.docs[0].data() };
+            }
+          }
+        } catch (e: any) {
+          if (!isPermissionDeniedErr(e)) console.warn("Firestore Google lookup failed:", e.message);
+        }
+
+        if (user) {
+          // Hydrate SQLite from Firestore.
+          try {
+            db.prepare("INSERT OR REPLACE INTO users (id, username, email, google_id, role, type, profile_picture_url, status, fullName, referral_code, referralCode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(
+              user.id, user.username, user.email, googleId, user.role || 'user', user.type || 'rider', picture || user.profile_picture_url || null, user.status || 'active', name || user.fullName || null, user.referral_code || null, user.referralCode || null
+            );
+          } catch (e) {}
+        }
       }
 
       if (!user) {
@@ -1791,43 +1852,47 @@ async function startServer() {
     const { email, password } = validation.data;
     
     try {
-      let user: any = null;
-      // Try Firestore first
-      try {
-        const firestoreUserSnap = await collections.users.where("email", "==", email).limit(1).get();
-        if (!firestoreUserSnap.empty) {
-          user = { id: firestoreUserSnap.docs[0].id, ...firestoreUserSnap.docs[0].data() };
-        }
-      } catch (fsError: any) {
-        if (!fsError.message?.includes('PERMISSION_DENIED')) {
-          console.error("Firestore user fetch failed, falling back to SQLite:", fsError);
-        }
-      }
-      
+      // SQLite is the source of truth for users (it survived the Firebase
+      // project migration; Firestore was reset). Check Turso first, then fall
+      // back to Firestore for legacy / dual-written rows.
+      let user: any = db.prepare("SELECT * FROM users WHERE email = ?").get(email) as any;
+      let foundInFirestore = false;
+
       if (!user) {
-        // Fallback to SQLite
-        user = db.prepare("SELECT * FROM users WHERE email = ?").get(email) as any;
-        if (user) {
-          try {
-            await collections.users.doc(user.id.toString()).set({
-              ...user,
-              interests: user.interests ? user.interests.split(',') : [],
-              services: user.services ? user.services.split(',') : [],
-              created_at: user.created_at || new Date().toISOString()
-            });
-          } catch (migError: any) {
-            if (!migError.message?.includes('PERMISSION_DENIED')) {
-              console.error("Auto-migration to Firestore failed:", migError);
-            }
+        try {
+          const firestoreUserSnap = await collections.users.where("email", "==", email).limit(1).get();
+          if (!firestoreUserSnap.empty) {
+            user = { id: firestoreUserSnap.docs[0].id, ...firestoreUserSnap.docs[0].data() };
+            foundInFirestore = true;
+          }
+        } catch (fsError: any) {
+          if (!isPermissionDeniedErr(fsError)) {
+            console.error("Firestore user fetch failed:", fsError);
           }
         }
-      } else {
-        // user was found in Firestore, hydrate SQLite
+      }
+
+      if (foundInFirestore && user) {
+        // Hydrate SQLite so subsequent lookups are local.
         try {
           db.prepare("INSERT OR REPLACE INTO users (id, username, email, password, google_id, role, type, profile_picture_url, status, fullName, referral_code, referralCode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(
             parseInt(user.id), user.username, user.email, user.password || null, user.google_id || null, user.role || 'user', user.type || 'rider', user.profile_picture_url || null, user.status || 'active', user.fullName || null, user.referral_code || null, user.referralCode || null
           );
         } catch (e) {}
+      } else if (user) {
+        // Found in SQLite — best-effort sync to Firestore for parity.
+        try {
+          await collections.users.doc(user.id.toString()).set({
+            ...user,
+            interests: user.interests ? user.interests.split(',') : [],
+            services: user.services ? user.services.split(',') : [],
+            created_at: user.created_at || new Date().toISOString()
+          });
+        } catch (migError: any) {
+          if (!isPermissionDeniedErr(migError)) {
+            console.error("Auto-migration to Firestore failed:", migError);
+          }
+        }
       }
 
       if (!user) {
@@ -2094,8 +2159,7 @@ async function startServer() {
       
       const submissions = await Promise.all(snapshot.docs.map(async (doc) => {
         const sub = doc.data() as any;
-        const userDoc = await collections.users.doc(sub.user_id.toString()).get();
-        const userData = userDoc.exists ? userDoc.data() : {};
+        const userData = (await findUserById(sub.user_id)) || {};
         
         let motoData = { make: null, model: null, year: null };
         if (sub.motorcycle_id) {
@@ -3546,8 +3610,7 @@ async function startServer() {
       const snapshot = await query.get();
       const badges = await Promise.all(snapshot.docs.map(async (doc) => {
         const b = doc.data() as any;
-        const creatorDoc = await collections.users.doc(b.creator_id.toString()).get();
-        const creatorData = creatorDoc.exists ? creatorDoc.data() as any : {};
+        const creatorData = (await findUserById(b.creator_id)) || {};
         return {
           ...b,
           id: doc.id,
@@ -3839,8 +3902,7 @@ async function startServer() {
       
       const reviews = await Promise.all(snapshot.docs.map(async (doc) => {
         const review = doc.data() as any;
-        const userDoc = await collections.users.doc(review.reviewer_user_id.toString()).get();
-        const userData = userDoc.exists ? userDoc.data() : {};
+        const userData = (await findUserById(review.reviewer_user_id)) || {};
         return {
           ...review,
           review_id: doc.id,
@@ -4175,8 +4237,7 @@ async function startServer() {
         const ecosystemsSnapshot = await collections.ecosystems.get();
         const firestoreEcosystems = await Promise.all(ecosystemsSnapshot.docs.map(async (doc) => {
           const eData = doc.data() as any;
-          const userDoc = await collections.users.doc(eData.user_id.toString()).get();
-          const uData = userDoc.exists ? userDoc.data() as any : {};
+          const uData = (await findUserById(eData.user_id)) || {};
           return {
             ...eData,
             username: uData.username || 'unknown',
@@ -4213,12 +4274,17 @@ async function startServer() {
         WHERE LOWER(username) = LOWER(?)
       `).get(username) as any;
 
-      const userSnapshot = await collections.users.where("username", "==", username).limit(1).get();
-      if (!userSnapshot.empty) {
-        const firestoreUser = { id: userSnapshot.docs[0].id, ...userSnapshot.docs[0].data() as any };
-        user = sqliteUser ? { ...firestoreUser, ...sqliteUser } : firestoreUser;
-      } else {
-        user = sqliteUser;
+      user = sqliteUser || null;
+      try {
+        const userSnapshot = await collections.users.where("username", "==", username).limit(1).get();
+        if (!userSnapshot.empty) {
+          const firestoreUser = { id: userSnapshot.docs[0].id, ...userSnapshot.docs[0].data() as any };
+          user = sqliteUser ? { ...firestoreUser, ...sqliteUser } : firestoreUser;
+        }
+      } catch (fsErr: any) {
+        if (!isPermissionDeniedErr(fsErr)) {
+          console.warn("Profile Firestore lookup failed (using SQLite only):", fsErr.message);
+        }
       }
 
       if (!user) {
@@ -4290,9 +4356,20 @@ async function startServer() {
         }
       }
 
-      // Referral count
-      const referralSnapshot = await collections.users.where("referred_by", "==", user.id).get();
-      const referral_count = referralSnapshot.size;
+      // Referral count (Turso primary — Firestore data was reset).
+      let referral_count = 0;
+      try {
+        const refRow = db.prepare("SELECT COUNT(*) as c FROM users WHERE referred_by = ?").get(user.id) as any;
+        referral_count = refRow?.c || 0;
+      } catch (e) {}
+      if (referral_count === 0) {
+        try {
+          const referralSnapshot = await collections.users.where("referred_by", "==", user.id).get();
+          referral_count = referralSnapshot.size;
+        } catch (e: any) {
+          if (!isPermissionDeniedErr(e)) console.warn("Firestore referral count failed:", e.message);
+        }
+      }
 
       const is_owner = viewer_id && viewer_id.toString() === userId;
       const can_view_locked = is_owner || is_following;
@@ -4347,8 +4424,7 @@ async function startServer() {
           const eDoc = await collections.events.doc(r.event_id.toString()).get();
           if (!eDoc.exists) return null;
           const e = eDoc.data() as any;
-          const hostDoc = await collections.users.doc(e.user_id.toString()).get();
-          const host = hostDoc.exists ? hostDoc.data() as any : {};
+          const host = (await findUserById(e.user_id)) || {};
           const rsvps = await collections.event_rsvps.where("event_id", "==", eDoc.id).get();
           return { ...e, id: eDoc.id, username: host.username, profile_picture_url: host.profile_picture_url, rsvp_count: rsvps.size };
         }));
@@ -4387,8 +4463,7 @@ async function startServer() {
           const eDoc = await collections.events.doc(r.event_id.toString()).get();
           if (!eDoc.exists) return null;
           const e = eDoc.data() as any;
-          const hostDoc = await collections.users.doc(e.user_id.toString()).get();
-          const host = hostDoc.exists ? hostDoc.data() as any : {};
+          const host = (await findUserById(e.user_id)) || {};
           const rsvps = await collections.event_rsvps.where("event_id", "==", eDoc.id).get();
           return { ...e, id: eDoc.id, username: host.username, profile_picture_url: host.profile_picture_url, rsvp_count: rsvps.size };
         }));
@@ -4824,18 +4899,8 @@ async function startServer() {
           
         for (const doc of firestoreCommentsSnap.docs) {
           const cData = doc.data() as any;
-          // Get user details
-          let userData: any = null;
-          try {
-             const userDoc = await collections.users.doc(cData.user_id.toString()).get();
-             if (userDoc.exists) userData = userDoc.data();
-          } catch(e) {}
-          
-          if (!userData) {
-            try {
-               userData = db.prepare("SELECT username, profile_picture_url FROM users WHERE id = ?").get(cData.user_id) as any;
-            } catch(e) {}
-          }
+          // Get user details (SQLite-first via helper).
+          const userData: any = await findUserById(cData.user_id);
           
           comments.push({
              id: doc.id,
@@ -4911,8 +4976,7 @@ async function startServer() {
       if (postDoc.exists) {
         const post = postDoc.data() as any;
         if (post.user_id.toString() !== user_id.toString()) {
-          const commenterDoc = await collections.users.doc(user_id.toString()).get();
-          const commenter = commenterDoc.exists ? commenterDoc.data() as any : { username: "Someone" };
+          const commenter = (await findUserById(user_id)) || { username: "Someone" };
           
           const notifId = Math.random().toString(36).substring(2, 15);
           await collections.notifications.doc(notifId).set({
@@ -5031,10 +5095,7 @@ async function startServer() {
         // Create notification in Firestore
         let follower: any = { username: "Someone" };
         try {
-          const followerDoc = await collections.users.doc(follower_id.toString()).get();
-          if (followerDoc.exists) {
-            follower = followerDoc.data();
-          }
+          follower = await findUserById(follower_id);
         } catch(e) {}
         
         try {
@@ -5271,12 +5332,12 @@ async function startServer() {
       const photos = await Promise.all(photosSnapshot.docs.map(async (doc) => {
         const data = doc.data() as any;
         const eventDoc = await collections.events.doc(data.event_id.toString()).get();
-        const userDoc = await collections.users.doc(data.user_id.toString()).get();
+        const userData = await findUserById(data.user_id);
         return {
           id: doc.id,
           ...data,
           event_title: eventDoc.exists ? (eventDoc.data() as any).title : "Unknown Event",
-          username: userDoc.exists ? (userDoc.data() as any).username : "Unknown User"
+          username: userData?.username || "Unknown User"
         };
       }));
       res.json(photos);
@@ -5289,11 +5350,9 @@ async function startServer() {
   app.get("/api/events", async (req, res) => {
     const { username, category, location } = req.query;
     let userId = null;
-    if (username) {
-      try {
-        const userSnapshot = await collections.users.where("username", "==", username).limit(1).get();
-        if (!userSnapshot.empty) userId = userSnapshot.docs[0].id;
-      } catch (err) {}
+    if (username && typeof username === 'string') {
+      const found = await findUserByUsername(username);
+      if (found) userId = found.id;
     }
 
     try {
@@ -5312,8 +5371,7 @@ async function startServer() {
 
       // Populate host and stats
       const populatedEvents = await Promise.all(events.map(async (ev) => {
-        const hostSnapshot = await collections.users.doc(ev.user_id.toString()).get();
-        const hostData = hostSnapshot.exists ? hostSnapshot.data() : {};
+        const hostData = (await findUserById(ev.user_id)) || {};
         const ecoDoc = await collections.ecosystems.doc(ev.user_id.toString()).get();
         const ecoData = ecoDoc.exists ? ecoDoc.data() : {};
         
@@ -5348,11 +5406,9 @@ async function startServer() {
     const { id } = req.params;
     const { username } = req.query;
     let userId = null;
-    if (username) {
-      try {
-        const userSnapshot = await collections.users.where("username", "==", username).limit(1).get();
-        if (!userSnapshot.empty) userId = userSnapshot.docs[0].id;
-      } catch (err) {}
+    if (username && typeof username === 'string') {
+      const found = await findUserByUsername(username);
+      if (found) userId = found.id;
     }
 
     try {
@@ -5362,8 +5418,7 @@ async function startServer() {
       }
       const eventData = eventDoc.data() as any;
 
-      const hostSnapshot = await collections.users.doc(eventData.user_id.toString()).get();
-      const hostData = hostSnapshot.exists ? hostSnapshot.data() : {};
+      const hostData = (await findUserById(eventData.user_id)) || {};
       const ecoDoc = await collections.ecosystems.doc(eventData.user_id.toString()).get();
       const ecoData = ecoDoc.exists ? ecoDoc.data() : {};
       
@@ -5396,11 +5451,7 @@ async function startServer() {
     }
 
     try {
-      const userSnapshot = await collections.users.where("username", "==", username).limit(1).get();
-      if (userSnapshot.empty) {
-        return res.status(404).json({ error: "User not found" });
-      }
-      const user = { id: userSnapshot.docs[0].id, ...userSnapshot.docs[0].data() as any };
+      const user = { id: req.user.id, username: req.user.username, role: req.user.role };
 
       const newId = await getNextId("events");
       const eventData = {
@@ -5424,9 +5475,20 @@ async function startServer() {
 
       await collections.events.doc(newId.toString()).set(eventData);
 
-      // Determine approval status
-      const ambassadorSnapshot = await collections.ambassadors.doc(user.id.toString()).get();
-      const isApproved = (user.role === 'admin' || user.role === 'moderator' || (ambassadorSnapshot.exists && (ambassadorSnapshot.data() as any).is_active)) ? 1 : 0;
+      // Determine approval status — check SQLite first, then Firestore.
+      const sqliteAmbassador = db.prepare("SELECT is_active FROM ambassadors WHERE user_id = ?").get(user.id) as any;
+      let isAmbassadorActive = sqliteAmbassador?.is_active === 1;
+      if (!isAmbassadorActive) {
+        try {
+          const ambassadorSnapshot = await collections.ambassadors.doc(user.id.toString()).get();
+          if (ambassadorSnapshot.exists && (ambassadorSnapshot.data() as any).is_active) {
+            isAmbassadorActive = true;
+          }
+        } catch (e: any) {
+          if (!isPermissionDeniedErr(e)) console.warn("ambassador Firestore check failed:", e.message);
+        }
+      }
+      const isApproved = (user.role === 'admin' || user.role === 'moderator' || isAmbassadorActive) ? 1 : 0;
       
       if (!isApproved) {
         await collections.events.doc(newId.toString()).update({ is_approved: 0 });
@@ -5520,8 +5582,7 @@ async function startServer() {
       const rsvpsSnapshot = await collections.event_rsvps.where("event_id", "==", id).get();
       const attendees = await Promise.all(rsvpsSnapshot.docs.map(async (doc) => {
         const data = doc.data() as any;
-        const userSnapshot = await collections.users.doc(data.user_id.toString()).get();
-        const userData = userSnapshot.exists ? userSnapshot.data() as any : {};
+        const userData = (await findUserById(data.user_id)) || {};
         return {
           id: data.user_id,
           username: userData.username || 'Unknown',
@@ -5651,13 +5712,10 @@ async function startServer() {
     const { username } = req.body;
     
     try {
-      const userSnapshot = await collections.users.where("username", "==", username).limit(1).get();
-      if (userSnapshot.empty) return res.status(404).json({ error: "User not found" });
-      const user = { id: userSnapshot.docs[0].id, ...userSnapshot.docs[0].data() as any };
-      
-      if (user.id.toString() !== req.user.id.toString() && req.user.role !== 'admin' && req.user.role !== 'moderator') {
+      if (username && username !== req.user.username && req.user.role !== 'admin' && req.user.role !== 'moderator') {
         return res.status(403).json({ error: "Forbidden: You can only RSVP for yourself" });
       }
+      const user = { id: req.user.id, username: req.user.username };
 
       // Check if already RSVP'd in Firestore
       const rsvpRef = collections.event_rsvps.doc(`${id}_${user.id}`);
@@ -5955,11 +6013,7 @@ async function startServer() {
     }
 
     try {
-      const userSnapshot = await collections.users.where("username", "==", username).limit(1).get();
-      if (userSnapshot.empty) {
-        return res.status(404).json({ error: "User not found" });
-      }
-      const user = { id: userSnapshot.docs[0].id, ...userSnapshot.docs[0].data() as any };
+      const user = { id: req.user.id, username: req.user.username };
 
       const motoId = await getNextId("motorcycles");
       const motoData = {
@@ -6140,14 +6194,8 @@ async function startServer() {
     }
 
     try {
-      // Refresh user to get full details for denormalization
-      let user: any = null;
-      const firestoreUser = await collections.users.where("username", "==", username).limit(1).get();
-      if (!firestoreUser.empty) {
-        user = { id: firestoreUser.docs[0].id, ...firestoreUser.docs[0].data() };
-      } else {
-        user = db.prepare("SELECT * FROM users WHERE username = ?").get(username) as any;
-      }
+      // Refresh user to get full details for denormalization (SQLite-first).
+      const user: any = await findUserById(req.user.id);
 
       if (!user) {
         return res.status(404).json({ error: "User not found" });
@@ -6380,8 +6428,7 @@ async function startServer() {
       if (!snapshot.empty) {
          clubs = await Promise.all(snapshot.docs.map(async doc => {
            const data = doc.data();
-           const userDoc = await collections.users.doc(doc.id).get();
-           const userData = userDoc.exists ? userDoc.data() : {};
+           const userData = (await findUserById(doc.id)) || {};
            const membersSnap = await collections.club_memberships.where("club_id", "==", parseInt(doc.id)).where("status", "==", "approved").get();
            return {
              club_id: parseInt(doc.id),
@@ -6463,8 +6510,7 @@ async function startServer() {
           const data = doc.data();
           return doc.id.toString() === userId.toString() || (data.owner_id && data.owner_id.toString() === userId.toString());
         }).map(async (doc) => {
-          const userDoc = await collections.users.doc(doc.id).get();
-          const userData = userDoc.exists ? userDoc.data() : {};
+          const userData = (await findUserById(doc.id)) || {};
           return {
             club_id: doc.id,
             username: (userData as any).username,
@@ -6483,9 +6529,8 @@ async function startServer() {
         
         const membershipsDocs = await Promise.all(membershipSnapshot.docs.filter(d => d.data().status !== 'rejected').map(async (doc) => {
           const mem = doc.data() as any;
-          const clubUserDoc = await collections.users.doc(mem.club_id.toString()).get();
+          const userData = (await findUserById(mem.club_id)) || {};
           const clubEcoDoc = await collections.ecosystems.doc(mem.club_id.toString()).get();
-          const userData = clubUserDoc.exists ? clubUserDoc.data() : {};
           const ecoData = clubEcoDoc.exists ? clubEcoDoc.data() : {};
           return {
             ...mem,
@@ -6529,8 +6574,7 @@ async function startServer() {
       if (!club) {
         const clubDoc = await collections.ecosystems.doc(clubId.toString()).get();
         if (clubDoc.exists && clubDoc.data()?.service_category === 'club') {
-          const userDoc = await collections.users.doc(clubId.toString()).get();
-          const userData = userDoc.exists ? userDoc.data() : {};
+          const userData = (await findUserById(clubId)) || {};
           club = {
             club_id: parseInt(clubId),
             username: (userData as any).username || '',
@@ -6591,8 +6635,7 @@ async function startServer() {
       await Promise.all(fsMembersSnap.docs.map(async (doc) => {
         const data = doc.data();
         if (!membersMap.has(data.user_id.toString())) {
-          const uDoc = await collections.users.doc(data.user_id.toString()).get();
-          const uData = uDoc.exists ? uDoc.data() : {};
+          const uData = (await findUserById(data.user_id)) || {};
           const rDoc = await collections.riders.doc(data.user_id.toString()).get();
           const rData = rDoc.exists ? rDoc.data() : {};
           membersMap.set(data.user_id.toString(), {
@@ -7250,8 +7293,7 @@ async function startServer() {
       const snapshot = await collections.ambassador_applications.orderBy("created_at", "desc").get();
       const applications = await Promise.all(snapshot.docs.map(async (doc) => {
         const app = doc.data() as any;
-        const userDoc = await collections.users.doc(app.user_id.toString()).get();
-        const userData = userDoc.exists ? userDoc.data() as any : {};
+        const userData = (await findUserById(app.user_id)) || {};
         return {
           ...app,
           id: doc.id,
@@ -7386,8 +7428,7 @@ async function startServer() {
         const snapshot = await collections.ambassadors.where("is_active", "==", 1).get();
         const firestoreAmbassadors = await Promise.all(snapshot.docs.map(async (doc) => {
           const a = doc.data() as any;
-          const userDoc = await collections.users.doc(a.user_id.toString()).get();
-          const userData = userDoc.exists ? userDoc.data() as any : {};
+          const userData = (await findUserById(a.user_id)) || {};
           
           let profileDetails: any = {};
           if (userData.type === 'ecosystem') {
@@ -7482,8 +7523,7 @@ async function startServer() {
       const doc = await collections.ambassadors.doc(id.toString()).get();
       if (doc.exists) {
         const a = doc.data() as any;
-        const userDoc = await collections.users.doc(id.toString()).get();
-        const userData = userDoc.exists ? userDoc.data() as any : {};
+        const userData = (await findUserById(id)) || {};
         
         let profileDetails: any = {};
         if (userData.type === 'ecosystem') {
@@ -7756,15 +7796,29 @@ async function startServer() {
     const servicesStr = Array.isArray(services) ? services.join(',') : services;
 
     try {
-      // Check if user already exists in Firestore!
-      const firestoreEmailCheck = await collections.users.where("email", "==", email).limit(1).get();
-      if (!firestoreEmailCheck.empty) {
+      // Check Turso first (source of truth post-Firebase-migration) then Firestore.
+      const sqliteEmail = db.prepare("SELECT 1 FROM users WHERE email = ?").get(email);
+      if (sqliteEmail) {
         return res.status(400).json({ error: "Email already exists" });
       }
-
-      const firestoreUsernameCheck = await collections.users.where("username", "==", username).limit(1).get();
-      if (!firestoreUsernameCheck.empty) {
+      const sqliteUsername = db.prepare("SELECT 1 FROM users WHERE username = ?").get(username);
+      if (sqliteUsername) {
         return res.status(400).json({ error: "Username already exists" });
+      }
+
+      try {
+        const firestoreEmailCheck = await collections.users.where("email", "==", email).limit(1).get();
+        if (!firestoreEmailCheck.empty) {
+          return res.status(400).json({ error: "Email already exists" });
+        }
+        const firestoreUsernameCheck = await collections.users.where("username", "==", username).limit(1).get();
+        if (!firestoreUsernameCheck.empty) {
+          return res.status(400).json({ error: "Username already exists" });
+        }
+      } catch (fsCheckErr: any) {
+        if (!isPermissionDeniedErr(fsCheckErr)) {
+          console.warn("Firestore duplicate check failed (proceeding):", fsCheckErr.message);
+        }
       }
 
       let userId: any;
