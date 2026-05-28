@@ -8294,13 +8294,17 @@ async function startServer() {
   app.use("/uploads", express.static(uploadsDir));
 
   // Vite middleware for development
+  console.log(`NODE_ENV: ${process.env.NODE_ENV}`);
   if (process.env.NODE_ENV !== "production") {
+    console.log("Loading Vite middleware...");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
+    console.log("Vite middleware loaded");
   } else {
+    console.log("Loading production static server...");
     const distPath = __dirname;
     app.use(express.static(distPath));
     app.get("*", (req, res) => {

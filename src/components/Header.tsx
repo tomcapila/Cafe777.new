@@ -106,7 +106,7 @@ export default function Header() {
     <header className="fixed top-0 left-0 right-0 z-50 bg-engine/90 backdrop-blur-xl border-b border-inverse/5 h-20 px-4">
       <div className="max-w-7xl mx-auto h-full flex items-center justify-between gap-4">
         <Link to="/" className="flex items-center gap-2 shrink-0">
-          <div className="bg-[#680a08] p-2 rounded-xl border border-[#680a08]/20 shadow-[0_0_15px_rgba(104,10,8,0.2)]">
+          <div className="bg-primary p-2 rounded-xl border border-primary/20 shadow-[0_0_15px_var(--shadow-primary)]">
             <img src="/777.svg" alt="Café777" className="w-5 h-5 [filter:brightness(0)_invert(1)]" />
           </div>
           <span className="font-display font-black text-xl tracking-tighter uppercase italic text-chrome hidden sm:inline">Café777</span>

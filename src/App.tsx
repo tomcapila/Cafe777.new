@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { NotificationProvider } from './contexts/NotificationContext';
@@ -5,34 +6,42 @@ import { FeatureFlagProvider } from './contexts/FeatureFlagContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import Header from './components/Header';
 import BottomNavigation from './components/BottomNavigation';
-import Home from './pages/Home';
-import MotorFeed from './pages/MotorFeed';
-import Profile from './pages/Profile';
-import EditProfile from './pages/EditProfile';
-import Onboarding from './pages/Onboarding';
-import Login from './pages/Login';
-import InviteLanding from './pages/InviteLanding';
-import ForgotPasswordPage from './pages/ForgotPasswordPage';
-import ResetPasswordPage from './pages/ResetPasswordPage';
-import Discover from './pages/Discover';
-import Events from './pages/Events';
-import EventDetails from './pages/EventDetails';
-import SubmitPhoto from './pages/SubmitPhoto';
-import ContestPage from './pages/ContestPage';
-import NotificationsPage from './pages/NotificationsPage';
-import Admin from './pages/Admin';
-import AdminLogin from './pages/AdminLogin';
-import RoadsDiscovery from './pages/RoadsDiscovery';
-import MotoClubsHub from './pages/MotoClubsHub';
-import Passport from './pages/Passport';
-import ScannerPage from './pages/ScannerPage';
-import AmbassadorDashboard from './pages/AmbassadorDashboard';
-import FAQ from './pages/FAQ';
-import About from './pages/About';
-import Messages from './pages/Messages';
-import PrivacyPolicy from './pages/PrivacyPolicy';
 
-import PartsAndService from './pages/PartsAndService';
+const Home = lazy(() => import('./pages/Home'));
+const MotorFeed = lazy(() => import('./pages/MotorFeed'));
+const Profile = lazy(() => import('./pages/Profile'));
+const EditProfile = lazy(() => import('./pages/EditProfile'));
+const Onboarding = lazy(() => import('./pages/Onboarding'));
+const Login = lazy(() => import('./pages/Login'));
+const InviteLanding = lazy(() => import('./pages/InviteLanding'));
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
+const Discover = lazy(() => import('./pages/Discover'));
+const Events = lazy(() => import('./pages/Events'));
+const EventDetails = lazy(() => import('./pages/EventDetails'));
+const SubmitPhoto = lazy(() => import('./pages/SubmitPhoto'));
+const ContestPage = lazy(() => import('./pages/ContestPage'));
+const NotificationsPage = lazy(() => import('./pages/NotificationsPage'));
+const Admin = lazy(() => import('./pages/Admin'));
+const AdminLogin = lazy(() => import('./pages/AdminLogin'));
+const RoadsDiscovery = lazy(() => import('./pages/RoadsDiscovery'));
+const MotoClubsHub = lazy(() => import('./pages/MotoClubsHub'));
+const Passport = lazy(() => import('./pages/Passport'));
+const ScannerPage = lazy(() => import('./pages/ScannerPage'));
+const AmbassadorDashboard = lazy(() => import('./pages/AmbassadorDashboard'));
+const FAQ = lazy(() => import('./pages/FAQ'));
+const About = lazy(() => import('./pages/About'));
+const Messages = lazy(() => import('./pages/Messages'));
+const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
+const PartsAndService = lazy(() => import('./pages/PartsAndService'));
+
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center h-full w-full">
+      <div className="w-10 h-10 border-4 border-steel/20 border-t-primary rounded-full animate-spin" />
+    </div>
+  );
+}
 
 export default function App() {
   return (
@@ -45,6 +54,7 @@ export default function App() {
                 <Header />
             
             <main className="flex-1 relative z-10 overflow-y-auto overflow-x-hidden pt-20 pb-20">
+              <Suspense fallback={<PageLoader />}>
               <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/motorfeed" element={<MotorFeed />} />
@@ -76,6 +86,7 @@ export default function App() {
                 <Route path="/parts-and-service" element={<PartsAndService />} />
                 <Route path="/privacy" element={<PrivacyPolicy />} />
               </Routes>
+              </Suspense>
             </main>
 
             <BottomNavigation />

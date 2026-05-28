@@ -3,8 +3,39 @@ import React, { useEffect, useState, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import * as LucideIcons from 'lucide-react';
 import { Building2, MapPin, Wrench, ShoppingBag, Coffee, Beer, Users, Route, Flag, Settings, Shield, Star, Award, ChevronUp, ChevronDown, Search, Filter, Upload, X, AlertCircle } from 'lucide-react';
+import {
+  Bike, Car, Fuel, Hotel, Home, Store, Warehouse, Factory,
+  Utensils, UtensilsCrossed, Pizza, Wine, Martini, CupSoda, ChefHat,
+  Hammer, Cog, Drill, Scissors, Paintbrush, SprayCan,
+  Music, Guitar, Mic, Disc, Radio,
+  Tent, Mountain, MountainSnow, TreePine, Trees, Waves, Compass, Map as MapIcon, MapPinned, Navigation,
+  Camera, Trophy, Medal, Crown, Gem, Heart, ThumbsUp,
+  Calendar, CalendarDays, Clock,
+  Phone, Mail, Globe, Wifi,
+  Zap, Flame, Sparkles, ShieldCheck, Skull,
+  Tag, Package, Truck, Bus, Plane, Train,
+  ParkingCircle, Bed, ShoppingCart, CreditCard, DollarSign,
+  Dumbbell, Anchor, Sailboat, Bone,
+} from 'lucide-react';
+
+// Curated icon lookup for admin-defined keyword icons (free-text Lucide names).
+// Tree-shakeable: only these icons are bundled. Unknown names fall back to MapPin.
+const ICON_MAP: Record<string, typeof MapPin> = {
+  Building2, MapPin, Wrench, ShoppingBag, Coffee, Beer, Users, Route, Flag, Settings, Shield, Star, Award,
+  Bike, Car, Fuel, Hotel, Home, Store, Warehouse, Factory,
+  Utensils, UtensilsCrossed, Pizza, Wine, Martini, CupSoda, ChefHat,
+  Hammer, Cog, Drill, Scissors, Paintbrush, SprayCan,
+  Music, Guitar, Mic, Disc, Radio,
+  Tent, Mountain, MountainSnow, TreePine, Trees, Waves, Compass, Map: MapIcon, MapPinned, Navigation,
+  Camera, Trophy, Medal, Crown, Gem, Heart, ThumbsUp,
+  Calendar, CalendarDays, Clock,
+  Phone, Mail, Globe, Wifi,
+  Zap, Flame, Sparkles, ShieldCheck, Skull,
+  Tag, Package, Truck, Bus, Plane, Train,
+  ParkingCircle, Bed, ShoppingCart, CreditCard, DollarSign,
+  Dumbbell, Anchor, Sailboat, Bone,
+};
 import { renderToString } from 'react-dom/server';
 import { useLanguage } from '../contexts/LanguageContext';
 import RecommendButton from '../components/RecommendButton';
@@ -109,13 +140,13 @@ export default function MapView() {
   
   const [dynamicCategories, setDynamicCategories] = useState<any[]>([]);
   const [categoryConfig, setCategoryConfig] = useState<Record<string, { color: string, icon: any }>>({
-    motoclub: { color: '#52525b', icon: <LucideIcons.Shield className="w-4 h-4 text-chrome" /> },
-    ambassador: { color: '#8b5cf6', icon: <LucideIcons.Star className="w-4 h-4 text-chrome" /> },
-    passport_stamp: { color: '#f59e0b', icon: <LucideIcons.Award className="w-4 h-4 text-chrome" /> },
-    ride_route: { color: '#06b6d4', icon: <LucideIcons.Route className="w-4 h-4 text-chrome" /> },
-    ride_spot: { color: '#ec4899', icon: <LucideIcons.MapPin className="w-4 h-4 text-chrome" /> },
-    ride_stop: { color: '#14b8a6', icon: <LucideIcons.Flag className="w-4 h-4 text-chrome" /> },
-    other: { color: '#a8a29e', icon: <LucideIcons.MapPin className="w-4 h-4 text-chrome" /> },
+    motoclub: { color: '#52525b', icon: <Shield className="w-4 h-4 text-chrome" /> },
+    ambassador: { color: '#8b5cf6', icon: <Star className="w-4 h-4 text-chrome" /> },
+    passport_stamp: { color: '#f59e0b', icon: <Award className="w-4 h-4 text-chrome" /> },
+    ride_route: { color: '#06b6d4', icon: <Route className="w-4 h-4 text-chrome" /> },
+    ride_spot: { color: '#ec4899', icon: <MapPin className="w-4 h-4 text-chrome" /> },
+    ride_stop: { color: '#14b8a6', icon: <Flag className="w-4 h-4 text-chrome" /> },
+    other: { color: '#a8a29e', icon: <MapPin className="w-4 h-4 text-chrome" /> },
   });
 
   const [filterGroupsPitStop, setFilterGroupsPitStop] = useState({
@@ -135,7 +166,7 @@ export default function MapView() {
           const cat = kw.category_name;
           ecosystemKeys.push(cat);
           const rawIcon = kw.icon || 'MapPin';
-          const IconComp = (LucideIcons as any)[rawIcon] || LucideIcons.MapPin;
+          const IconComp = ICON_MAP[rawIcon] || MapPin;
           newConfig[cat] = {
             color: '#3b82f6', // Use primary or random color? 
             icon: <IconComp className="w-4 h-4 text-chrome" />
