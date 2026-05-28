@@ -28,15 +28,15 @@ export default function UniversalSearch() {
     let cancelled = false;
 
     fetchWithAuth('/api/trending-routes?limit=3')
-      .then((r) => (r.ok ? r.json() : []))
-      .then((data) => { if (!cancelled) setTrendingRoutes(Array.isArray(data) ? data : []); })
+      .then((r): Promise<any[]> => (r.ok ? r.json() : Promise.resolve([])))
+      .then((data: any) => { if (!cancelled) setTrendingRoutes(Array.isArray(data) ? data : []); })
       .catch(() => { if (!cancelled) setTrendingRoutes([]); });
 
     const loadPitStops = (lat?: number, lng?: number) => {
       const qs = lat !== undefined && lng !== undefined ? `&lat=${lat}&lng=${lng}` : '';
       fetchWithAuth(`/api/nearby-pit-stops?limit=3${qs}`)
-        .then((r) => (r.ok ? r.json() : []))
-        .then((data) => { if (!cancelled) setNearbyPitStops(Array.isArray(data) ? data : []); })
+        .then((r): Promise<any[]> => (r.ok ? r.json() : Promise.resolve([])))
+        .then((data: any) => { if (!cancelled) setNearbyPitStops(Array.isArray(data) ? data : []); })
         .catch(() => { if (!cancelled) setNearbyPitStops([]); });
     };
 

@@ -290,7 +290,7 @@ export default function Profile() {
     if (!currentUser || !data) return;
 
     // Optimistic update
-    setData(prevData => {
+    setData((prevData: any) => {
       if (!prevData) return prevData;
       return {
         ...prevData,
@@ -316,7 +316,7 @@ export default function Profile() {
       });
       if (!res.ok) {
         // Revert if failed
-        setData(prevData => {
+        setData((prevData: any) => {
           if (!prevData) return prevData;
           return {
             ...prevData,
@@ -337,7 +337,7 @@ export default function Profile() {
     } catch (err) {
       console.error(err);
       // Revert if failed
-      setData(prevData => {
+      setData((prevData: any) => {
         if (!prevData) return prevData;
         return {
           ...prevData,
@@ -435,7 +435,7 @@ export default function Profile() {
     const wasFollowing = data.is_following;
     const previousFollowers = data.followers_count || 0;
     
-    setData(prev => prev ? {
+    setData((prev: any) => prev ? {
       ...prev,
       is_following: !wasFollowing,
       followers_count: wasFollowing ? Math.max(0, previousFollowers - 1) : previousFollowers + 1
@@ -449,7 +449,7 @@ export default function Profile() {
       });
       if (!res.ok) {
         // Revert on failure
-        setData(prev => prev ? {
+        setData((prev: any) => prev ? {
           ...prev,
           is_following: wasFollowing,
           followers_count: previousFollowers
@@ -459,7 +459,7 @@ export default function Profile() {
     } catch (err) {
       console.error(err);
       // Revert on exception
-      setData(prev => prev ? {
+      setData((prev: any) => prev ? {
         ...prev,
         is_following: wasFollowing,
         followers_count: previousFollowers
@@ -2452,7 +2452,7 @@ export default function Profile() {
               ) : (
                 <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-6">
                   {passportStamps.map((stamp) => {
-                    const IconComponent = {
+                    const IconComponent = ({
                       'MapPin': MapPin,
                       'Activity': Activity,
                       'Heart': Heart,
@@ -2462,7 +2462,7 @@ export default function Profile() {
                       'Building2': Building2,
                       'Calendar': Calendar,
                       'ShieldCheck': ShieldCheck
-                    }[stamp.icon] || MapPin;
+                    } as Record<string, typeof MapPin>)[stamp.icon] || MapPin;
 
                     const rarityColors = {
                       common: 'text-steel bg-steel/10 border-steel/20',

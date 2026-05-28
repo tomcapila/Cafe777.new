@@ -45,7 +45,7 @@ const createRouteIcon = (color: string, isSelected: boolean = false) => {
   });
 };
 
-function MapUpdater({ center, zoom }: { center: [number, number], zoom: number }) {
+function MapUpdater({ center, zoom }: { center: [number, number], zoom: number }): null {
   const map = useMap();
   useEffect(() => {
     map.flyTo(center, zoom, { duration: 1.5 });
@@ -128,15 +128,15 @@ export default function RoadsDiscovery() {
   useEffect(() => {
     // Fetch ecosystems and combine with static map data
     fetchWithAuth('/api/ecosystems')
-      .then(res => {
-        if (!res.ok) return [];
+      .then((res): Promise<any[]> => {
+        if (!res.ok) return Promise.resolve([]);
         const contentType = res.headers.get('content-type');
         if (contentType && contentType.includes('application/json')) {
           return res.json();
         }
-        return [];
+        return Promise.resolve([]);
       })
-      .then(data => {
+      .then((data: any) => {
         if (!Array.isArray(data)) return;
         const ecosystemPOIs: POI[] = data.map((e: any) => ({
           id: e.user_id,
@@ -230,15 +230,15 @@ export default function RoadsDiscovery() {
 
   useEffect(() => {
     fetchWithAuth('/api/roads')
-      .then(res => {
-        if (!res.ok) return [];
+      .then((res): Promise<any[]> => {
+        if (!res.ok) return Promise.resolve([]);
         const contentType = res.headers.get('content-type');
         if (contentType && contentType.includes('application/json')) {
           return res.json();
         }
-        return [];
+        return Promise.resolve([]);
       })
-      .then(data => {
+      .then((data: any) => {
         if (Array.isArray(data)) {
           setRoutes(data);
         }
@@ -509,7 +509,7 @@ export default function RoadsDiscovery() {
               </div>
 
               <div className="flex flex-wrap gap-1.5 mt-3">
-                {route.tags.map(tag => (
+                {route.tags.map((tag: string) => (
                   <span key={tag} className="text-[9px] uppercase tracking-widest font-bold text-steel bg-engine px-1.5 py-0.5 rounded">
                     #{tag}
                   </span>

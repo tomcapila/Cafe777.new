@@ -1,11 +1,12 @@
 import { fetchWithAuth } from '../utils/api';
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Bike, Bell, Search, Languages, ShieldAlert, MessageSquare, Moon, Sun } from 'lucide-react';
+import { Bell, Search, Languages, ShieldAlert, MessageSquare, Moon, Sun } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
 import SideMenu from './SideMenu';
 import UniversalSearch from './UniversalSearch';
+
 
 const MotorcycleMenuIcon = ({ className }: { className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -106,7 +107,7 @@ export default function Header() {
       <div className="max-w-7xl mx-auto h-full flex items-center justify-between gap-4">
         <Link to="/" className="flex items-center gap-2 shrink-0">
           <div className="bg-[#680a08] p-2 rounded-xl border border-[#680a08]/20 shadow-[0_0_15px_rgba(104,10,8,0.2)]">
-            <Bike className="w-5 h-5 text-white fill-white" />
+            <img src="/777.svg" alt="Café777" className="w-5 h-5 [filter:brightness(0)_invert(1)]" />
           </div>
           <span className="font-display font-black text-xl tracking-tighter uppercase italic text-chrome hidden sm:inline">Café777</span>
         </Link>

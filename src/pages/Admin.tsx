@@ -2634,7 +2634,7 @@ export default function Admin() {
                             body: JSON.stringify({ key: 'api_google_maps', value: newValue })
                           });
                           if (res.ok) {
-                            setSettings(prev => ({ ...prev, api_google_maps: newValue }));
+                            setSettings((prev: any) => ({ ...prev, api_google_maps: newValue }));
                             showNotification('success', 'Settings updated');
                           }
                         } catch (err) {
@@ -2665,7 +2665,7 @@ export default function Admin() {
                             body: JSON.stringify({ key: 'api_osm', value: newValue })
                           });
                           if (res.ok) {
-                            setSettings(prev => ({ ...prev, api_osm: newValue }));
+                            setSettings((prev: any) => ({ ...prev, api_osm: newValue }));
                             showNotification('success', 'Settings updated');
                           }
                         } catch (err) {

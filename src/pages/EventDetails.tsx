@@ -885,7 +885,7 @@ export default function EventDetails() {
                     {editEventData.image_url && (
                       <button 
                         type="button"
-                        onClick={() => setEditEventData(prev => ({ ...prev, image_url: '' }))}
+                        onClick={() => setEditEventData((prev: any) => ({ ...prev, image_url: '' }))}
                         className="text-[10px] font-mono font-black text-accent uppercase tracking-widest hover:text-error transition-colors"
                       >
                         {t('event.field.remove')}

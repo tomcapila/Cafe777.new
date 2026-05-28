@@ -21,7 +21,23 @@
       ]
     },
     "allowImportingTsExtensions": true,
-    "noEmit": true
+    "noEmit": true,
+    "noImplicitAny": true
   },
-  "exclude": ["node_modules", "dist", "android"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "android",
+    "check_posts.ts",
+    "list_users.ts",
+    "migrate_to_firestore.ts",
+    "query_user.ts",
+    "test_firestore.ts",
+    "test-db.ts",
+    "cleanup_mocks.ts",
+    "fix_100vh.ts",
+    "fix_heights.ts",
+    "fix_inputs.ts",
+    "replace_fetch.ts"
+  ]
 }

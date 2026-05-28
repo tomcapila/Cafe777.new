@@ -61,6 +61,7 @@ if (!admin.apps.length) {
   });
 }
 
+// @ts-expect-error firebase-admin@10 types don't expose the 2-arg `getFirestore(app, databaseId)` overload yet, but it works at runtime.
 const firestore = getFirestore(admin.app(), firebaseConfig.firestoreDatabaseId);
 const bucket = admin.storage().bucket();
 console.log(`Firestore initialized for database: ${firebaseConfig.firestoreDatabaseId}`);
@@ -241,6 +242,7 @@ const tursoToken = process.env.TURSO_DB_AUTH_TOKEN;
 // silent data loss in others, and PRAGMA settings not reaching the Turso server.
 // Remote mode trades ~50ms per query for actual atomicity and correct enforcement.
 const db: any = tursoUrl
+  // @ts-expect-error libsql 0.5.x accepts { authToken } but its Options type doesn't declare it.
   ? new Database(tursoUrl, { authToken: tursoToken })
   : new Database(isProd ? '/tmp/cafe777.db' : 'cafe777.db');
 
@@ -2040,7 +2042,7 @@ async function startServer() {
 
       const contests = await Promise.all(filteredDocs.map(async (doc) => {
         const contest = doc.data() as any;
-        let badgeData = { name: null, icon: null };
+        let badgeData: { name: any; icon: any } = { name: null, icon: null };
         if (contest.prize_badge_id) {
           const badgeDoc = await collections.badges.doc(contest.prize_badge_id.toString()).get();
           if (badgeDoc.exists) {
@@ -2162,7 +2164,7 @@ async function startServer() {
         const sub = doc.data() as any;
         const userData = (await findUserById(sub.user_id)) || {};
         
-        let motoData = { make: null, model: null, year: null };
+        let motoData: { make: any; model: any; year: any } = { make: null, model: null, year: null };
         if (sub.motorcycle_id) {
           const motoDoc = await collections.motorcycles.doc(sub.motorcycle_id.toString()).get();
           if (motoDoc.exists) {
@@ -2550,7 +2552,7 @@ async function startServer() {
     try {
       const dbKeywords = db.prepare("SELECT * FROM keywords_config").all();
       // Ensure keywords is parsed from JSON string if needed
-      const keywords = dbKeywords.map(k => ({
+      const keywords = (dbKeywords as any[]).map((k: any) => ({
         ...k,
         keywords: typeof k.keywords === 'string' ? JSON.parse(k.keywords) : k.keywords
       }));
@@ -2902,15 +2904,15 @@ async function startServer() {
     
     try {
       const [settingsSnapshot, keywordsSnapshot, controlSnapshot, ecoSnapshot] = await Promise.all([
-        collections.settings.get().catch(() => ({ docs: [] })),
-        collections.keywords_config.get().catch(() => ({ docs: [] })),
-        collections.places_control.get().catch(() => ({ docs: [] })),
-        collections.ecosystems.get().catch(() => ({ docs: [] }))
+        collections.settings.get().catch(() => ({ docs: [] as any[] })),
+        collections.keywords_config.get().catch(() => ({ docs: [] as any[] })),
+        collections.places_control.get().catch(() => ({ docs: [] as any[] })),
+        collections.ecosystems.get().catch(() => ({ docs: [] as any[] }))
       ]);
 
-      const settingsMap = settingsSnapshot.docs.reduce((acc, doc) => { 
-        acc[doc.id] = (doc.data() as any).value; 
-        return acc; 
+      const settingsMap = settingsSnapshot.docs.reduce((acc: any, doc: any) => {
+        acc[doc.id] = (doc.data() as any).value;
+        return acc;
       }, {} as any);
 
       // Fallback if settings empty (Firestore might be unconfigured or empty)
@@ -6971,7 +6973,7 @@ async function startServer() {
       }
 
       const updateStmt = db.prepare("UPDATE club_roles SET hierarchy_order = ? WHERE id = ? AND club_id = ?");
-      const transaction = db.transaction((rolesToUpdate) => {
+      const transaction = db.transaction((rolesToUpdate: any[]) => {
         for (const role of rolesToUpdate) {
           updateStmt.run(role.hierarchy_order, role.id, parseInt(clubId));
         }
@@ -7229,7 +7231,7 @@ async function startServer() {
     try {
       const code = Math.random().toString(36).substring(2, 10).toUpperCase();
       const inviteId = await getNextId("invite_links");
-      const inviteData = {
+      const inviteData: any = {
         id: inviteId,
         code,
         sponsor_id: req.user.id,

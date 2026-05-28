@@ -49,7 +49,7 @@ const getCustomIcon = (category: string, configMap: Record<string, any>) => {
   return icon;
 };
 
-function MapUpdater({ center, zoom }: { center: [number, number], zoom: number }) {
+function MapUpdater({ center, zoom }: { center: [number, number], zoom: number }): null {
   const map = useMap();
   useEffect(() => {
     map.flyTo(center, zoom, { duration: 1.5 });
@@ -57,7 +57,7 @@ function MapUpdater({ center, zoom }: { center: [number, number], zoom: number }
   return null;
 }
 
-function MapEvents({ onMoveEnd }: { onMoveEnd: (bounds: any) => void }) {
+function MapEvents({ onMoveEnd }: { onMoveEnd: (bounds: any) => void }): null {
   const map = useMap();
   const lastBounds = React.useRef<any>(null);
   const timeoutRef = React.useRef<NodeJS.Timeout | null>(null);
@@ -92,9 +92,9 @@ function MapEvents({ onMoveEnd }: { onMoveEnd: (bounds: any) => void }) {
 export default function MapView() {
   const { t } = useLanguage();
 
-  const mapData = [];
+  const mapData: any[] = [];
 
-  const mockRoutes = [];
+  const mockRoutes: any[] = [];
 
   const filterGroupsRide = {
     'discover.groups.routes': ['ride_route'],
@@ -654,7 +654,7 @@ export default function MapView() {
                 exit={{ opacity: 0, height: 0, y: -10 }}
                 className="flex gap-2 overflow-x-auto pb-2 no-scrollbar"
               >
-                {(mapMode === 'pit_stop' ? filterGroupsPitStop : filterGroupsRide)[activeGroup as keyof typeof filterGroupsPitStop | keyof typeof filterGroupsRide].map((key) => {
+                {(((mapMode === 'pit_stop' ? filterGroupsPitStop : filterGroupsRide) as Record<string, string[]>)[activeGroup as string] || []).map((key: string) => {
                   const config = categoryConfig[key];
                   if (!config) return null;
                   return (
