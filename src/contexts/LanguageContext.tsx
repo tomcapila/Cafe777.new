@@ -155,6 +155,7 @@ const translations: Translations = {
   'menu.messages': { en: 'Messages', pt: 'Mensagens' },
   'menu.appSettings': { en: 'App Settings', pt: 'Configurações do App' },
   'menu.helpSupport': { en: 'Help & Support', pt: 'Ajuda e Suporte' },
+  'menu.about': { en: 'About CAFE777', pt: 'Sobre o CAFE777' },
   'menu.logout': { en: 'Logout', pt: 'Sair' },
 
   // Ambassador

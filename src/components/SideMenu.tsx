@@ -207,7 +207,7 @@ export default function SideMenu({ isOpen, onClose, user, onLogout }: SideMenuPr
                   <div className="w-5 h-5 flex items-center justify-center text-steel group-hover:text-primary transition-colors">
                     <span className="font-serif italic font-bold">i</span>
                   </div>
-                  <span className="font-bold">{t('menu.about') || 'About CAFE777'}</span>
+                  <span className="font-bold">{t('menu.about')}</span>
                 </Link>
                 <Link to="/notifications" onClick={handleInteraction} className="flex items-center gap-4 text-chrome hover:text-primary transition-colors p-3 rounded-xl hover:bg-inverse/5 group">
                   <Bell className="w-5 h-5 text-steel group-hover:text-primary transition-colors" /> 
