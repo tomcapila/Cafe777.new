@@ -448,13 +448,20 @@ export default function Profile() {
         body: JSON.stringify({ follower_id: currentUser.id }),
       });
       if (!res.ok) {
-        // Revert on failure
         setData((prev: any) => prev ? {
           ...prev,
           is_following: wasFollowing,
           followers_count: previousFollowers
         } : null);
         console.error('Follow failed, reverted optimistic update');
+      } else {
+        const json = await res.json();
+        const nowFollowing = json.action === 'followed';
+        setData((prev: any) => prev ? {
+          ...prev,
+          is_following: nowFollowing,
+          followers_count: nowFollowing ? previousFollowers + 1 : Math.max(0, previousFollowers - 1)
+        } : null);
       }
     } catch (err) {
       console.error(err);

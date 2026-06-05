@@ -26,7 +26,7 @@ import { OAuth2Client } from 'google-auth-library';
 import { fetchOSMPlaces } from './src/services/osmService.ts';
 import admin from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
-import firebaseConfig from "./firebase-applet-config.json" assert { type: "json" };
+import firebaseConfig from "./firebase-applet-config.json" with { type: "json" };
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -241,20 +241,20 @@ const tursoToken = process.env.TURSO_DB_AUTH_TOKEN;
 // the local replica reverts both writes. Net effect: orphan rows in some tables,
 // silent data loss in others, and PRAGMA settings not reaching the Turso server.
 // Remote mode trades ~50ms per query for actual atomicity and correct enforcement.
-const db: any = tursoUrl
-  // @ts-expect-error libsql 0.5.x accepts { authToken } but its Options type doesn't declare it.
-  ? new Database(tursoUrl, { authToken: tursoToken })
-  : new Database(isProd ? '/tmp/cafe777.db' : 'cafe777.db');
-
-if (tursoUrl) {
-  console.log(`Turso (remote mode) connected to ${tursoUrl}`);
-} else {
-  console.log(`Local-only SQLite (TURSO_DB_URL not set — data will not persist across restarts in production)`);
+function createDb() {
+  if (tursoUrl) {
+    // @ts-expect-error libsql 0.5.x accepts { authToken } but its Options type doesn't declare it.
+    return new Database(tursoUrl, { authToken: tursoToken });
+  }
+  return new Database(isProd ? '/tmp/cafe777.db' : 'cafe777.db');
 }
 
-// FK enforcement OFF to match the original better-sqlite3 default the codebase was built on.
-// In remote mode this PRAGMA now actually reaches the Turso server (unlike embedded replica).
-db.exec("PRAGMA foreign_keys = OFF;");
+// Turso closes idle Hrana streams after a period of inactivity (common on Cloud Run
+// when scaled to zero). Detect that error so the middleware can reconnect.
+function isHranaStreamError(e: any): boolean {
+  const msg = String(e?.message ?? e);
+  return msg.includes('stream not found') || (msg.includes('Hrana') && msg.includes('404'));
+}
 
 // libsql 0.5.x embedded replicas don't preserve multi-statement transactions across
 // the Hrana protocol — each write auto-commits server-side, so BEGIN/COMMIT become
@@ -267,37 +267,60 @@ db.exec("PRAGMA foreign_keys = OFF;");
 const isNoActiveTxnError = (err: any) =>
   typeof err?.message === "string" && err.message.includes("no transaction is active");
 
-(db as any).transaction = function (fn: (...args: any[]) => any) {
-  if (typeof fn !== "function") throw new TypeError("Expected first argument to be a function");
-  const wrap = (mode: string) => (...args: any[]) => {
-    try { db.exec(`BEGIN${mode ? " " + mode : ""}`); } catch (beginErr) {
-      if (!isNoActiveTxnError(beginErr)) throw beginErr;
-    }
-    let result: any;
-    try {
-      result = fn(...args);
-    } catch (originalErr) {
-      try { db.exec("ROLLBACK"); } catch (rollbackErr) {
-        if (!isNoActiveTxnError(rollbackErr)) {
-          console.error("ROLLBACK failed (suppressed, propagating original error):", rollbackErr);
-        }
+function patchDbTransaction() {
+  (db as any).transaction = function (fn: (...args: any[]) => any) {
+    if (typeof fn !== "function") throw new TypeError("Expected first argument to be a function");
+    const wrap = (mode: string) => (...args: any[]) => {
+      try { db.exec(`BEGIN${mode ? " " + mode : ""}`); } catch (beginErr) {
+        if (!isNoActiveTxnError(beginErr)) throw beginErr;
       }
-      throw originalErr;
-    }
-    try { db.exec("COMMIT"); } catch (commitErr) {
-      if (!isNoActiveTxnError(commitErr)) throw commitErr;
-      // Auto-committed by libsql embedded replica — writes are already persisted.
-    }
-    return result;
+      let result: any;
+      try {
+        result = fn(...args);
+      } catch (originalErr) {
+        try { db.exec("ROLLBACK"); } catch (rollbackErr) {
+          if (!isNoActiveTxnError(rollbackErr)) {
+            console.error("ROLLBACK failed (suppressed, propagating original error):", rollbackErr);
+          }
+        }
+        throw originalErr;
+      }
+      try { db.exec("COMMIT"); } catch (commitErr) {
+        if (!isNoActiveTxnError(commitErr)) throw commitErr;
+        // Auto-committed by libsql remote mode — writes are already persisted.
+      }
+      return result;
+    };
+    const base: any = wrap("");
+    base.default = base;
+    base.deferred = wrap("DEFERRED");
+    base.immediate = wrap("IMMEDIATE");
+    base.exclusive = wrap("EXCLUSIVE");
+    base.database = db;
+    return base;
   };
-  const base: any = wrap("");
-  base.default = base;
-  base.deferred = wrap("DEFERRED");
-  base.immediate = wrap("IMMEDIATE");
-  base.exclusive = wrap("EXCLUSIVE");
-  base.database = db;
-  return base;
-};
+}
+
+let db: any = createDb();
+
+function reconnectDb() {
+  try { db.close(); } catch {}
+  db = createDb();
+  db.exec("PRAGMA foreign_keys = OFF;");
+  patchDbTransaction();
+  console.log("Turso stream reconnected.");
+}
+
+if (tursoUrl) {
+  console.log(`Turso (remote mode) connected to ${tursoUrl}`);
+} else {
+  console.log(`Local-only SQLite (TURSO_DB_URL not set — data will not persist across restarts in production)`);
+}
+
+// FK enforcement OFF to match the original better-sqlite3 default the codebase was built on.
+// In remote mode this PRAGMA now actually reaches the Turso server (unlike embedded replica).
+db.exec("PRAGMA foreign_keys = OFF;");
+patchDbTransaction();
 
 // Ensure uploads directory exists
 const uploadsDir = isProd ? '/tmp/uploads' : path.resolve(process.cwd(), "public/uploads");
@@ -1526,7 +1549,13 @@ async function startServer() {
         ...helmet.contentSecurityPolicy.getDefaultDirectives(),
         "img-src": ["'self'", "data:", "https:", "http:"],
         "script-src": ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://maps.googleapis.com"],
-        "connect-src": ["'self'", "https://maps.googleapis.com", "*.googleapis.com"],
+        "connect-src": [
+          "'self'",
+          "https://maps.googleapis.com",
+          "https://*.googleapis.com",
+          // Vite HMR WebSocket — needed in dev, blocked in prod to reduce attack surface.
+          ...(isProd ? [] : ["ws://localhost:*", "wss://localhost:*"]),
+        ],
         "frame-ancestors": ["'self'", "https://ai.studio", "https://*.ai.studio", "https://*.google.com", "https://*.run.app"],
       },
     },
@@ -1569,6 +1598,18 @@ async function startServer() {
 
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
+  // Reconnect Turso if the Hrana stream expired (e.g. after Cloud Run idle scale-down).
+  app.use('/api', (_req, _res, next) => {
+    if (tursoUrl) {
+      try {
+        db.exec("SELECT 1");
+      } catch (e) {
+        if (isHranaStreamError(e)) reconnectDb();
+      }
+    }
+    next();
+  });
 
   // Admin check middleware (must be used after authenticateToken)
   const checkAdmin = (req: any, res: any, next: any) => {
@@ -2522,27 +2563,38 @@ async function startServer() {
 
   app.post("/api/user-alerts/:id/read", authenticateToken, async (req: any, res) => {
     const { id } = req.params;
+    const numericId = Number(id);
+    const isNumericId = !isNaN(numericId) && String(numericId) === id;
+
     try {
-      const notifDoc = await collections.notifications.doc(id).get();
-      if (!notifDoc.exists) {
-        // Fallback check in SQLite if needed, but usually we just return 404
-        return res.status(404).json({ error: "Notification not found" });
+      // SQLite-primary: if the id looks like a SQLite integer, update there directly.
+      if (isNumericId) {
+        const row = db.prepare("SELECT id, user_id FROM notifications WHERE id = ?").get(numericId) as any;
+        if (!row) return res.status(404).json({ error: "Notification not found" });
+        if (row.user_id.toString() !== req.user.id.toString() && req.user.role !== 'admin' && req.user.role !== 'moderator') {
+          return res.status(403).json({ error: "Forbidden: You can only read your own notifications" });
+        }
+        db.prepare("UPDATE notifications SET is_read = 1 WHERE id = ?").run(numericId);
+        // Best-effort Firestore sync (won't match by integer id, but harmless)
+        try { await collections.notifications.doc(id).update({ is_read: 1 }); } catch (_) {}
+        return res.json({ message: "Notification marked as read" });
       }
+
+      // Firestore-primary: id is a Firestore string document id.
+      const notifDoc = await collections.notifications.doc(id).get();
+      if (!notifDoc.exists) return res.status(404).json({ error: "Notification not found" });
+
       const notification = notifDoc.data() as any;
       if (notification.user_id.toString() !== req.user.id.toString() && req.user.role !== 'admin' && req.user.role !== 'moderator') {
         return res.status(403).json({ error: "Forbidden: You can only read your own notifications" });
       }
-      
+
       await collections.notifications.doc(id).update({ is_read: 1 });
-      
-      // Dual-write to SQLite
-      try {
-        db.prepare("UPDATE notifications SET is_read = 1 WHERE id = ?").run(id);
-      } catch (sqe) {}
-      
+      try { db.prepare("UPDATE notifications SET is_read = 1 WHERE id = ?").run(id); } catch (_) {}
+
       res.json({ message: "Notification marked as read" });
     } catch (err) {
-      console.error("Error updating notification status in Firestore:", err);
+      console.error("Error updating notification status:", err);
       res.status(500).json({ error: "Failed to update notification" });
     }
   });
@@ -4649,15 +4701,18 @@ async function startServer() {
     const { user_id } = req.query;
     
     try {
-      // Try Firestore first
-      const firestorePostsSnap = await collections.posts
-        .where("privacy_level", "==", "public")
-        .orderBy("created_at", "desc")
-        .limit(50)
-        .get();
+      let posts: any[] = [];
 
-      let posts = [];
-      for (const doc of firestorePostsSnap.docs) {
+      // Try Firestore first; gracefully fall back to SQLite if the query fails
+      // (e.g. missing composite index on privacy_level+created_at).
+      try {
+        const firestorePostsSnap = await collections.posts
+          .where("privacy_level", "==", "public")
+          .orderBy("created_at", "desc")
+          .limit(50)
+          .get();
+
+        for (const doc of firestorePostsSnap.docs) {
         const data = doc.data() as any;
         let motoData: any = null;
         let eventData: any = null;
@@ -4726,9 +4781,15 @@ async function startServer() {
           is_pinned: isPinned ? 1 : (data.is_pinned || 0)
         });
       }
+      } catch (fsErr: any) {
+        // Firestore query failed (e.g. missing composite index). Fall through to SQLite.
+        if (!isPermissionDeniedErr(fsErr)) console.error("Firestore posts fetch failed, falling back to SQLite:", fsErr);
+      }
 
       // For migration, we still mix in SQLite posts if Firestore is empty or sparsely populated
       if (posts.length < 10) {
+        // Validate user_id to prevent SQL injection before embedding in subquery.
+        const safeUid = user_id && /^\d+$/.test(String(user_id)) ? Number(user_id) : -1;
         const sqlitePosts = db.prepare(`
           SELECT p.*, u.username, u.type, u.profile_picture_url,
                 r.name as rider_name, e.company_name, e.service_category,
@@ -4737,8 +4798,8 @@ async function startServer() {
                 p.respect_count as likes_count,
                 p.respect_count,
                 p.comment_count,
-                ${user_id ? `(SELECT COUNT(*) FROM post_likes WHERE post_id = p.id AND user_id = ${user_id}) > 0` : '0'} as has_liked,
-                ${user_id ? `(SELECT COUNT(*) FROM user_pinned_posts WHERE post_id = p.id AND user_id = ${user_id}) > 0` : '0'} as is_pinned
+                (SELECT COUNT(*) FROM post_likes WHERE post_id = p.id AND user_id = ?) > 0 as has_liked,
+                (SELECT COUNT(*) FROM user_pinned_posts WHERE post_id = p.id AND user_id = ?) > 0 as is_pinned
           FROM posts p
           JOIN users u ON p.user_id = u.id
           LEFT JOIN riders r ON u.id = r.user_id
@@ -4748,7 +4809,7 @@ async function startServer() {
           WHERE (p.privacy_level = 'public' OR p.user_id = ?)
           ORDER BY is_pinned DESC, p.created_at DESC
           LIMIT 50
-        `).all(user_id || -1);
+        `).all(safeUid, safeUid, safeUid);
         
         // Deduplicate using user_id and content, and fallback to id
         const firestoreSignatures = new Set(posts.map(p => `${p.user_id}_${String(p.content).trim()}`));
@@ -4782,17 +4843,22 @@ async function startServer() {
     }
   });
 
-  app.post("/api/posts/:id/pin", authenticateToken, (req: any, res) => {
+  app.post("/api/posts/:id/pin", authenticateToken, async (req: any, res) => {
     const postId = req.params.id;
     const userId = req.user.id;
 
     try {
-      // Check if post exists
-      const post = db.prepare("SELECT * FROM posts WHERE id = ?").get(postId) as any;
+      // Check if post exists — SQLite first, then Firestore (handles IDs that pre-date the
+      // dual-write fix where Firestore and SQLite IDs diverged).
+      let post: any = db.prepare("SELECT id, user_id FROM posts WHERE id = ?").get(postId);
       if (!post) {
-        return res.status(404).json({ error: "Post not found" });
+        const fsDoc = await collections.posts.doc(postId.toString()).get();
+        if (!fsDoc.exists) {
+          return res.status(404).json({ error: "Post not found" });
+        }
+        post = { id: postId, user_id: fsDoc.data()?.user_id };
       }
-      if (post.user_id !== userId) {
+      if (String(post.user_id) !== String(userId)) {
         return res.status(403).json({ error: "You can only pin your own posts" });
       }
 
@@ -5123,28 +5189,20 @@ async function startServer() {
       try {
         const followDoc = await collections.followers.doc(followId).get();
         if (followDoc.exists) isFollowingFirestore = true;
-        
-        if (!isFollowingFirestore) {
-            const followCheckAlt = await collections.followers.where('user_id', 'in', [parsedUserId, user_id.toString()]).where('follower_id', 'in', [parsedFollowerId, follower_id.toString()]).get();
-            isFollowingFirestore = !followCheckAlt.empty;
-        }
       } catch (e) {}
-      
+
       if (isFollowingFirestore || isFollowingSQLite) {
-        // UNFOLLOW
+        // UNFOLLOW — delete Firestore doc, then delete SQLite row independently
         try {
-            await collections.followers.doc(followId).delete();
-            const altCheck = await collections.followers.where('user_id', 'in', [parsedUserId, user_id.toString()]).where('follower_id', 'in', [parsedFollowerId, follower_id.toString()]).get();
-            altCheck.docs.forEach(doc => doc.ref.delete());
+          await collections.followers.doc(followId).delete();
         } catch (e) {}
-        
-        // Dual-delete SQLite
+
         try {
           db.prepare("DELETE FROM followers WHERE user_id = ? AND follower_id = ?").run(parsedUserId, parsedFollowerId);
         } catch (sqe) {
           console.error("SQLite delete followers error:", sqe);
         }
-        
+
         res.json({ success: true, action: 'unfollowed' });
       } else {
         const now = new Date().toISOString();
@@ -6283,13 +6341,14 @@ async function startServer() {
 
       await collections.posts.doc(postId.toString()).set(postDoc);
 
-      // Dual write to SQLite
-      insertPost.run(
-        user.id, 
-        postDoc.content, 
-        postDoc.image_url, 
-        postDoc.tagged_motorcycle_id, 
-        postDoc.privacy_level, 
+      // Dual write to SQLite — use the same postId so both systems stay in sync.
+      db.prepare("INSERT OR IGNORE INTO posts (id, user_id, content, image_url, tagged_motorcycle_id, privacy_level, shared_event_id) VALUES (?, ?, ?, ?, ?, ?, ?)").run(
+        postId,
+        user.id,
+        postDoc.content,
+        postDoc.image_url,
+        postDoc.tagged_motorcycle_id,
+        postDoc.privacy_level,
         postDoc.shared_event_id
       );
 
@@ -7717,9 +7776,10 @@ async function startServer() {
     }
   });
 
-  app.get("/api/users/:id/basic", authenticateToken, (req: any, res) => {
+  app.get("/api/users/:id/basic", authenticateToken, async (req: any, res) => {
     const { id } = req.params;
     try {
+      await ensureSqliteUserExists(id);
       const user = db.prepare(`
         SELECT u.id, u.username, u.profile_picture_url, u.type,
                COALESCE(e.company_name, r.name) as name

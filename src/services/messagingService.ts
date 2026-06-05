@@ -1,5 +1,41 @@
 import { fetchWithAuth } from '../utils/api';
 
+// Runs `fn` immediately and then on `intervalMs`, but pauses while the tab is
+// hidden (Page Visibility API) to avoid burning server quota for idle tabs.
+// Returns a cleanup function that stops the poller and removes the listener.
+function createPoller(fn: () => void, intervalMs: number): () => void {
+  let timer: ReturnType<typeof setInterval> | null = null;
+
+  const start = () => {
+    if (timer !== null) return;
+    fn();
+    timer = setInterval(fn, intervalMs);
+  };
+
+  const stop = () => {
+    if (timer !== null) {
+      clearInterval(timer);
+      timer = null;
+    }
+  };
+
+  const onVisibilityChange = () => {
+    if (document.hidden) {
+      stop();
+    } else {
+      start();
+    }
+  };
+
+  document.addEventListener('visibilitychange', onVisibilityChange);
+  start();
+
+  return () => {
+    stop();
+    document.removeEventListener('visibilitychange', onVisibilityChange);
+  };
+}
+
 export const createChat = async (participantIds: number[], type: 'one-on-one' | 'group', title?: string) => {
   const res = await fetchWithAuth('/api/conversations', {
     method: 'POST',
@@ -40,12 +76,11 @@ export const subscribeToMessages = (chatId: number, callback: (messages: any[]) 
     }
   };
 
-  fetchMessages();
-  const interval = setInterval(fetchMessages, 3000);
+  const stopPoller = createPoller(fetchMessages, 3000);
 
   return () => {
     isSubscribed = false;
-    clearInterval(interval);
+    stopPoller();
   };
 };
 
@@ -91,11 +126,10 @@ export const subscribeToUserChats = (userId: number, callback: (chats: any[]) =>
     }
   };
 
-  fetchChats();
-  const interval = setInterval(fetchChats, 5000);
+  const stopPoller = createPoller(fetchChats, 5000);
 
   return () => {
     isSubscribed = false;
-    clearInterval(interval);
+    stopPoller();
   };
 };
