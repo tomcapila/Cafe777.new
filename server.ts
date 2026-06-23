@@ -27,6 +27,7 @@ import { fetchOSMPlaces } from './src/services/osmService.ts';
 import admin from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
 import firebaseConfig from "./firebase-applet-config.json" with { type: "json" };
+import { GoogleGenAI } from "@google/genai";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -76,6 +77,7 @@ const collections = {
   post_likes: firestore.collection("post_likes"),
   followers: firestore.collection("followers"),
   events: firestore.collection("events"),
+  events_staging: firestore.collection("events_staging"),
   contests: firestore.collection("contests"),
   submissions: firestore.collection("submissions"),
   votes: firestore.collection("votes"),
@@ -365,10 +367,16 @@ const uploadToFirebase = async (file: any, folder: string = "uploads"): Promise<
     throw new Error("Firebase storage bucket is not initialized.");
   }
 
+  const downloadToken = crypto.randomUUID();
   const blob = bucket.file(firebasePath);
   const blobStream = blob.createWriteStream({
     metadata: {
-      contentType: file.mimetype
+      contentType: file.mimetype,
+      metadata: {
+        // Embeds a stable download token so the URL works in <img> tags
+        // without requiring public bucket access or storage rules changes.
+        firebaseStorageDownloadTokens: downloadToken
+      }
     },
     resumable: false
   });
@@ -378,14 +386,8 @@ const uploadToFirebase = async (file: any, folder: string = "uploads"): Promise<
       console.error("Firebase upload error:", err.message);
       reject(err);
     });
-    blobStream.on('finish', async () => {
-      try {
-        await blob.makePublic();
-      } catch (e) {
-        console.warn("Could not make file public (may require Uniform Bucket-Level Access or IAM changes):", e);
-      }
-      // Use the standard download URL format which is more robust for Firebase
-      const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${firebaseConfig.storageBucket}/o/${encodeURIComponent(blob.name)}?alt=media`;
+    blobStream.on('finish', () => {
+      const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${firebaseConfig.storageBucket}/o/${encodeURIComponent(blob.name)}?alt=media&token=${downloadToken}`;
       resolve(publicUrl);
     });
     blobStream.end(file.buffer);
@@ -993,6 +995,9 @@ try {
 try {
   db.prepare("ALTER TABLE places_cache ADD COLUMN source TEXT DEFAULT 'google'").run();
 } catch (e) { /* Column might already exist */ }
+try {
+  db.prepare("ALTER TABLE places_cache ADD COLUMN import_batch_id TEXT").run();
+} catch (e) { /* Column might already exist */ }
 
 // Migration: Add respect_count and comment_count if they don't exist
 try {
@@ -1163,6 +1168,21 @@ try {
 
 try {
   db.exec("ALTER TABLE events ADD COLUMN price_starting_from INTEGER DEFAULT 0;");
+} catch (e) {}
+try {
+  db.exec("ALTER TABLE events ADD COLUMN source_type TEXT DEFAULT 'internal';");
+} catch (e) {}
+try {
+  db.exec("ALTER TABLE events ADD COLUMN source_name TEXT;");
+} catch (e) {}
+try {
+  db.exec("ALTER TABLE events ADD COLUMN created_by_user_id TEXT;");
+} catch (e) {}
+try {
+  db.exec("ALTER TABLE events ADD COLUMN ingested_at TEXT;");
+} catch (e) {}
+try {
+  db.exec("ALTER TABLE events ADD COLUMN is_verified INTEGER DEFAULT 0;");
 } catch (e) {}
 
 // Insert missing badges
@@ -1677,17 +1697,20 @@ async function startServer() {
       let dbUser: any = db.prepare("SELECT id, username, role, plan, type FROM users WHERE id = ?").get(user.id) as any;
 
       if (!dbUser) {
-        // Fallback to Firestore if not found in SQLite
+        // Fallback to Firestore if not found in SQLite — 4s timeout so a slow/down
+        // Firestore never blocks authenticated requests indefinitely.
         try {
-          const firestoreUser = await collections.users.doc(user.id?.toString()).get();
-          if (firestoreUser.exists) {
+          const fsTimeout = new Promise<null>((_, r) => setTimeout(() => r(new Error('timeout')), 4000));
+          const firestoreUser = await Promise.race([
+            collections.users.doc(user.id?.toString()).get(),
+            fsTimeout
+          ]) as any;
+          if (firestoreUser && firestoreUser.exists) {
             dbUser = { id: user.id, ...firestoreUser.data() };
-            // Auto-migrate to SQLite if found in Firestore but not SQLite
-            await ensureSqliteUserExists(user.id);
+            ensureSqliteUserExists(user.id).catch(() => {});
           }
         } catch (firestoreErr: any) {
-          // Only log if it's not a permission error which we know can happen
-          if (!firestoreErr.message?.includes('PERMISSION_DENIED')) {
+          if (!firestoreErr.message?.includes('PERMISSION_DENIED') && firestoreErr.message !== 'timeout') {
             console.warn(`Firestore user fetch failed in authenticateToken:`, firestoreErr.message);
           }
         }
@@ -1894,26 +1917,34 @@ async function startServer() {
       return res.status(400).json({ error: "Invalid input", details: validation.error.format() });
     }
     const { email, password } = validation.data;
-    
+
     try {
+      const _t0 = Date.now();
       // SQLite is the source of truth for users (it survived the Firebase
       // project migration; Firestore was reset). Check Turso first, then fall
       // back to Firestore for legacy / dual-written rows.
       let user: any = db.prepare("SELECT * FROM users WHERE email = ?").get(email) as any;
+      console.log(`[login] Turso query: ${Date.now()-_t0}ms found=${!!user}`);
       let foundInFirestore = false;
 
       if (!user) {
+        const _t1 = Date.now();
         try {
-          const firestoreUserSnap = await collections.users.where("email", "==", email).limit(1).get();
-          if (!firestoreUserSnap.empty) {
+          const timeout = new Promise<null>((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000));
+          const firestoreUserSnap = await Promise.race([
+            collections.users.where("email", "==", email).limit(1).get(),
+            timeout
+          ]) as any;
+          if (firestoreUserSnap && !firestoreUserSnap.empty) {
             user = { id: firestoreUserSnap.docs[0].id, ...firestoreUserSnap.docs[0].data() };
             foundInFirestore = true;
           }
         } catch (fsError: any) {
-          if (!isPermissionDeniedErr(fsError)) {
+          if (!isPermissionDeniedErr(fsError) && fsError?.message !== 'timeout') {
             console.error("Firestore user fetch failed:", fsError);
           }
         }
+        console.log(`[login] Firestore fallback: ${Date.now()-_t1}ms found=${!!user}`);
       }
 
       if (foundInFirestore && user) {
@@ -1924,19 +1955,18 @@ async function startServer() {
           );
         } catch (e) {}
       } else if (user) {
-        // Found in SQLite — best-effort sync to Firestore for parity.
-        try {
-          await collections.users.doc(user.id.toString()).set({
-            ...user,
-            interests: user.interests ? user.interests.split(',') : [],
-            services: user.services ? user.services.split(',') : [],
-            created_at: user.created_at || new Date().toISOString()
-          });
-        } catch (migError: any) {
+        // Found in SQLite — best-effort sync to Firestore; fire-and-forget so it
+        // never blocks the login response even if Firestore is slow/rate-limiting.
+        collections.users.doc(user.id.toString()).set({
+          ...user,
+          interests: user.interests ? user.interests.split(',') : [],
+          services: user.services ? user.services.split(',') : [],
+          created_at: user.created_at || new Date().toISOString()
+        }).catch((migError: any) => {
           if (!isPermissionDeniedErr(migError)) {
             console.error("Auto-migration to Firestore failed:", migError);
           }
-        }
+        });
       }
 
       if (!user) {
@@ -1951,16 +1981,17 @@ async function startServer() {
       const isHashed = user.password.startsWith('$2a$') || user.password.startsWith('$2b$') || user.password.startsWith('$2y$');
       
       let passwordMatch = false;
+      const _tb = Date.now();
       if (isHashed) {
         passwordMatch = await bcrypt.compare(password, user.password);
       } else {
         passwordMatch = user.password === password;
         if (passwordMatch) {
-          // Migrate to hashed password
           const hashedPassword = await bcrypt.hash(password, 10);
           db.prepare("UPDATE users SET password = ? WHERE id = ?").run(hashedPassword, user.id);
         }
       }
+      console.log(`[login] bcrypt: ${Date.now()-_tb}ms match=${passwordMatch}`);
 
       if (!passwordMatch) {
         return res.status(401).json({ error: "Invalid credentials" });
@@ -1970,12 +2001,9 @@ async function startServer() {
         return res.status(403).json({ error: `Account is ${user.status}` });
       }
 
-      // Don't return the password
       const { password: _, ...userInfo } = user;
-      
-      // Generate JWT
       const token = jwt.sign({ id: user.id, username: user.username, role: user.role, plan: user.plan }, JWT_SECRET, { expiresIn: '24h' });
-      
+      console.log(`[login] total: ${Date.now()-_t0}ms`);
       res.json({ user: userInfo, token });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -2623,13 +2651,17 @@ async function startServer() {
     }
   });
 
-  // Admin: Get keywords config
+  // Admin: Get keywords config — SQLite-first for instant response.
   app.get("/api/admin/keywords", authenticateToken, async (req, res) => {
     if ((req as any).user.role !== 'admin') return res.status(403).json({ error: "Forbidden" });
     try {
+      const rows = db.prepare("SELECT id, category_name, keywords, radius, icon FROM keywords_config ORDER BY id").all() as any[];
+      if (rows.length > 0) {
+        return res.json(rows.map(r => ({ ...r, keywords: typeof r.keywords === 'string' ? JSON.parse(r.keywords) : r.keywords })));
+      }
+      // Fallback to Firestore when SQLite is empty.
       const snapshot = await collections.keywords_config.get();
-      const keywords = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
-      res.json(keywords);
+      res.json(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
     } catch (error) {
       console.error("Error fetching keywords config:", error);
       res.status(500).json({ error: "Failed to fetch keywords" });
@@ -2714,26 +2746,37 @@ async function startServer() {
     }
   });
 
-  // Admin: Get places control
+  // Admin: Get places control — SQLite-first (fast, offline-safe); Firestore fallback only when SQLite is empty.
   app.get("/api/admin/places", authenticateToken, async (req, res) => {
     if ((req as any).user.role !== 'admin') return res.status(403).json({ error: "Forbidden" });
     try {
-      const cacheSnapshot = await collections.places_cache.get();
-      const controlSnapshot = await collections.places_control.get();
-      
+      const sqlitePlaces = db.prepare(`
+        SELECT pc.place_id, pc.name, pc.lat, pc.lng, pc.rating, pc.reviews,
+               pc.category, pc.full_address, pc.city,
+               COALESCE(ctrl.is_approved, 0)     AS is_approved,
+               COALESCE(ctrl.is_hidden, 0)        AS is_hidden,
+               COALESCE(ctrl.needs_revision, 0)   AS needs_revision
+        FROM   places_cache pc
+        LEFT JOIN places_control ctrl ON pc.place_id = ctrl.place_id
+        ORDER  BY pc.name
+      `).all() as any[];
+
+      if (sqlitePlaces.length > 0) {
+        return res.json(sqlitePlaces);
+      }
+
+      // SQLite empty — fall back to Firestore with a 8s timeout.
+      const fsTimeout = new Promise<null>((_, r) => setTimeout(() => r(new Error('timeout')), 8000));
+      const [cacheSnapshot, controlSnapshot] = await Promise.race([
+        Promise.all([collections.places_cache.get(), collections.places_control.get()]),
+        fsTimeout.then(() => { throw new Error('timeout'); })
+      ]) as any;
+
       const controlsMap = new Map();
-      controlSnapshot.docs.forEach(doc => controlsMap.set(doc.id, doc.data()));
-      
-      const places = cacheSnapshot.docs.map(doc => {
-        const cacheData = doc.data();
-        const controlData = controlsMap.get(doc.id) || {};
-        return {
-          ...cacheData,
-          ...controlData,
-          place_id: doc.id
-        };
-      });
-      
+      controlSnapshot.docs.forEach((doc: any) => controlsMap.set(doc.id, doc.data()));
+      const places = cacheSnapshot.docs.map((doc: any) => ({
+        ...doc.data(), ...(controlsMap.get(doc.id) || {}), place_id: doc.id
+      }));
       res.json(places);
     } catch (error) {
       console.error("Error fetching admin places:", error);
@@ -2747,78 +2790,493 @@ async function startServer() {
     const { places } = req.body;
     if (!Array.isArray(places)) return res.status(400).json({ error: "Invalid data format" });
 
+    // Accent-insensitive, lowercase normalization for matching category text.
+    const normalize = (s: any) =>
+      String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+    // Turn arbitrary category text into a category slug (a-z0-9 + underscores).
+    const slugify = (s: any) =>
+      normalize(s).replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60) || 'other';
+
+    // Maps Google/Apify PT category text -> canonical app slug. First match wins.
+    const CANONICAL_RULES: { needles: string[]; slug: string }[] = [
+      { needles: ['pecas para motocicletas', 'moto pecas', 'motopecas', 'loja de autopecas', 'autopecas', 'auto pecas', 'loja de pecas'], slug: 'parts_store' },
+      { needles: ['concessionaria de motocicletas', 'loja de motocicletas', 'concessionaria de ciclomotores'], slug: 'dealership' },
+      { needles: ['oficina mecanica de motos', 'oficina de moto', 'oficina de motos', 'oficina mecanica'], slug: 'repair' },
+      { needles: ['borracharia', 'alinhamento e balanceamento', 'alinhamento', 'fornecedor de produtos de borracha'], slug: 'repair' },
+      { needles: ['comercio de pneu', 'loja de pneus', 'pneus usados', 'loja de rodas', 'pneu'], slug: 'parts_store' },
+      { needles: ['bateria'], slug: 'parts_store' },
+      { needles: ['lava-rapido', 'lava rapido', 'lava jato', 'lava-jato', 'lavagem de motos'], slug: 'wash' },
+      { needles: ['motocross'], slug: 'motocross' },
+      { needles: ['aluguel de motocicletas', 'aluguel de moto'], slug: 'rental' },
+      { needles: ['servico de entrega', 'entregas expresso', 'motoboy'], slug: 'delivery' },
+    ];
+
+    // Clearly non-motorcycle categories: still imported, but flagged for admin revision.
+    const NON_MOTO: string[] = [
+      'bicicleta', 'pet shop', 'artigos esportivos', 'esportiv', 'tecido', 'estofa',
+      'caminhao', 'caminhoes', 'caminh', 'volvo', 'carros usados', 'revendedora de carros',
+      'leilao', 'automoveis', 'concessionaria de veiculos', 'veiculos motorizados', 'concessionaria',
+    ];
+
+    // Slugs considered motorcycle-relevant (auto-approved).
+    const MOTO_SLUGS = new Set(['dealership', 'repair', 'parts_store', 'gear_shop', 'biker_cafe', 'biker_bar', 'meeting_spot', 'ride_stop', 'motoclub', 'wash', 'motocross', 'rental', 'delivery']);
+
+    // Default Lucide icon per slug (unknown names fall back to MapPin client-side).
+    const ICON_FOR: Record<string, string> = {
+      dealership: 'Building2', repair: 'Wrench', parts_store: 'Cog', gear_shop: 'ShoppingBag',
+      biker_cafe: 'Coffee', wash: 'SprayCan', motocross: 'Flag', rental: 'Bike', delivery: 'Navigation',
+    };
+
+    // Existing category slugs from keywords_config.
+    const existingRows = db.prepare("SELECT category_name FROM keywords_config").all() as { category_name: string }[];
+    const existingCats = new Set(existingRows.map(r => normalize(r.category_name)));
+
+    const classify = (categoryText: string): { slug: string; motoRelevant: boolean } => {
+      const n = normalize(categoryText);
+      if (!n) return { slug: 'other', motoRelevant: false };
+      // Already a known slug (e.g. legacy flat imports where category is already a slug).
+      const asSlug = slugify(categoryText);
+      if (existingCats.has(normalize(asSlug))) return { slug: asSlug, motoRelevant: MOTO_SLUGS.has(asSlug) };
+      // Canonical motorcycle mapping.
+      for (const rule of CANONICAL_RULES) {
+        if (rule.needles.some(needle => n.includes(needle))) return { slug: rule.slug, motoRelevant: true };
+      }
+      // Explicitly non-motorcycle -> create its own category but flag for revision.
+      if (NON_MOTO.some(needle => n.includes(needle))) return { slug: slugify(categoryText), motoRelevant: false };
+      // Mentions "moto" -> treat as a new motorcycle category.
+      if (n.includes('moto')) return { slug: slugify(categoryText), motoRelevant: true };
+      // Unknown -> import but flag for review.
+      return { slug: slugify(categoryText), motoRelevant: false };
+    };
+
+    // Tag every place in this import so the cleanup agent can target just this batch.
+    const importBatchId = Date.now().toString();
+
     try {
-      const batch = firestore.batch();
-      
-      // Get valid categories from keywords_config
-      const validCategoriesRows = db.prepare("SELECT category_name FROM keywords_config").all() as { category_name: string }[];
-      const validCategories = new Set(validCategoriesRows.map(r => r.category_name.toLowerCase()));
+      // First pass: normalize records and collect category seeds for any new categories.
+      const records: any[] = [];
+      const slugInfo = new Map<string, { keywords: Set<string> }>();
 
       for (const p of places) {
-        const place_id = p.place_id || p.id;
+        const place_id = p.placeId || p.place_id || p.id;
         if (!place_id) continue;
 
-        const category = (p.category || 'other').toLowerCase();
-        const isCategoryValid = validCategories.has(category);
-        const needsRevision = !isCategoryValid;
+        const name = p.title || p.name || 'Unknown';
+        const lat = Number(p.location?.lat ?? p.lat);
+        const lng = Number(p.location?.lng ?? p.lng);
+        if (!isFinite(lat) || !isFinite(lng)) continue;
 
-        const cacheRef = collections.places_cache.doc(place_id);
-        const controlRef = collections.places_control.doc(place_id);
+        const categoryText = p.categoryName || p.category || (Array.isArray(p.categories) ? p.categories[0] : '') || 'other';
+        const { slug, motoRelevant } = classify(categoryText);
 
-        const cacheData = {
-          place_id,
-          name: p.name,
-          lat: Number(p.lat),
-          lng: Number(p.lng),
-          rating: Number(p.rating || 0),
-          reviews: Number(p.reviews || 0),
-          category: p.category || 'other',
-          source_keyword: p.source_keyword || 'manual_import',
-          full_address: p.full_address || p.address || null,
-          last_fetched: admin.firestore.FieldValue.serverTimestamp()
-        };
+        const rating = Number(p.totalScore ?? p.rating ?? 0) || 0;
+        const reviews = Number(p.reviewsCount ?? p.reviews ?? 0) || 0;
+        const full_address = p.address || p.full_address || null;
+        const city = p.city || null;
+        const source_keyword = p.searchString || p.source_keyword || 'bulk_import';
 
-        const controlData = {
-          place_id,
-          is_approved: p.is_approved !== undefined ? !!p.is_approved : !needsRevision,
-          is_hidden: !!p.is_hidden,
-          needs_revision: needsRevision
-        };
+        // Respect explicit control flags when provided (back-compat); else derive from relevance.
+        const is_approved = p.is_approved !== undefined ? !!p.is_approved : motoRelevant;
+        const is_hidden = !!p.is_hidden;
+        const needs_revision = p.needs_revision !== undefined ? !!p.needs_revision : !motoRelevant;
 
-        batch.set(cacheRef, cacheData, { merge: true });
-        batch.set(controlRef, controlData, { merge: true });
+        records.push({ place_id, name, lat, lng, rating, reviews, category: slug, source_keyword, full_address, city, is_approved, is_hidden, needs_revision });
 
-        // Dual-write to SQLite for fallback
-        try {
-          db.prepare(`
-            INSERT OR REPLACE INTO places_cache 
-            (place_id, name, lat, lng, rating, reviews, category, source_keyword, last_fetched)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-          `).run(
-            place_id, p.name, p.lat, p.lng, p.rating || 0,
-            p.reviews || 0, p.category || 'other', p.source_keyword || 'manual_import'
-          );
-          
-          db.prepare(`
-            INSERT OR REPLACE INTO places_control 
-            (place_id, is_approved, is_hidden, needs_revision)
-            VALUES (?, ?, ?, ?)
-          `).run(
-            place_id, 
-            p.is_approved !== undefined ? (p.is_approved ? 1 : 0) : (needsRevision ? 0 : 1),
-            p.is_hidden !== undefined ? (p.is_hidden ? 1 : 0) : 0,
-            needsRevision ? 1 : 0
-          );
-        } catch (sqError) {
-          console.error("SQLite bulk import failed for one item:", sqError);
+        if (!existingCats.has(normalize(slug))) {
+          if (!slugInfo.has(slug)) slugInfo.set(slug, { keywords: new Set<string>() });
+          const info = slugInfo.get(slug)!;
+          if (categoryText) info.keywords.add(String(categoryText).trim());
+          if (source_keyword && source_keyword !== 'bulk_import') info.keywords.add(String(source_keyword).trim());
         }
       }
 
-      await batch.commit();
-      res.json({ success: true, count: places.length });
+      // Create any missing categories in keywords_config (Firestore + SQLite).
+      // Allocate ids locally instead of via getNextId()'s Firestore transaction —
+      // running many transactions during a bulk import triggers INVALID_ARGUMENT
+      // ("Invalid transaction"). The shared counter is bumped once at the end.
+      let categoriesCreated = 0;
+      let nextCategoryId = 0;
+      try {
+        const maxRow = db.prepare("SELECT COALESCE(MAX(id), 0) AS m FROM keywords_config").get() as { m: number };
+        nextCategoryId = Number(maxRow?.m || 0);
+      } catch (e) { /* ignore */ }
+      try {
+        const counterDoc = await firestore.collection("_counters").doc("keywords_config").get();
+        const counterVal = counterDoc.exists ? Number(counterDoc.data()?.count || 0) : 0;
+        if (counterVal > nextCategoryId) nextCategoryId = counterVal;
+      } catch (e) { /* ignore */ }
+
+      for (const [slug, info] of slugInfo) {
+        if (existingCats.has(normalize(slug))) continue;
+        const keywords = Array.from(info.keywords).filter(Boolean);
+        if (keywords.length === 0) keywords.push(slug.replace(/_/g, ' '));
+        const icon = ICON_FOR[slug] || 'MapPin';
+        const radius = 5000;
+        const newId = ++nextCategoryId;
+        try {
+          await collections.keywords_config.doc(newId.toString()).set({ category_name: slug, keywords, radius, icon });
+          try {
+            db.prepare("INSERT OR REPLACE INTO keywords_config (id, category_name, keywords, radius, icon) VALUES (?, ?, ?, ?, ?)")
+              .run(newId, slug, JSON.stringify(keywords), radius, icon);
+          } catch (sqError) { console.error("SQLite keyword create failed:", sqError); }
+          existingCats.add(normalize(slug));
+          categoriesCreated++;
+        } catch (kwErr) {
+          console.error("Failed to create keyword category", slug, kwErr);
+        }
+      }
+
+      // Keep the shared counter ahead of the ids we just allocated so future
+      // getNextId("keywords_config") calls don't collide with them.
+      if (categoriesCreated > 0) {
+        try {
+          await firestore.collection("_counters").doc("keywords_config").set({ count: nextCategoryId }, { merge: true });
+        } catch (e) { console.error("Failed to bump keywords_config counter:", e); }
+      }
+
+      // Write places. Chunk Firestore commits to stay under the 500-op batch limit.
+      let batch = firestore.batch();
+      let opsInBatch = 0;
+      const commitIfNeeded = async (force = false) => {
+        if (opsInBatch > 0 && (force || opsInBatch >= 400)) {
+          await batch.commit();
+          batch = firestore.batch();
+          opsInBatch = 0;
+        }
+      };
+
+      let needsRevisionCount = 0;
+      for (const r of records) {
+        const cacheRef = collections.places_cache.doc(r.place_id);
+        const controlRef = collections.places_control.doc(r.place_id);
+
+        batch.set(cacheRef, {
+          place_id: r.place_id, name: r.name, lat: r.lat, lng: r.lng,
+          rating: r.rating, reviews: r.reviews, category: r.category,
+          source_keyword: r.source_keyword, full_address: r.full_address, city: r.city,
+          import_batch_id: importBatchId,
+          last_fetched: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+        opsInBatch++;
+
+        batch.set(controlRef, {
+          place_id: r.place_id, is_approved: r.is_approved, is_hidden: r.is_hidden, needs_revision: r.needs_revision,
+        }, { merge: true });
+        opsInBatch++;
+
+        if (r.needs_revision) needsRevisionCount++;
+
+        try {
+          db.prepare(`
+            INSERT OR REPLACE INTO places_cache
+            (place_id, name, lat, lng, rating, reviews, category, source_keyword, city, import_batch_id, last_fetched)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          `).run(r.place_id, r.name, r.lat, r.lng, r.rating, r.reviews, r.category, r.source_keyword, r.city, importBatchId);
+
+          db.prepare(`
+            INSERT OR REPLACE INTO places_control
+            (place_id, is_approved, is_hidden, needs_revision)
+            VALUES (?, ?, ?, ?)
+          `).run(r.place_id, r.is_approved ? 1 : 0, r.is_hidden ? 1 : 0, r.needs_revision ? 1 : 0);
+        } catch (sqError) {
+          console.error("SQLite bulk import failed for one item:", sqError);
+        }
+
+        await commitIfNeeded();
+      }
+      await commitIfNeeded(true);
+
+      res.json({ success: true, count: records.length, categoriesCreated, needsRevision: needsRevisionCount, batchId: importBatchId });
     } catch (error) {
       console.error("Error bulk importing places:", error);
       res.status(500).json({ error: "Failed to bulk import places" });
+    }
+  });
+
+  // ---- Places Cleanup Agent ------------------------------------------------
+  // Helpers kept local to this block (the server file is intentionally non-modular).
+  const agentNormalize = (s: any) =>
+    String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+  const AGENT_MOTO_SLUGS = new Set(['dealership', 'repair', 'parts_store', 'gear_shop', 'biker_cafe', 'biker_bar', 'meeting_spot', 'ride_stop', 'motoclub', 'wash', 'motocross', 'rental', 'delivery']);
+  const AGENT_MIN_RATING_APPROVE = 4.5;
+  const AGENT_MIN_REVIEWS_APPROVE = 50;
+  const AGENT_MIN_RATING_KEEP = 3.5;
+  const AGENT_DUP_DISTANCE_M = 100;
+
+  const haversineM = (lat1: number, lng1: number, lat2: number, lng2: number) => {
+    const R = 6371000;
+    const toRad = (d: number) => (d * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(a));
+  };
+
+  let agentGenaiClient: GoogleGenAI | null = null;
+  // Wraps a Gemini call with retry + exponential backoff on 429 (rate limit).
+  // Honors the server-suggested retryDelay when the error carries one.
+  const generateWithRetry = async (params: any, maxRetries = 4): Promise<any> => {
+    let attempt = 0;
+    while (true) {
+      try {
+        return await agentGenaiClient!.models.generateContent(params);
+      } catch (err: any) {
+        const status = err?.status ?? err?.code;
+        const msg = String(err?.message ?? err ?? '');
+        const is429 = status === 429 || /\b429\b|too many requests|rate.?limit|resource_exhausted/i.test(msg);
+        if (!is429 || attempt >= maxRetries) throw err;
+        // Prefer the API's own retryDelay; otherwise exponential backoff (2s, 4s, 8s, 16s) + jitter.
+        const suggested = msg.match(/retryDelay"?\s*:?\s*"?(\d+)s/i);
+        const waitMs = suggested
+          ? (Number(suggested[1]) + 1) * 1000
+          : Math.min(2000 * 2 ** attempt, 30000) + Math.floor(Math.random() * 500);
+        console.warn(`Gemini 429 — backing off ${waitMs}ms (retry ${attempt + 1}/${maxRetries})`);
+        await new Promise(r => setTimeout(r, waitMs));
+        attempt++;
+      }
+    }
+  };
+  // Classifies motorcycle-relevance + suggests a category, in batches.
+  // Returns a map place_id -> {relevant, suggestedCategory, reason}, or null when AI is unavailable/failed.
+  const classifyPlacesWithAI = async (
+    items: { place_id: string; name: string; category: string; full_address?: string | null }[],
+    validSlugs: string[]
+  ): Promise<Map<string, { relevant: boolean; suggestedCategory: string; reason: string }> | null> => {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey || items.length === 0) return null;
+    try {
+      if (!agentGenaiClient) agentGenaiClient = new GoogleGenAI({ apiKey });
+      const result = new Map<string, { relevant: boolean; suggestedCategory: string; reason: string }>();
+      const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+      const CHUNK = 25;
+      const CHUNK_DELAY_MS = 1500; // proactively stay under the free-tier RPM
+      let anySuccess = false;
+      for (let i = 0; i < items.length; i += CHUNK) {
+        const chunk = items.slice(i, i + CHUNK);
+        const prompt = `You are curating a directory of MOTORCYCLE-related places (dealerships, repair shops, parts stores, gear shops, biker cafes/bars, ride stops, motorcycle wash, motocross tracks, rental, delivery). For each place below decide if it is relevant to MOTORCYCLISTS. Bicycle shops, car dealerships, pet shops, generic sporting goods stores and truck dealers are NOT relevant.\nValid category slugs: ${validSlugs.join(', ')}.\nReturn ONLY a JSON array, one object per place in the same order, each shaped: {"id": string, "relevant": boolean, "category": string (a slug from the valid list or "other"), "reason": string (max 8 words, Portuguese)}.\nPlaces:\n${JSON.stringify(chunk.map((c) => ({ id: c.place_id, name: c.name, category: c.category, address: c.full_address || '' })))}`;
+        let response: any;
+        try {
+          response = await generateWithRetry({
+            model,
+            contents: prompt,
+            config: { responseMimeType: 'application/json' },
+          });
+        } catch (chunkErr) {
+          // Chunk failed even after retries; skip it — its places fall back to manual flag.
+          console.error('Gemini chunk failed after retries, leaving for manual review:', chunkErr);
+          continue;
+        }
+        anySuccess = true;
+        const txt = (response.text || '').trim();
+        let parsed: any = null;
+        try {
+          parsed = JSON.parse(txt);
+        } catch {
+          try { parsed = JSON.parse(txt.replace(/^```json\s*|\s*```$/g, '')); } catch { parsed = null; }
+        }
+        if (Array.isArray(parsed)) {
+          for (const row of parsed) {
+            if (row && row.id != null) {
+              result.set(String(row.id), {
+                relevant: !!row.relevant,
+                suggestedCategory: String(row.category || 'other'),
+                reason: String(row.reason || ''),
+              });
+            }
+          }
+        }
+        // Throttle between chunks to stay under the rate limit (skip after the last).
+        if (i + CHUNK < items.length) await new Promise(r => setTimeout(r, CHUNK_DELAY_MS));
+      }
+      // Return whatever we classified. A partial map is safe — unclassified places
+      // fall back to "flag for revision" individually. Null only if nothing succeeded.
+      return anySuccess ? result : null;
+    } catch (err) {
+      console.error('AI classification failed:', err);
+      return null;
+    }
+  };
+
+  // Admin: Cleanup agent — analyze a batch and return a proposed plan (no writes).
+  app.post("/api/admin/places/agent/analyze", authenticateToken, async (req, res) => {
+    if ((req as any).user.role !== 'admin') return res.status(403).json({ error: "Forbidden" });
+    try {
+      let { batchId } = req.body || {};
+      if (!batchId) {
+        const last = db.prepare("SELECT import_batch_id FROM places_cache WHERE import_batch_id IS NOT NULL ORDER BY import_batch_id DESC LIMIT 1").get() as any;
+        batchId = last?.import_batch_id;
+      }
+      if (!batchId) return res.status(404).json({ error: "No imported batch found" });
+
+      const rows = db.prepare(`
+        SELECT place_id, name, lat, lng, rating, reviews, category, full_address
+        FROM places_cache WHERE import_batch_id = ?
+      `).all(batchId) as any[];
+
+      if (rows.length === 0) {
+        return res.json({ batchId, plan: [], summary: { total: 0, approve: 0, delete: 0, flag: 0, aiUsed: false } });
+      }
+
+      // Existing live places (outside this batch) for cross-batch duplicate detection.
+      const existing = db.prepare(`
+        SELECT place_id, name, lat, lng, reviews
+        FROM places_cache WHERE import_batch_id IS NULL OR import_batch_id != ?
+      `).all(batchId) as any[];
+
+      type Decision = { place_id: string; name: string; category: string; rating: number; reviews: number; action: 'approve' | 'delete' | 'flag'; reason: string; suggestedCategory: string };
+      const decided = new Map<string, Decision>();
+      const survivors: any[] = [];
+
+      // 1-4: deterministic rules (no API cost).
+      for (const r of rows) {
+        const rating = Number(r.rating) || 0;
+        const reviews = Number(r.reviews) || 0;
+        const lat = Number(r.lat), lng = Number(r.lng);
+        const base = { place_id: r.place_id, name: r.name, category: r.category, rating, reviews, suggestedCategory: r.category };
+        if (!isFinite(lat) || !isFinite(lng) || (lat === 0 && lng === 0)) {
+          decided.set(r.place_id, { ...base, action: 'delete', reason: 'Sem coordenadas válidas' });
+        } else if (rating === 0 || reviews === 0) {
+          decided.set(r.place_id, { ...base, action: 'delete', reason: 'Sem rating ou reviews' });
+        } else if (rating < AGENT_MIN_RATING_KEEP) {
+          decided.set(r.place_id, { ...base, action: 'delete', reason: `Rating baixo (${rating})` });
+        } else {
+          survivors.push(r);
+        }
+      }
+
+      // Duplicate detection: same normalized name within AGENT_DUP_DISTANCE_M. Keep most-reviewed.
+      const dupDeleted = new Set<string>();
+      for (let i = 0; i < survivors.length; i++) {
+        const a = survivors[i];
+        if (dupDeleted.has(a.place_id)) continue;
+        const an = agentNormalize(a.name);
+        for (let j = i + 1; j < survivors.length; j++) {
+          const b = survivors[j];
+          if (dupDeleted.has(b.place_id)) continue;
+          if (agentNormalize(b.name) === an && haversineM(Number(a.lat), Number(a.lng), Number(b.lat), Number(b.lng)) < AGENT_DUP_DISTANCE_M) {
+            const loser = (Number(a.reviews) >= Number(b.reviews)) ? b : a;
+            const winner = loser === a ? b : a;
+            dupDeleted.add(loser.place_id);
+            decided.set(loser.place_id, {
+              place_id: loser.place_id, name: loser.name, category: loser.category,
+              rating: Number(loser.rating) || 0, reviews: Number(loser.reviews) || 0,
+              suggestedCategory: loser.category, action: 'delete', reason: `Duplicata de "${winner.name}"`,
+            });
+            if (loser.place_id === a.place_id) break;
+          }
+        }
+        if (dupDeleted.has(a.place_id)) continue;
+        for (const e of existing) {
+          if (agentNormalize(e.name) === an && haversineM(Number(a.lat), Number(a.lng), Number(e.lat), Number(e.lng)) < AGENT_DUP_DISTANCE_M) {
+            dupDeleted.add(a.place_id);
+            decided.set(a.place_id, {
+              place_id: a.place_id, name: a.name, category: a.category,
+              rating: Number(a.rating) || 0, reviews: Number(a.reviews) || 0,
+              suggestedCategory: a.category, action: 'delete', reason: `Duplicata de lugar existente "${e.name}"`,
+            });
+            break;
+          }
+        }
+      }
+
+      const toClassify = survivors.filter(s => !dupDeleted.has(s.place_id));
+
+      // Valid slugs = motorcycle canon + whatever categories already exist.
+      const kwRows = db.prepare("SELECT category_name FROM keywords_config").all() as any[];
+      const validSlugsSet = new Set<string>(AGENT_MOTO_SLUGS);
+      for (const k of kwRows) validSlugsSet.add(k.category_name);
+      const validSlugs = Array.from(validSlugsSet);
+
+      // 5-7: AI relevance + threshold combination.
+      const aiResult = await classifyPlacesWithAI(
+        toClassify.map(s => ({ place_id: s.place_id, name: s.name, category: s.category, full_address: s.full_address })),
+        validSlugs
+      );
+
+      for (const s of toClassify) {
+        const rating = Number(s.rating) || 0;
+        const reviews = Number(s.reviews) || 0;
+        const ai = aiResult?.get(s.place_id);
+        const suggestedCategory = (ai?.suggestedCategory && ai.suggestedCategory !== 'other') ? ai.suggestedCategory : s.category;
+        const base = { place_id: s.place_id, name: s.name, category: s.category, rating, reviews, suggestedCategory };
+        const isMoto = AGENT_MOTO_SLUGS.has(suggestedCategory) || validSlugsSet.has(suggestedCategory);
+
+        if (aiResult && ai && !ai.relevant) {
+          decided.set(s.place_id, { ...base, action: 'delete', reason: ai.reason || 'Não relacionado a motociclismo' });
+        } else if (aiResult && ai?.relevant && isMoto && rating >= AGENT_MIN_RATING_APPROVE && reviews >= AGENT_MIN_REVIEWS_APPROVE) {
+          decided.set(s.place_id, { ...base, action: 'approve', reason: `Atende critérios (${rating}★, ${reviews} reviews)` });
+        } else if (!aiResult) {
+          decided.set(s.place_id, { ...base, action: 'flag', reason: 'IA indisponível — revisar manualmente' });
+        } else {
+          decided.set(s.place_id, { ...base, action: 'flag', reason: 'Métricas/categoria a confirmar' });
+        }
+      }
+
+      // Preserve original import order.
+      const plan: Decision[] = [];
+      for (const r of rows) {
+        const d = decided.get(r.place_id);
+        if (d) plan.push(d);
+      }
+
+      const summary = {
+        total: plan.length,
+        approve: plan.filter(p => p.action === 'approve').length,
+        delete: plan.filter(p => p.action === 'delete').length,
+        flag: plan.filter(p => p.action === 'flag').length,
+        aiUsed: !!aiResult,
+      };
+
+      res.json({ batchId, plan, summary });
+    } catch (error) {
+      console.error("Agent analyze failed:", error);
+      res.status(500).json({ error: "Failed to analyze batch" });
+    }
+  });
+
+  // Admin: Cleanup agent — apply the (possibly edited) decisions.
+  app.post("/api/admin/places/agent/apply", authenticateToken, async (req, res) => {
+    if ((req as any).user.role !== 'admin') return res.status(403).json({ error: "Forbidden" });
+    const { decisions } = req.body || {};
+    if (!Array.isArray(decisions)) return res.status(400).json({ error: "Invalid decisions" });
+    let approved = 0, deleted = 0, flagged = 0;
+    try {
+      for (const d of decisions) {
+        const placeId = String(d.place_id || '');
+        if (!placeId) continue;
+        const category = d.category;
+
+        if (d.action === 'delete') {
+          try { await collections.places_cache.doc(placeId).delete(); } catch (e) {}
+          try { await collections.places_control.doc(placeId).delete(); } catch (e) {}
+          try {
+            db.prepare("DELETE FROM places_cache WHERE place_id = ?").run(placeId);
+            db.prepare("DELETE FROM places_control WHERE place_id = ?").run(placeId);
+          } catch (e) { console.error("SQLite agent delete failed:", e); }
+          deleted++;
+        } else if (d.action === 'approve') {
+          if (category) {
+            try { await collections.places_cache.doc(placeId).set({ category }, { merge: true }); } catch (e) {}
+            try { db.prepare("UPDATE places_cache SET category = ? WHERE place_id = ?").run(category, placeId); } catch (e) {}
+          }
+          try { await collections.places_control.doc(placeId).set({ place_id: placeId, is_approved: true, is_hidden: false, needs_revision: false }, { merge: true }); } catch (e) {}
+          try { db.prepare("INSERT OR REPLACE INTO places_control (place_id, is_approved, is_hidden, needs_revision) VALUES (?, 1, 0, 0)").run(placeId); } catch (e) { console.error("SQLite agent approve failed:", e); }
+          approved++;
+        } else if (d.action === 'flag') {
+          if (category) {
+            try { await collections.places_cache.doc(placeId).set({ category }, { merge: true }); } catch (e) {}
+            try { db.prepare("UPDATE places_cache SET category = ? WHERE place_id = ?").run(category, placeId); } catch (e) {}
+          }
+          try { await collections.places_control.doc(placeId).set({ place_id: placeId, is_approved: false, needs_revision: true }, { merge: true }); } catch (e) {}
+          try { db.prepare("INSERT OR REPLACE INTO places_control (place_id, is_approved, is_hidden, needs_revision) VALUES (?, 0, 0, 1)").run(placeId); } catch (e) { console.error("SQLite agent flag failed:", e); }
+          flagged++;
+        }
+      }
+      logAdminAction((req as any).user.id, 'PLACES_AGENT_APPLY', 'places', 'agent', `approved=${approved} deleted=${deleted} flagged=${flagged}`);
+      res.json({ success: true, approved, deleted, flagged });
+    } catch (error) {
+      console.error("Agent apply failed:", error);
+      res.status(500).json({ error: "Failed to apply decisions" });
     }
   });
 
@@ -2870,6 +3328,27 @@ async function startServer() {
     } catch (error) {
       console.error("Error updating place cache:", error);
       res.status(500).json({ error: "Failed to update place data" });
+    }
+  });
+
+  // Admin: Delete place
+  app.delete("/api/admin/places/:id", authenticateToken, async (req, res) => {
+    if ((req as any).user.role !== 'admin') return res.status(403).json({ error: "Forbidden" });
+    const placeId = req.params.id;
+    try {
+      await collections.places_cache.doc(placeId).delete();
+      await collections.places_control.doc(placeId).delete();
+      try {
+        db.prepare("DELETE FROM places_cache WHERE place_id = ?").run(placeId);
+        db.prepare("DELETE FROM places_control WHERE place_id = ?").run(placeId);
+      } catch (sqError) {
+        console.error("SQLite delete failed for place:", sqError);
+      }
+      logAdminAction((req as any).user.id, 'DELETE_PLACE', 'place', placeId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting place:", error);
+      res.status(500).json({ error: "Failed to delete place" });
     }
   });
 
@@ -3640,16 +4119,15 @@ async function startServer() {
 
   app.get("/api/stamps", async (req, res) => {
     try {
+      const stamps = db.prepare("SELECT * FROM passport_stamps").all();
+      if (stamps.length > 0) return res.json(stamps);
       const snapshot = await collections.passport_stamps.get();
-      const stamps = snapshot.docs.map(doc => ({ ...doc.data() as any, id: doc.id }));
-      res.json(stamps);
+      res.json(snapshot.docs.map(doc => ({ ...doc.data() as any, id: doc.id })));
     } catch (error: any) {
       if (!error.message?.includes('PERMISSION_DENIED')) {
         console.error("Error fetching stamps from Firestore:", error);
       }
-      // Fallback
-      const stamps = db.prepare("SELECT * FROM passport_stamps").all();
-      res.json(stamps);
+      res.json([]);
     }
   });
 
@@ -3657,49 +4135,31 @@ async function startServer() {
   app.get(["/api/achievements", "/api/badges"], async (req, res) => {
     const { creator_id } = req.query;
     try {
+      let queryStr = `
+        SELECT b.*, creator.username as creator_username, creator.type as creator_type_name
+        FROM badges b LEFT JOIN users creator ON b.creator_id = creator.id
+        WHERE b.is_active = 1
+      `;
+      const params: any[] = [];
+      if (creator_id) { queryStr += " AND b.creator_id = ?"; params.push(parseInt(creator_id as string)); }
+      queryStr += " ORDER BY b.badge_id DESC";
+      const badges = db.prepare(queryStr).all(...params);
+      if (badges.length > 0) return res.json(badges);
+      // Fallback to Firestore when SQLite is empty.
       let query: admin.firestore.Query = collections.badges.where("is_active", "==", 1);
-      if (creator_id) {
-        query = query.where("creator_id", "==", parseInt(creator_id as string));
-      }
-      
+      if (creator_id) query = query.where("creator_id", "==", parseInt(creator_id as string));
       const snapshot = await query.get();
-      const badges = await Promise.all(snapshot.docs.map(async (doc) => {
+      const fsBadges = await Promise.all(snapshot.docs.map(async (doc) => {
         const b = doc.data() as any;
         const creatorData = (await findUserById(b.creator_id)) || {};
-        return {
-          ...b,
-          id: doc.id,
-          creator_username: creatorData.username || 'unknown',
-          creator_type_name: creatorData.type || 'unknown'
-        };
+        return { ...b, id: doc.id, creator_username: creatorData.username || 'unknown', creator_type_name: creatorData.type || 'unknown' };
       }));
-      
-      res.json(badges);
+      res.json(fsBadges);
     } catch (error: any) {
       if (!error.message?.includes('PERMISSION_DENIED')) {
         console.error("Error fetching badges from Firestore:", error);
       }
-      // Fallback
-      try {
-        let queryStr = `
-          SELECT b.*,
-                 creator.username as creator_username,
-                 creator.type as creator_type_name
-          FROM badges b
-          LEFT JOIN users creator ON b.creator_id = creator.id
-          WHERE b.is_active = 1
-        `;
-        const params: any[] = [];
-        if (creator_id) {
-          queryStr += " AND b.creator_id = ?";
-          params.push(parseInt(creator_id as string));
-        }
-        queryStr += " ORDER BY b.badge_id DESC";
-        const badges = db.prepare(queryStr).all(...params);
-        res.json(badges);
-      } catch (sqliteErr) {
-        res.status(500).json({ error: "Failed to load badges" });
-      }
+      res.status(500).json({ error: "Failed to load badges" });
     }
   });
 
@@ -5469,15 +5929,26 @@ async function startServer() {
   });
 
   app.get("/api/events", async (req, res) => {
-    const { username, category, location } = req.query;
+    const { username, category, location, source_type } = req.query;
     let userId = null;
     if (username && typeof username === 'string') {
       const found = await findUserByUsername(username);
       if (found) userId = found.id;
     }
 
+    const validSourceTypes = ['all', 'internal', 'external'];
+    const sourceTypeFilter = (typeof source_type === 'string' && validSourceTypes.includes(source_type))
+      ? source_type : 'all';
+    if (source_type && !validSourceTypes.includes(source_type as string)) {
+      return res.status(400).json({ error: "source_type must be 'all', 'internal', or 'external'" });
+    }
+
     try {
       let query: admin.firestore.Query = collections.events.where("is_approved", "==", 1);
+
+      if (sourceTypeFilter !== 'all') {
+        query = query.where("source_type", "==", sourceTypeFilter);
+      }
 
       if (category && category !== 'all') {
         query = query.where("category", "==", category);
@@ -5591,6 +6062,11 @@ async function startServer() {
         price_starting_from: price_starting_from ? 1 : 0,
         is_promoted: 0,
         is_approved: 1, // Auto-approve for now or based on rules
+        source_type: "internal",
+        source_name: "user_created",
+        created_by_user_id: user.id.toString(),
+        ingested_at: null as null,
+        is_verified: false,
         created_at: admin.firestore.FieldValue.serverTimestamp()
       };
 
@@ -6113,6 +6589,172 @@ async function startServer() {
       logAdminAction((req as any).user.id, is_promoted ? 'PROMOTE_EVENT' : 'UNPROMOTE_EVENT', 'event', req.params.id);
       res.json({ success: true });
     } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Revisão de ingestão de eventos (events_staging)
+  // O serviço de ingestão (Python) escreve em events_staging com status "pending".
+  // O admin revisa, edita, aprova (move para /events) ou rejeita. Aprovação é
+  // server-side (Admin SDK). Todo texto é DADO — o front renderiza como texto.
+  // ---------------------------------------------------------------------------
+
+  // Deriva date/time/location/category/external_link de um doc de staging.
+  const mapStagingToEvent = (s: any) => {
+    const start = (s.start_datetime || "").toString().replace(" ", "T");
+    const date = start.slice(0, 10) || new Date().toISOString().split("T")[0];
+    const hhmm = start.slice(11, 16);
+    const time = /^\d{2}:\d{2}$/.test(hhmm) ? hhmm : null;
+    const locationParts = [s.venue_name, s.address || s.city].filter(Boolean);
+    const location = locationParts.join(" — ") || s.city || null;
+    return {
+      title: s.title || "Evento",
+      description: s.description || null,
+      date,
+      time,
+      location,
+      category: s.event_type || "other",
+      external_link: s.canonical_url || s.raw_url || null,
+    };
+  };
+
+  app.get("/api/admin/staging-events", authenticateToken, checkAdmin, async (req: any, res) => {
+    try {
+      const status = (req.query.status as string) || "pending";
+      const snap = await collections.events_staging.where("status", "==", status).get();
+      const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      // Ordena por fetched_at desc no servidor (evita índice composto no Firestore).
+      items.sort((a: any, b: any) => String(b.fetched_at || "").localeCompare(String(a.fetched_at || "")));
+      res.json(items);
+    } catch (error: any) {
+      console.error("Error listing staging events:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put("/api/admin/staging-events/:id", authenticateToken, checkAdmin, async (req: any, res) => {
+    const { id } = req.params;
+    const editable = ["title", "description", "venue_name", "address", "city", "state", "start_datetime", "end_datetime", "event_type"];
+    try {
+      const ref = collections.events_staging.doc(id);
+      const doc = await ref.get();
+      if (!doc.exists) return res.status(404).json({ error: "Staging event not found" });
+
+      const patch: any = {};
+      for (const key of editable) {
+        if (req.body[key] !== undefined) {
+          // Valores tratados como texto puro (admin é confiável, mas mantemos consistência).
+          patch[key] = req.body[key] === null ? null : String(req.body[key]);
+        }
+      }
+      if (Object.keys(patch).length === 0) {
+        return res.status(400).json({ error: "No editable fields provided" });
+      }
+      patch.edited_at = new Date().toISOString();
+      patch.edited_by = req.user.id;
+
+      await ref.update(patch);
+      logAdminAction(req.user.id, "EDIT_STAGING_EVENT", "events_staging", id);
+      res.json({ success: true, ...patch });
+    } catch (error: any) {
+      console.error("Error editing staging event:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put("/api/admin/staging-events/:id/approve", authenticateToken, checkAdmin, async (req: any, res) => {
+    const { id } = req.params;
+    try {
+      const ref = collections.events_staging.doc(id);
+      const doc = await ref.get();
+      if (!doc.exists) return res.status(404).json({ error: "Staging event not found" });
+      const s = doc.data() as any;
+      if (s.status === "approved") return res.status(409).json({ error: "Already approved" });
+
+      const mapped = mapStagingToEvent(s);
+      const newId = await getNextId("events");
+      const eventData: Record<string, any> = {
+        user_id: req.user.id, // o admin que aprova é o "host" do evento publicado
+        title: mapped.title,
+        description: mapped.description,
+        date: mapped.date,
+        time: mapped.time,
+        location: mapped.location,
+        image_url: null,
+        participation_badge_id: null,
+        participation_stamp_id: null,
+        category: mapped.category,
+        price: null,
+        external_link: mapped.external_link,
+        price_starting_from: 0,
+        is_promoted: 0,
+        is_approved: 1,
+        source_type: "external",
+        source_name: s.source_name || null,
+        created_by_user_id: null,
+        ingested_at: new Date().toISOString(),
+        is_verified: false,
+        staging_id: id,
+        created_at: admin.firestore.FieldValue.serverTimestamp(),
+      };
+      await collections.events.doc(newId.toString()).set(eventData);
+
+      // Dual-write para SQLite (mesmo padrão de POST /api/events).
+      try {
+        db.prepare(`
+          INSERT OR REPLACE INTO events (id, user_id, title, description, date, time, location, image_url, participation_badge_id, category, participation_stamp_id, is_approved, price, external_link, price_starting_from)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(newId, req.user.id, mapped.title, mapped.description, mapped.date, mapped.time, mapped.location, null, null, mapped.category, null, 1, null, mapped.external_link, 0);
+      } catch (sqError) {
+        console.error("SQLite insert failed for approved staging event:", sqError);
+      }
+
+      await ref.update({
+        status: "approved",
+        reviewed_at: new Date().toISOString(),
+        reviewed_by: req.user.id,
+        approved_event_id: newId,
+      });
+      logAdminAction(req.user.id, "APPROVE_STAGING_EVENT", "events_staging", id, `-> events/${newId}`);
+      res.json({ success: true, event_id: newId });
+    } catch (error: any) {
+      console.error("Error approving staging event:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/admin/events/:id/verify", authenticateToken, checkAdmin, async (req: any, res) => {
+    const { id } = req.params;
+    const { is_verified } = req.body;
+    if (typeof is_verified !== 'boolean') {
+      return res.status(400).json({ error: "is_verified must be a boolean" });
+    }
+    try {
+      await collections.events.doc(id).update({ is_verified });
+      logAdminAction(req.user.id, "VERIFY_EVENT", "event", id, `is_verified=${is_verified}`);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error verifying event:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put("/api/admin/staging-events/:id/reject", authenticateToken, checkAdmin, async (req: any, res) => {
+    const { id } = req.params;
+    try {
+      const ref = collections.events_staging.doc(id);
+      const doc = await ref.get();
+      if (!doc.exists) return res.status(404).json({ error: "Staging event not found" });
+      await ref.update({
+        status: "rejected",
+        reviewed_at: new Date().toISOString(),
+        reviewed_by: req.user.id,
+      });
+      logAdminAction(req.user.id, "REJECT_STAGING_EVENT", "events_staging", id);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error rejecting staging event:", error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -7412,28 +8054,24 @@ async function startServer() {
 
   app.get("/api/ambassadors/applications", authenticateToken, checkAdmin, async (req, res) => {
     try {
-      const snapshot = await collections.ambassador_applications.orderBy("created_at", "desc").get();
-      const applications = await Promise.all(snapshot.docs.map(async (doc) => {
-        const app = doc.data() as any;
-        const userData = (await findUserById(app.user_id)) || {};
-        return {
-          ...app,
-          id: doc.id,
-          username: userData.username,
-          email: userData.email
-        };
-      }));
-      res.json(applications);
-    } catch (error: any) {
-      console.error("Error fetching ambassador applications from Firestore:", error);
-      // Fallback
       const applications = db.prepare(`
-        SELECT a.*, u.username, u.email 
+        SELECT a.*, u.username, u.email
         FROM ambassador_applications a
         JOIN users u ON a.user_id = u.id
         ORDER BY a.created_at DESC
       `).all();
-      res.json(applications);
+      if (applications.length > 0) return res.json(applications);
+      // Fallback to Firestore when SQLite is empty.
+      const snapshot = await collections.ambassador_applications.orderBy("created_at", "desc").get();
+      const fsApps = await Promise.all(snapshot.docs.map(async (doc) => {
+        const a = doc.data() as any;
+        const userData = (await findUserById(a.user_id)) || {};
+        return { ...a, id: doc.id, username: userData.username, email: userData.email };
+      }));
+      res.json(fsApps);
+    } catch (error: any) {
+      console.error("Error fetching ambassador applications:", error);
+      res.json([]);
     }
   });
 
