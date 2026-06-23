@@ -1,7 +1,7 @@
 import { fetchWithAuth } from '../utils/api';
 import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ShieldAlert, Trash2, Ban, CheckCircle, Search, UserX, Settings, Users, Calendar, Star, ShieldCheck, XCircle, Camera, MapPin, Activity, Heart, Wrench, Mountain, ToggleLeft, ToggleRight, Trophy, Plus, Edit2, Shield, Image, Upload, AlertCircle } from 'lucide-react';
+import { ShieldAlert, Trash2, Ban, CheckCircle, Search, UserX, Settings, Users, Calendar, Star, ShieldCheck, XCircle, Camera, MapPin, Activity, Heart, Wrench, Mountain, ToggleLeft, ToggleRight, Trophy, Plus, Edit2, Shield, Image, Upload, AlertCircle, Sparkles, Inbox, AlertTriangle, Save, X, ExternalLink } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useFeatureFlags } from '../contexts/FeatureFlagContext';
 import { useNotification } from '../contexts/NotificationContext';
@@ -20,9 +20,13 @@ export default function Admin() {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [searchParams, setSearchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState<'users' | 'events' | 'submissions' | 'event_photos' | 'settings' | 'badges' | 'contests' | 'ambassadors' | 'places'>(
+  const [activeTab, setActiveTab] = useState<'users' | 'events' | 'staging' | 'submissions' | 'event_photos' | 'settings' | 'badges' | 'contests' | 'ambassadors' | 'places'>(
     (searchParams.get('tab') as any) || 'users'
   );
+  const [stagingEvents, setStagingEvents] = useState<any[]>([]);
+  const [editingStagingId, setEditingStagingId] = useState<string | null>(null);
+  const [stagingDraft, setStagingDraft] = useState<any>({});
+  const [stagingBusyId, setStagingBusyId] = useState<string | null>(null);
   const [settings, setSettings] = useState<any>({});
   const [featureAccess, setFeatureAccess] = useState<any[]>([]);
   const [contestSettings, setContestSettings] = useState({ enabled: false, allowedTypes: ['premium'] });
@@ -50,9 +54,17 @@ export default function Admin() {
   const [isBadgeSelectorOpen, setIsBadgeSelectorOpen] = useState(false);
   const [placesSearchTerm, setPlacesSearchTerm] = useState('');
   const [placesCategoryFilter, setPlacesCategoryFilter] = useState('all');
+  const [placesRevisionFilter, setPlacesRevisionFilter] = useState(false);
+  const [keywordsSearchTerm, setKeywordsSearchTerm] = useState('');
   const [selectedPlaces, setSelectedPlaces] = useState<string[]>([]);
   const [isMassActionLoading, setIsMassActionLoading] = useState(false);
   const [editingPlace, setEditingPlace] = useState<any | null>(null);
+  const [lastImportBatchId, setLastImportBatchId] = useState<string | null>(null);
+  const [agentRunning, setAgentRunning] = useState(false);
+  const [agentPlan, setAgentPlan] = useState<any[] | null>(null);
+  const [agentSummary, setAgentSummary] = useState<any | null>(null);
+  const [agentApplying, setAgentApplying] = useState(false);
+  const [agentReport, setAgentReport] = useState<{ approved: number; deleted: number; flagged: number } | null>(null);
 
   const handleAwardBadge = async () => {
     if (!awardingBadgeId || !selectedUserIdToAward) return;
@@ -131,7 +143,7 @@ export default function Admin() {
 
   useEffect(() => {
     const tab = searchParams.get('tab');
-    if (tab && ['users', 'events', 'submissions', 'event_photos', 'settings', 'badges', 'contests', 'ambassadors', 'places'].includes(tab)) {
+    if (tab && ['users', 'events', 'staging', 'submissions', 'event_photos', 'settings', 'badges', 'contests', 'ambassadors', 'places'].includes(tab)) {
       setActiveTab(tab as any);
     }
   }, [searchParams]);
@@ -388,9 +400,10 @@ export default function Admin() {
       if (currentUser) {
         setLoading(true);
         await Promise.all([
-          fetchUsers(), 
-          fetchEvents(), 
-          fetchSubmissions(), 
+          fetchUsers(),
+          fetchEvents(),
+          fetchStagingEvents(),
+          fetchSubmissions(),
           fetchEventPhotos(),
           fetchSettings(), 
           fetchBadges(), 
@@ -411,7 +424,8 @@ export default function Admin() {
   const filteredPlacesControl = placesControl.filter(place => {
     const matchesSearch = place.name.toLowerCase().includes(placesSearchTerm.toLowerCase());
     const matchesCategory = placesCategoryFilter === 'all' || place.category === placesCategoryFilter;
-    return matchesSearch && matchesCategory;
+    const matchesRevision = !placesRevisionFilter || !!place.needs_revision;
+    return matchesSearch && matchesCategory && matchesRevision;
   });
 
   const handleCreateContest = async (e: React.FormEvent) => {
@@ -586,6 +600,69 @@ export default function Admin() {
       showNotification('error', 'Update failed');
     }
   };
+
+  // Cleanup agent: analyze a batch and open the editable preview (no writes yet).
+  const runAgent = async (batchId?: string | null) => {
+    setAgentRunning(true);
+    setAgentReport(null);
+    try {
+      const res = await fetchWithAuth('/api/admin/places/agent/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batchId: batchId || undefined })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAgentPlan(data.plan || []);
+        setAgentSummary(data.summary || null);
+        if (!data.plan || data.plan.length === 0) {
+          showNotification('info', 'No places to review in the last import');
+        }
+      } else {
+        const err = await res.json().catch(() => ({} as any));
+        showNotification('error', err.error || 'Failed to run agent');
+      }
+    } catch (err) {
+      console.error(err);
+      showNotification('error', 'Agent failed');
+    } finally {
+      setAgentRunning(false);
+    }
+  };
+
+  // Edit a single decision in the preview before applying.
+  const updateDecision = (placeId: string, field: 'action' | 'suggestedCategory', value: string) => {
+    setAgentPlan(prev => prev ? prev.map(p => p.place_id === placeId ? { ...p, [field]: value } : p) : prev);
+  };
+
+  // Apply the (possibly edited) decisions, then show the report.
+  const applyAgent = async () => {
+    if (!agentPlan) return;
+    setAgentApplying(true);
+    try {
+      const decisions = agentPlan.map(p => ({ place_id: p.place_id, action: p.action, category: p.suggestedCategory }));
+      const res = await fetchWithAuth('/api/admin/places/agent/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decisions })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAgentReport({ approved: data.approved || 0, deleted: data.deleted || 0, flagged: data.flagged || 0 });
+        setAgentPlan(null);
+        setAgentSummary(null);
+        await fetchPlacesControl();
+        showNotification('success', `Agent applied: ${data.approved} approved, ${data.deleted} deleted, ${data.flagged} flagged`);
+      } else {
+        showNotification('error', 'Failed to apply agent decisions');
+      }
+    } catch (err) {
+      console.error(err);
+      showNotification('error', 'Apply failed');
+    } finally {
+      setAgentApplying(false);
+    }
+  };
   const handleRoleChange = async (id: number, newRole: string) => {
     try {
       const res = await fetchWithAuth(`/api/admin/users/${id}/role`, {
@@ -619,6 +696,99 @@ export default function Admin() {
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  // ---- Revisão de ingestão (events_staging) ----
+  const fetchStagingEvents = async () => {
+    if (!currentUser) return;
+    try {
+      const res = await fetchWithAuth('/api/admin/staging-events');
+      if (res.ok) {
+        setStagingEvents(await res.json());
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const startEditStaging = (ev: any) => {
+    setEditingStagingId(ev.id);
+    setStagingDraft({
+      title: ev.title || '',
+      description: ev.description || '',
+      venue_name: ev.venue_name || '',
+      address: ev.address || '',
+      city: ev.city || '',
+      state: ev.state || '',
+      start_datetime: ev.start_datetime || '',
+      end_datetime: ev.end_datetime || '',
+      event_type: ev.event_type || '',
+    });
+  };
+
+  const cancelEditStaging = () => {
+    setEditingStagingId(null);
+    setStagingDraft({});
+  };
+
+  const saveEditStaging = async (id: string) => {
+    setStagingBusyId(id);
+    try {
+      const res = await fetchWithAuth(`/api/admin/staging-events/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(stagingDraft),
+      });
+      if (res.ok) {
+        setStagingEvents(stagingEvents.map((e) => (e.id === id ? { ...e, ...stagingDraft } : e)));
+        showNotification('success', t('admin.staging.notification.edited'));
+        cancelEditStaging();
+      } else {
+        showNotification('error', t('admin.staging.notification.editFailed'));
+      }
+    } catch (err) {
+      console.error(err);
+      showNotification('error', t('admin.staging.notification.editFailed'));
+    } finally {
+      setStagingBusyId(null);
+    }
+  };
+
+  const handleApproveStaging = async (id: string) => {
+    setStagingBusyId(id);
+    try {
+      const res = await fetchWithAuth(`/api/admin/staging-events/${id}/approve`, { method: 'PUT' });
+      if (res.ok) {
+        setStagingEvents(stagingEvents.filter((e) => e.id !== id));
+        showNotification('success', t('admin.staging.notification.approved'));
+        fetchEvents();
+      } else {
+        showNotification('error', t('admin.staging.notification.approveFailed'));
+      }
+    } catch (err) {
+      console.error(err);
+      showNotification('error', t('admin.staging.notification.approveFailed'));
+    } finally {
+      setStagingBusyId(null);
+    }
+  };
+
+  const handleRejectStaging = async (id: string) => {
+    setStagingBusyId(id);
+    try {
+      const res = await fetchWithAuth(`/api/admin/staging-events/${id}/reject`, { method: 'PUT' });
+      if (res.ok) {
+        setStagingEvents(stagingEvents.filter((e) => e.id !== id));
+        showNotification('success', t('admin.staging.notification.rejected'));
+      } else {
+        showNotification('error', t('admin.staging.notification.rejectFailed'));
+      }
+    } catch (err) {
+      console.error(err);
+      showNotification('error', t('admin.staging.notification.rejectFailed'));
+    } finally {
+      setStagingBusyId(null);
     }
   };
 
@@ -824,6 +994,18 @@ export default function Admin() {
           >
             <Calendar className="w-4 h-4" />
             {t('admin.tab.events')}
+          </button>
+          <button
+            onClick={() => handleTabChange('staging')}
+            className={`flex items-center gap-2 px-6 py-3 rounded-xl text-[10px] font-mono font-black uppercase tracking-widest transition-all whitespace-nowrap shrink-0 ${
+              activeTab === 'staging' ? 'bg-primary text-inverse shadow-xl shadow-primary/20' : 'text-steel hover:text-chrome'
+            }`}
+          >
+            <Inbox className="w-4 h-4" />
+            {t('admin.tab.staging')}
+            {stagingEvents.length > 0 && (
+              <span className="ml-1 px-2 py-0.5 rounded-full bg-accent/20 text-accent text-[9px] font-black">{stagingEvents.length}</span>
+            )}
           </button>
           <button
             onClick={() => handleTabChange('submissions')}
@@ -1166,6 +1348,202 @@ export default function Admin() {
               </table>
             </div>
           </div>
+        </>
+      ) : activeTab === 'staging' ? (
+        <>
+          <div className="mb-8">
+            <h2 className="text-3xl font-display font-black uppercase italic tracking-tighter flex items-center gap-4 text-primary">
+              <Inbox className="w-8 h-8" />
+              {t('admin.staging.title')}
+            </h2>
+            <p className="text-steel font-light mt-2">{t('admin.staging.subtitle')}</p>
+          </div>
+
+          {stagingEvents.length === 0 ? (
+            <div className="glass-card p-16 text-center border-inverse/5 shadow-2xl">
+              <Inbox className="w-12 h-12 mx-auto mb-4 text-engine" />
+              <div className="text-xl font-display font-black uppercase italic text-steel">{t('admin.staging.empty')}</div>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {stagingEvents.map((ev) => {
+                const isEditing = editingStagingId === ev.id;
+                const busy = stagingBusyId === ev.id;
+                const flags: string[] = Array.isArray(ev.injection_flags) ? ev.injection_flags : [];
+                const flagged = flags.length > 0;
+                const geo = ev.geo_status;
+                const geoCls = geo === 'in_mg'
+                  ? 'bg-success/5 text-success border-success/20'
+                  : geo === 'out_mg'
+                  ? 'bg-accent/5 text-accent border-accent/20'
+                  : 'bg-warning/5 text-warning border-warning/20';
+                return (
+                  <div
+                    key={ev.id}
+                    className={`glass-card p-6 shadow-2xl border ${flagged ? 'border-warning/40' : 'border-inverse/5'}`}
+                  >
+                    {/* Cabeçalho: título + selos */}
+                    <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
+                      <div className="min-w-0">
+                        <div className="font-display font-black uppercase italic text-xl tracking-tight text-chrome leading-none mb-2 break-words">
+                          {ev.title}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-mono font-black uppercase tracking-widest border ${geoCls}`}>
+                            <MapPin className="w-3 h-3" />
+                            {t(`admin.staging.geo.${geo || 'unknown'}`)}
+                          </span>
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-mono font-black uppercase tracking-widest border bg-engine text-steel border-inverse/5">
+                            {ev.extraction_method} · {Math.round((ev.extraction_confidence ?? 0) * 100)}%
+                          </span>
+                          {ev.source_name && (
+                            <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-mono font-black uppercase tracking-widest border bg-engine text-steel border-inverse/5">
+                              {ev.source_name}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Aviso de injeção detectada */}
+                    {flagged && (
+                      <div className="mb-4 p-4 rounded-2xl border border-warning/30 bg-warning/5">
+                        <div className="flex items-center gap-2 text-warning font-mono font-black text-[10px] uppercase tracking-widest mb-2">
+                          <AlertTriangle className="w-4 h-4" />
+                          {t('admin.staging.flagsWarning')}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {flags.map((f) => (
+                            <span key={f} className="px-2 py-1 rounded-lg bg-warning/10 text-warning text-[10px] font-mono font-bold">{f}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {isEditing ? (
+                      /* Modo edição */
+                      <div className="space-y-4">
+                        <div>
+                          <label className="text-[10px] font-mono font-black text-steel uppercase tracking-widest">{t('admin.staging.field.title')}</label>
+                          <input className="input-field mt-1" value={stagingDraft.title ?? ''} onChange={(e) => setStagingDraft({ ...stagingDraft, title: e.target.value })} />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-mono font-black text-steel uppercase tracking-widest">{t('admin.staging.field.description')}</label>
+                          <textarea rows={4} className="input-field mt-1 resize-y" value={stagingDraft.description ?? ''} onChange={(e) => setStagingDraft({ ...stagingDraft, description: e.target.value })} />
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="text-[10px] font-mono font-black text-steel uppercase tracking-widest">{t('admin.staging.field.start')}</label>
+                            <input className="input-field mt-1" value={stagingDraft.start_datetime ?? ''} onChange={(e) => setStagingDraft({ ...stagingDraft, start_datetime: e.target.value })} />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-mono font-black text-steel uppercase tracking-widest">{t('admin.staging.field.end')}</label>
+                            <input className="input-field mt-1" value={stagingDraft.end_datetime ?? ''} onChange={(e) => setStagingDraft({ ...stagingDraft, end_datetime: e.target.value })} />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-mono font-black text-steel uppercase tracking-widest">{t('admin.staging.field.venue')}</label>
+                            <input className="input-field mt-1" value={stagingDraft.venue_name ?? ''} onChange={(e) => setStagingDraft({ ...stagingDraft, venue_name: e.target.value })} />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-mono font-black text-steel uppercase tracking-widest">{t('admin.staging.field.address')}</label>
+                            <input className="input-field mt-1" value={stagingDraft.address ?? ''} onChange={(e) => setStagingDraft({ ...stagingDraft, address: e.target.value })} />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-mono font-black text-steel uppercase tracking-widest">{t('admin.staging.field.city')}</label>
+                            <input className="input-field mt-1" value={stagingDraft.city ?? ''} onChange={(e) => setStagingDraft({ ...stagingDraft, city: e.target.value })} />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-mono font-black text-steel uppercase tracking-widest">{t('admin.staging.field.state')}</label>
+                            <input className="input-field mt-1" value={stagingDraft.state ?? ''} onChange={(e) => setStagingDraft({ ...stagingDraft, state: e.target.value })} />
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Modo leitura — todo texto renderizado como texto */
+                      <div className="space-y-3">
+                        {ev.description && (
+                          <p className="text-sm text-chrome/90 whitespace-pre-wrap break-words">{ev.description}</p>
+                        )}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                          <div>
+                            <div className="text-[10px] font-mono font-black text-steel uppercase tracking-widest mb-1">{t('admin.staging.field.start')}</div>
+                            <div className="text-chrome">{ev.start_datetime || '—'}</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] font-mono font-black text-steel uppercase tracking-widest mb-1">{t('admin.staging.field.end')}</div>
+                            <div className="text-chrome">{ev.end_datetime || '—'}</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] font-mono font-black text-steel uppercase tracking-widest mb-1">{t('admin.staging.field.cityState')}</div>
+                            <div className="text-chrome">{[ev.city, ev.state].filter(Boolean).join(' / ') || '—'}</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] font-mono font-black text-steel uppercase tracking-widest mb-1">{t('admin.staging.field.venue')}</div>
+                            <div className="text-chrome break-words">{ev.venue_name || '—'}</div>
+                          </div>
+                        </div>
+                        {ev.address && (
+                          <div className="text-xs">
+                            <div className="text-[10px] font-mono font-black text-steel uppercase tracking-widest mb-1">{t('admin.staging.field.address')}</div>
+                            <div className="text-chrome break-words">{ev.address}</div>
+                          </div>
+                        )}
+                        {ev.raw_url && /^https?:\/\//i.test(ev.raw_url) && (
+                          <a
+                            href={ev.raw_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-[10px] font-mono font-black uppercase tracking-widest text-primary hover:text-accent transition-colors"
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                            {t('admin.staging.viewSource')}
+                          </a>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Ações */}
+                    <div className="flex flex-wrap items-center justify-end gap-3 mt-6 pt-4 border-t border-inverse/5">
+                      {isEditing ? (
+                        <>
+                          <button onClick={cancelEditStaging} disabled={busy} className="btn-secondary flex items-center gap-2">
+                            <X className="w-4 h-4" /> {t('common.cancel')}
+                          </button>
+                          <button onClick={() => saveEditStaging(ev.id)} disabled={busy} className="btn-primary flex items-center gap-2">
+                            <Save className="w-4 h-4" /> {t('common.save')}
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => handleRejectStaging(ev.id)}
+                            disabled={busy}
+                            className="px-4 py-2.5 rounded-xl border border-accent/20 text-accent hover:bg-accent/10 transition-all flex items-center gap-2 text-xs font-mono font-black uppercase tracking-widest disabled:opacity-50"
+                          >
+                            <XCircle className="w-4 h-4" /> {t('admin.staging.action.reject')}
+                          </button>
+                          <button
+                            onClick={() => startEditStaging(ev)}
+                            disabled={busy}
+                            className="px-4 py-2.5 rounded-xl border border-inverse/10 text-steel hover:text-chrome hover:bg-inverse/5 transition-all flex items-center gap-2 text-xs font-mono font-black uppercase tracking-widest disabled:opacity-50"
+                          >
+                            <Edit2 className="w-4 h-4" /> {t('admin.staging.action.edit')}
+                          </button>
+                          <button
+                            onClick={() => handleApproveStaging(ev.id)}
+                            disabled={busy}
+                            className="px-4 py-2.5 rounded-xl border border-success/20 text-success hover:bg-success/10 transition-all flex items-center gap-2 text-xs font-mono font-black uppercase tracking-widest disabled:opacity-50"
+                          >
+                            <CheckCircle className="w-4 h-4" /> {t('admin.staging.action.approve')}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </>
       ) : activeTab === 'submissions' ? (
         <div className="space-y-6">
@@ -1723,7 +2101,7 @@ export default function Admin() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Keywords Config */}
             <div className="bg-oil border border-inverse/10 rounded-2xl p-6">
-              <div className="flex justify-between items-center mb-6">
+              <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-bold text-chrome">Keywords Configuration</h3>
                 <button
                   onClick={() => setIsCreatingKeyword(true)}
@@ -1731,6 +2109,16 @@ export default function Admin() {
                 >
                   Add Category
                 </button>
+              </div>
+              <div className="relative mb-4">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-steel" />
+                <input
+                  type="text"
+                  placeholder="Search categories..."
+                  value={keywordsSearchTerm}
+                  onChange={(e) => setKeywordsSearchTerm(e.target.value)}
+                  className="w-full bg-inverse/5 border border-inverse/10 rounded-xl pl-10 pr-4 py-2 text-sm text-chrome focus:border-primary/50 outline-none transition-all"
+                />
               </div>
 
               {isCreatingKeyword && (
@@ -1801,7 +2189,11 @@ export default function Admin() {
               )}
 
               <div className="space-y-4">
-                {keywordsConfig.map(kw => (
+                {keywordsConfig.filter(kw =>
+                  !keywordsSearchTerm ||
+                  kw.category_name.toLowerCase().includes(keywordsSearchTerm.toLowerCase()) ||
+                  (Array.isArray(kw.keywords) && kw.keywords.some((k: string) => k.toLowerCase().includes(keywordsSearchTerm.toLowerCase())))
+                ).map(kw => (
                   <div key={kw.id} className="flex items-center justify-between bg-inverse/5 rounded-xl p-4">
                     <div>
                       <h4 className="font-bold text-chrome">{kw.category_name}</h4>
@@ -1945,6 +2337,13 @@ export default function Admin() {
                       <option key={kw.id} value={kw.category_name}>{kw.category_name}</option>
                     ))}
                   </select>
+                  <button
+                    onClick={() => setPlacesRevisionFilter(v => !v)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all border ${placesRevisionFilter ? 'bg-error/20 text-error border-error/30' : 'bg-inverse/5 text-steel border-inverse/10 hover:border-error/30 hover:text-error'}`}
+                  >
+                    <AlertCircle className="w-4 h-4" />
+                    Needs Revision
+                  </button>
                   <label className="bg-primary/10 text-primary hover:bg-primary/20 px-4 py-2 rounded-xl text-sm font-bold cursor-pointer transition-all flex items-center gap-2">
                     <Upload className="w-4 h-4" />
                     Bulk Import
@@ -1967,8 +2366,21 @@ export default function Admin() {
                           });
                           
                           if (res.ok) {
-                            showNotification('success', `Successfully imported ${places.length} places`);
+                            const result = await res.json().catch(() => ({} as any));
+                            const imported = result.count ?? (Array.isArray(places) ? places.length : 0);
+                            const created = result.categoriesCreated ?? 0;
+                            const flagged = result.needsRevision ?? 0;
+                            let msg = `Imported ${imported} places`;
+                            if (created) msg += ` • ${created} new ${created === 1 ? 'category' : 'categories'}`;
+                            if (flagged) msg += ` • ${flagged} flagged for revision`;
+                            showNotification('success', msg);
                             fetchPlacesControl();
+                            fetchKeywords();
+                            if (result.batchId) {
+                              setLastImportBatchId(result.batchId);
+                              // Auto-run the cleanup agent if enabled (still opens the preview for confirmation).
+                              if (settings.agent_auto_run) runAgent(result.batchId);
+                            }
                           } else {
                             showNotification('error', 'Failed to import places');
                           }
@@ -1981,6 +2393,23 @@ export default function Admin() {
                       }}
                     />
                   </label>
+                  <button
+                    onClick={() => runAgent(lastImportBatchId)}
+                    disabled={agentRunning}
+                    title="Analyze the last import: auto-approve, delete junk, flag the rest"
+                    className="bg-accent/10 text-accent hover:bg-accent/20 px-4 py-2 rounded-xl text-sm font-bold cursor-pointer transition-all flex items-center gap-2 disabled:opacity-50"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    {agentRunning ? 'Analyzing...' : 'Run Cleanup Agent'}
+                  </button>
+                  <button
+                    onClick={() => handleSettingChange('agent_auto_run', !settings.agent_auto_run)}
+                    title="Automatically run the cleanup agent after each Bulk Import"
+                    className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-bold transition-all border border-inverse/10 text-steel hover:text-chrome"
+                  >
+                    {settings.agent_auto_run ? <ToggleRight className="w-5 h-5 text-accent" /> : <ToggleLeft className="w-5 h-5" />}
+                    Auto-run
+                  </button>
                 </div>
               </div>
 
@@ -2017,28 +2446,25 @@ export default function Admin() {
                     <button
                       disabled={isMassActionLoading}
                       onClick={async () => {
+                        if (!confirm(`Delete ${selectedPlaces.length} selected places? This cannot be undone.`)) return;
                         setIsMassActionLoading(true);
                         try {
-                          await Promise.all(selectedPlaces.map(id => 
-                            fetchWithAuth(`/api/admin/places/${id}/control`, {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ is_hidden: 1 })
-                            })
+                          await Promise.all(selectedPlaces.map(id =>
+                            fetchWithAuth(`/api/admin/places/${id}`, { method: 'DELETE' })
                           ));
-                          showNotification('success', `Hidden ${selectedPlaces.length} places`);
+                          showNotification('success', `Deleted ${selectedPlaces.length} places`);
                           setSelectedPlaces([]);
                           await fetchPlacesControl();
                         } catch (err) {
                           console.error(err);
-                          showNotification('error', 'Failed to mass hide');
+                          showNotification('error', 'Failed to mass delete');
                         } finally {
                           setIsMassActionLoading(false);
                         }
                       }}
                       className="bg-error text-inverse px-4 py-2 rounded-lg text-xs font-bold hover:bg-error/90 transition-all disabled:opacity-50"
                     >
-                      {isMassActionLoading ? 'Processing...' : 'Mass Hide'}
+                      {isMassActionLoading ? 'Processing...' : 'Mass Delete'}
                     </button>
                     <button
                       onClick={() => setSelectedPlaces([])}
@@ -2111,6 +2537,26 @@ export default function Admin() {
                           className="px-3 py-1 bg-primary/10 text-primary hover:bg-primary/20 rounded-lg text-xs font-bold transition-all"
                         >
                           Edit
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (!confirm(`Delete "${place.name}"? This cannot be undone.`)) return;
+                            try {
+                              const res = await fetchWithAuth(`/api/admin/places/${place.place_id}`, { method: 'DELETE' });
+                              if (res.ok) {
+                                showNotification('success', `Deleted "${place.name}"`);
+                                fetchPlacesControl();
+                              } else {
+                                showNotification('error', 'Failed to delete place');
+                              }
+                            } catch (err) {
+                              console.error(err);
+                              showNotification('error', 'Delete failed');
+                            }
+                          }}
+                          className="px-3 py-1 bg-error/10 text-error hover:bg-error/20 rounded-lg text-xs font-bold transition-all"
+                        >
+                          Delete
                         </button>
                         <button
                           onClick={async () => {
@@ -2214,6 +2660,131 @@ export default function Admin() {
               </div>
             </div>
           </div>
+
+          {/* Cleanup Agent — report card (ephemeral, last run only) */}
+          {agentReport && (
+            <div className="bg-oil border border-accent/30 rounded-2xl p-6">
+              <div className="flex justify-between items-start mb-4">
+                <h3 className="text-lg font-bold text-chrome flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-accent" />
+                  Cleanup Report
+                </h3>
+                <button onClick={() => setAgentReport(null)} className="text-steel hover:text-chrome">
+                  <XCircle className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="bg-success/10 border border-success/20 rounded-xl p-4 text-center">
+                  <div className="text-3xl font-display font-black text-success">{agentReport.approved}</div>
+                  <div className="text-[10px] font-mono uppercase tracking-widest text-steel mt-1">Approved</div>
+                </div>
+                <div className="bg-error/10 border border-error/20 rounded-xl p-4 text-center">
+                  <div className="text-3xl font-display font-black text-error">{agentReport.deleted}</div>
+                  <div className="text-[10px] font-mono uppercase tracking-widest text-steel mt-1">Deleted</div>
+                </div>
+                <div className="bg-accent/10 border border-accent/20 rounded-xl p-4 text-center">
+                  <div className="text-3xl font-display font-black text-accent">{agentReport.flagged}</div>
+                  <div className="text-[10px] font-mono uppercase tracking-widest text-steel mt-1">Flagged</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Cleanup Agent — editable preview modal */}
+          {agentPlan && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[2000] flex items-center justify-center p-4">
+              <div className="bg-oil border border-inverse/10 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+                <div className="flex justify-between items-center p-6 border-b border-inverse/10">
+                  <div>
+                    <h3 className="text-2xl font-display font-black uppercase italic text-chrome flex items-center gap-3">
+                      <Sparkles className="w-6 h-6 text-accent" />
+                      Cleanup Agent — Review
+                    </h3>
+                    {agentSummary && (
+                      <p className="text-sm text-steel mt-1">
+                        {agentSummary.total} places •{' '}
+                        <span className="text-success">{agentSummary.approve} approve</span> •{' '}
+                        <span className="text-error">{agentSummary.delete} delete</span> •{' '}
+                        <span className="text-accent">{agentSummary.flag} flag</span>
+                        {!agentSummary.aiUsed && <span className="text-warning"> • AI offline (conservative)</span>}
+                      </p>
+                    )}
+                  </div>
+                  <button onClick={() => { setAgentPlan(null); setAgentSummary(null); }} className="text-steel hover:text-chrome">
+                    <XCircle className="w-6 h-6" />
+                  </button>
+                </div>
+
+                <div className="overflow-y-auto flex-1 p-6 space-y-3">
+                  {agentPlan.length === 0 ? (
+                    <p className="text-center text-steel py-12">No places to review.</p>
+                  ) : (
+                    agentPlan.map(item => (
+                      <div key={item.place_id} className={`rounded-xl p-4 border ${
+                        item.action === 'approve' ? 'bg-success/5 border-success/20' :
+                        item.action === 'delete' ? 'bg-error/5 border-error/20' :
+                        'bg-accent/5 border-accent/20'
+                      }`}>
+                        <div className="flex justify-between items-start gap-4">
+                          <div className="min-w-0 flex-1">
+                            <h4 className="font-bold text-chrome truncate">{item.name}</h4>
+                            <p className="text-xs text-steel mt-0.5">{item.rating}★ ({item.reviews} reviews)</p>
+                            <p className="text-[11px] text-steel/70 italic mt-1">{item.reason}</p>
+                          </div>
+                          <div className="flex flex-col gap-2 shrink-0 w-44">
+                            <select
+                              value={item.action}
+                              onChange={(e) => updateDecision(item.place_id, 'action', e.target.value)}
+                              className={`w-full rounded-lg px-3 py-1.5 text-xs font-bold border bg-oil ${
+                                item.action === 'approve' ? 'text-success border-success/30' :
+                                item.action === 'delete' ? 'text-error border-error/30' :
+                                'text-accent border-accent/30'
+                              }`}
+                            >
+                              <option value="approve">✓ Approve</option>
+                              <option value="flag">⚑ Flag for revision</option>
+                              <option value="delete">🗑 Delete</option>
+                            </select>
+                            {item.action !== 'delete' && (
+                              <select
+                                value={item.suggestedCategory || ''}
+                                onChange={(e) => updateDecision(item.place_id, 'suggestedCategory', e.target.value)}
+                                className="w-full bg-oil border border-inverse/10 rounded-lg px-3 py-1.5 text-xs text-chrome"
+                              >
+                                {keywordsConfig.map(kw => (
+                                  <option key={kw.id} value={kw.category_name}>{kw.category_name}</option>
+                                ))}
+                                {!keywordsConfig.some(kw => kw.category_name === item.suggestedCategory) && item.suggestedCategory && (
+                                  <option value={item.suggestedCategory}>{item.suggestedCategory}</option>
+                                )}
+                              </select>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="flex justify-end gap-3 p-6 border-t border-inverse/10">
+                  <button
+                    onClick={() => { setAgentPlan(null); setAgentSummary(null); }}
+                    className="px-6 py-2 border border-inverse/10 rounded-xl text-steel font-bold hover:bg-inverse/5 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={applyAgent}
+                    disabled={agentApplying || agentPlan.length === 0}
+                    className="px-8 py-2 bg-accent text-inverse rounded-xl font-bold hover:bg-accent/90 shadow-xl shadow-accent/20 transition-all disabled:opacity-50 flex items-center gap-2"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    {agentApplying ? 'Applying...' : 'Apply Decisions'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Edit Place Modal */}
           {editingPlace && (

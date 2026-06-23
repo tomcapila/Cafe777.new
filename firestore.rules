@@ -43,6 +43,10 @@ service cloud.firestore {
     match /post_likes/{id} { allow read, write: if isSignedIn(); }
     match /followers/{id} { allow read, write: if isSignedIn(); }
     match /events/{id} { allow read, write: if isSignedIn(); }
+    // Staging de ingestão de eventos: só admin lê; nenhum cliente escreve.
+    // Escrita é exclusiva do serviço de ingestão e do backend via Admin SDK
+    // (que ignora estas regras). A aprovação move o doc para /events.
+    match /events_staging/{id} { allow read: if isAdmin(); allow write: if false; }
     match /contests/{id} { allow read, write: if isSignedIn(); }
     match /submissions/{id} { allow read, write: if isSignedIn(); }
     match /votes/{id} { allow read, write: if isSignedIn(); }

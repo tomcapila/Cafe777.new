@@ -1,6 +1,6 @@
 import { fetchWithAuth } from '../utils/api';
 import React, { useEffect, useState } from 'react';
-import { Calendar, MapPin, Clock, Users, Plus, Star, ShieldCheck, Search, Filter, X, Bike, LayoutGrid, List } from 'lucide-react';
+import { Calendar, MapPin, Clock, Users, Plus, Star, ShieldCheck, Search, Filter, X, Bike, LayoutGrid, List, Globe, Users2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -30,6 +30,7 @@ export default function Events() {
   const [searchDate, setSearchDate] = useState('');
   const [eventCategory, setEventCategory] = useState('all');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'internal' | 'external'>('all');
 
   // Modal state
   const [showModal, setShowModal] = useState(false);
@@ -114,7 +115,7 @@ export default function Events() {
         setMyEvents(combinedMyEvents);
       }
       
-      const res = await fetchWithAuth(`/api/events?username=${username}`);
+      const res = await fetchWithAuth(`/api/events?username=${username}&source_type=${sourceFilter}`);
       const data = await res.json();
       setEvents(data);
     } catch (err) {
@@ -196,7 +197,7 @@ export default function Events() {
 
   useEffect(() => {
     fetchEvents();
-  }, []);
+  }, [sourceFilter]);
 
   const handlePromote = async (eventId: number, currentStatus: number) => {
     try {
@@ -281,6 +282,32 @@ export default function Events() {
           </button>
         </div>
       )}
+
+      {/* Source filter chips */}
+      <div className="flex items-center gap-2 mb-6 flex-wrap">
+        {([
+          { key: 'all',      icon: null,    labelKey: 'events.source.all' },
+          { key: 'internal', icon: Users2,  labelKey: 'events.source.internal' },
+          { key: 'external', icon: Globe,   labelKey: 'events.source.external' },
+        ] as const).map(({ key, icon: Icon, labelKey }) => (
+          <button
+            key={key}
+            onClick={() => setSourceFilter(key)}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[10px] font-mono font-black uppercase tracking-widest transition-all border ${
+              sourceFilter === key
+                ? key === 'internal'
+                  ? 'bg-success/10 text-success border-success/30'
+                  : key === 'external'
+                  ? 'bg-accent/10 text-accent border-accent/30'
+                  : 'bg-primary/10 text-primary border-primary/30'
+                : 'bg-engine text-steel border-inverse/5 hover:text-chrome'
+            }`}
+          >
+            {Icon && <Icon className="w-3 h-3" />}
+            {t(labelKey)}
+          </button>
+        ))}
+      </div>
 
       <div className="mb-12">
         <div className="glass-card p-4 flex flex-col md:flex-row gap-4">
@@ -775,6 +802,23 @@ function EventListItem({ event, t, isAdmin, handleRSVP, handlePromote, viewMode 
           <span className="text-[10px] font-mono font-black text-primary uppercase tracking-widest px-3 py-1 rounded-full bg-primary/5 border border-primary/10">
             {event.category ? t(`events.category.${event.category}`) : t('events.category.other')}
           </span>
+          {event.source_type === 'external' ? (
+            <span className="flex items-center gap-1 text-[9px] font-mono font-bold uppercase tracking-widest px-2.5 py-1 rounded-full bg-accent/10 text-accent border border-accent/20">
+              <Globe className="w-2.5 h-2.5" />
+              {t('events.source.external')}
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 text-[9px] font-mono font-bold uppercase tracking-widest px-2.5 py-1 rounded-full bg-success/10 text-success border border-success/20">
+              <Users2 className="w-2.5 h-2.5" />
+              {t('events.source.internal')}
+            </span>
+          )}
+          {event.is_verified && (
+            <span className="flex items-center gap-1 text-[9px] font-mono font-bold uppercase tracking-widest px-2.5 py-1 rounded-full bg-info/10 text-info border border-info/20">
+              <ShieldCheck className="w-2.5 h-2.5" />
+              {t('events.source.verified')}
+            </span>
+          )}
         </div>
         
         <Link to={`/events/${event.id}`} className="hover:text-primary transition-colors">
