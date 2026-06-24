@@ -150,6 +150,63 @@ async function ensureSqliteUserExists(userId: number | string) {
 const isPermissionDeniedErr = (e: any) =>
   typeof e?.message === "string" && e.message.includes("PERMISSION_DENIED");
 
+// Purge a user from Firestore on account deletion. Without this, login and
+// authenticateToken fall back to Firestore and re-hydrate the Turso row — the
+// account "comes back" even after DELETE FROM users. Deleting the `users` doc is
+// the critical step (it kills both resurrection paths); owned content is cleaned
+// up best-effort so we don't leave the deleted user's data live.
+async function deleteUserFromFirestore(userId: number | string) {
+  const idStr = userId.toString();
+
+  // Docs keyed directly by the user id (deterministic). The users doc is the one
+  // that matters for resurrection; the rest are the user's own mirror rows.
+  for (const ref of [
+    collections.users.doc(idStr),
+    collections.riders.doc(idStr),
+    collections.ecosystems.doc(idStr),
+    collections.ambassadors.doc(idStr),
+  ]) {
+    try {
+      await ref.delete();
+    } catch (e: any) {
+      if (!isPermissionDeniedErr(e)) console.warn(`Firestore delete failed for ${ref.path}:`, e.message);
+    }
+  }
+
+  // Owned/related docs found by query. Best-effort and batched; a failure here
+  // must not block account deletion (the users doc above is already gone).
+  // user_id is stored as a number for self-created rows, so query by the numeric
+  // id and its string form to cover dual-written documents.
+  const idVariants = [userId, idStr].filter((v, i, a) => a.indexOf(v) === i);
+  const queries = idVariants.flatMap((id) => [
+    collections.events.where("user_id", "==", id),
+    collections.posts.where("user_id", "==", id),
+    collections.event_rsvps.where("user_id", "==", id),
+    collections.followers.where("user_id", "==", id),
+    collections.followers.where("follower_id", "==", id),
+    collections.notifications.where("user_id", "==", id),
+    collections.post_likes.where("user_id", "==", id),
+    collections.comments.where("user_id", "==", id),
+  ]);
+  for (const q of queries) {
+    try {
+      const snap = await q.get();
+      let batch = firestore.batch();
+      let n = 0;
+      for (const doc of snap.docs) {
+        batch.delete(doc.ref);
+        if (++n % 400 === 0) {
+          await batch.commit();
+          batch = firestore.batch();
+        }
+      }
+      if (n % 400 !== 0) await batch.commit();
+    } catch (e: any) {
+      if (!isPermissionDeniedErr(e)) console.warn("Firestore owned-doc cleanup failed:", e.message);
+    }
+  }
+}
+
 async function findUserByUsername(username: string): Promise<any | null> {
   if (!username) return null;
   const sq = db.prepare("SELECT * FROM users WHERE username = ?").get(username) as any;
@@ -273,6 +330,9 @@ function patchDbTransaction() {
   (db as any).transaction = function (fn: (...args: any[]) => any) {
     if (typeof fn !== "function") throw new TypeError("Expected first argument to be a function");
     const wrap = (mode: string) => (...args: any[]) => {
+      // Re-apply PRAGMA before BEGIN: Turso may silently recreate the Hrana stream
+      // after idle shutdown, losing the session-scoped PRAGMA foreign_keys = OFF.
+      try { db.exec("PRAGMA foreign_keys = OFF;"); } catch {}
       try { db.exec(`BEGIN${mode ? " " + mode : ""}`); } catch (beginErr) {
         if (!isNoActiveTxnError(beginErr)) throw beginErr;
       }
@@ -4971,7 +5031,10 @@ async function startServer() {
 
       if (user.type === "rider") {
         const riderDoc = await collections.riders.doc(userId).get();
-        const rider = riderDoc.exists ? riderDoc.data() : null;
+        // Fallback ao Turso (fonte de verdade) quando o doc do Firestore não existe.
+        const rider = riderDoc.exists
+          ? riderDoc.data()
+          : (db.prepare("SELECT * FROM riders WHERE user_id = ?").get(user.id) || null);
 
         const motorcyclesSnapshot = await collections.motorcycles.where("rider_id", "==", user.id).get();
         const motorcycles = motorcyclesSnapshot.docs.map(doc => ({ ...doc.data() as any, id: doc.id }));
@@ -5021,7 +5084,11 @@ async function startServer() {
         });
       } else {
         const ecosystemDoc = await collections.ecosystems.doc(userId).get();
-        const ecosystem = ecosystemDoc.exists ? ecosystemDoc.data() : null;
+        // Turso é a fonte de verdade; o register cria a linha ecosystems só lá (não
+        // no Firestore). Sem este fallback, profile vem null e o front quebra.
+        const ecosystem = ecosystemDoc.exists
+          ? ecosystemDoc.data()
+          : (db.prepare("SELECT * FROM ecosystems WHERE user_id = ?").get(user.id) || null);
 
         // Hosted events
         const hostedEventsSnapshot = await collections.events.where("user_id", "==", user.id).get();
@@ -6755,6 +6822,77 @@ async function startServer() {
       res.json({ success: true });
     } catch (error: any) {
       console.error("Error rejecting staging event:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/admin/staging-events/clear", authenticateToken, checkAdmin, async (req: any, res) => {
+    const { status = "all" } = req.body || {};
+    const validStatuses = ["pending", "approved", "rejected", "all"];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ error: `status must be one of: ${validStatuses.join(", ")}` });
+    }
+    try {
+      let query = collections.events_staging as any;
+      if (status !== "all") {
+        query = query.where("status", "==", status);
+      }
+      const snap = await query.get();
+      const batch = db.batch ? db.batch() : null;
+      let count = 0;
+      const deleteBatch = db.batch ? db.batch() : null;
+
+      snap.docs.forEach((doc: any) => {
+        deleteBatch?.delete(doc.ref);
+        count++;
+      });
+
+      await deleteBatch?.commit();
+      logAdminAction(req.user.id, "CLEAR_STAGING_EVENTS", "events_staging", "batch", `status=${status}, count=${count}`);
+      res.json({ success: true, deleted: count, status });
+    } catch (error: any) {
+      console.error("Error clearing staging events:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/admin/events/clear-approved", authenticateToken, checkAdmin, async (req: any, res) => {
+    const { sourceType = "external" } = req.body || {};
+    const validSources = ["internal", "external", "all"];
+    if (!validSources.includes(sourceType)) {
+      return res.status(400).json({ error: `sourceType must be one of: ${validSources.join(", ")}` });
+    }
+    try {
+      let query = collections.events as any;
+      if (sourceType !== "all") {
+        query = query.where("source_type", "==", sourceType);
+      }
+      const snap = await query.get();
+      let count = 0;
+      const deleteBatch = db.batch();
+
+      snap.docs.forEach((doc: any) => {
+        deleteBatch.delete(doc.ref);
+        count++;
+      });
+
+      await deleteBatch.commit();
+
+      // Also delete SQLite entries
+      try {
+        if (sourceType === "all") {
+          db.exec("DELETE FROM events");
+        } else {
+          db.prepare("DELETE FROM events WHERE source_type = ?").run(sourceType);
+        }
+      } catch (sqe) {
+        console.warn("Could not delete from SQLite events:", sqe);
+      }
+
+      logAdminAction(req.user.id, "CLEAR_APPROVED_EVENTS", "events", "batch", `sourceType=${sourceType}, count=${count}`);
+      res.json({ success: true, deleted: count, sourceType });
+    } catch (error: any) {
+      console.error("Error clearing approved events:", error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -8591,8 +8729,14 @@ async function startServer() {
         hashedPassword = await bcrypt.hash(password, 10);
       }
       
-      // Dual write to SQLite for backward compatibility
-      db.transaction(() => {
+      // Writes diretas em auto-commit (sem db.transaction / BEGIN).
+      // Em Turso remote mode (Hrana), db.exec("BEGIN") abre uma transação interativa
+      // no Stream A, mas chamadas subsequentes de db.prepare().run() vão para streams
+      // novos (auto-commit). O resultado é que apenas o INSERT INTO users fica dentro
+      // da transação e nunca commita (COMMIT chega num stream sem tx → swallowed),
+      // enquanto os INSERTs seguintes já commitaram. Sem BEGIN, cada statement
+      // auto-commita individualmente e os dados persistem de imediato.
+      {
         let referredBy = null;
         let isAmbassadorInvite = false;
         if (referralCode) {
@@ -8632,6 +8776,12 @@ async function startServer() {
         );
         userId = result.lastInsertRowid;
 
+        // Limpa qualquer órfão que tenha ficado de tentativas anteriores com o mesmo
+        // userId. Como userId é recém-gerado por AUTOINCREMENT, qualquer linha
+        // pré-existente em ecosystems/riders com esse id é resíduo de write parcial.
+        db.prepare("DELETE FROM ecosystems WHERE user_id = ?").run(userId);
+        db.prepare("DELETE FROM riders WHERE user_id = ?").run(userId);
+
         if (type === "rider") {
           insertRider.run(userId, fullName || username, null, location || null);
           if (bloodType) {
@@ -8640,11 +8790,34 @@ async function startServer() {
         } else {
           insertEco.run(userId, businessName || 'Unknown Business', location || null, businessType || null, bio || null, null, null, userId);
         }
-        
+
         if (isAmbassadorInvite) {
           db.prepare("UPDATE invite_links SET is_used = 1, used_by_user_id = ? WHERE code = ?").run(userId, referralCode);
         }
-      })();
+      }
+
+      // Defesa contra gravação parcial do libsql remoto (Turso): confirmar que a
+      // linha em `users` realmente persistiu ANTES de espelhar no Firestore. Sem
+      // isso, uma falha parcial cria um usuário só no Firestore — invisível na tela
+      // Admin (que lê só o Turso). Foi o que ocorreu com o user 69 / cafe777.app.
+      const persisted = db.prepare("SELECT id FROM users WHERE id = ?").get(userId);
+      if (!persisted) {
+        // users não persistiu mas ecosystems/riders podem ter persistido (write
+        // parcial). Remove o resíduo antes de abortar para não deixar um órfão
+        // que trave o próximo cadastro com a mesma colisão de PK.
+        try {
+          db.prepare("DELETE FROM ecosystems WHERE user_id = ?").run(userId);
+          db.prepare("DELETE FROM riders WHERE user_id = ?").run(userId);
+        } catch {}
+        throw new Error("Falha ao gravar o usuário no Turso; cadastro abortado para não divergir do Firestore. Tente novamente.");
+      }
+      if (type !== "rider") {
+        // Garante a linha em `ecosystems` (idempotente) — evita órfão/ausência no Turso.
+        const ecoRow = db.prepare("SELECT user_id FROM ecosystems WHERE user_id = ?").get(userId);
+        if (!ecoRow) {
+          insertEco.run(userId, businessName || 'Unknown Business', location || null, businessType || null, bio || null, null, null, userId);
+        }
+      }
 
       const userDoc = {
         id: userId,
@@ -8693,7 +8866,7 @@ async function startServer() {
     }
   });
 
-  app.put("/api/user/onboarding", authenticateToken, (req, res) => {
+  app.put("/api/user/onboarding", authenticateToken, async (req: any, res) => {
     const { type, fullName, location, bio, motorcycle, businessName, businessType, interests, services, referralCode } = req.body;
     const userId = (req as any).user.id;
 
@@ -8777,7 +8950,28 @@ async function startServer() {
       })();
       
       const user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as any;
-      
+
+      // Espelha no Firestore. O register grava as duas fontes; o onboarding, até
+      // aqui, gravava só o Turso — o que deixava Firestore desatualizado (tipo/status
+      // de ecosystem, perfil) e divergente. merge:true para não apagar outros campos.
+      try {
+        await collections.users.doc(userId.toString()).set({
+          type: user.type,
+          status: user.status,
+          fullName: user.fullName ?? null,
+          location: user.location ?? null,
+          bio: user.bio ?? null,
+          motorcycle: user.motorcycle ?? null,
+          businessName: user.businessName ?? null,
+          businessType: user.businessType ?? null,
+          interests: user.interests ? user.interests.split(',') : [],
+          services: user.services ? user.services.split(',') : [],
+          username: user.username,
+        }, { merge: true });
+      } catch (e: any) {
+        if (!isPermissionDeniedErr(e)) console.warn("onboarding Firestore mirror failed:", e.message);
+      }
+
       if (user.referred_by) {
         updateAmbassadorReputation(user.referred_by).catch(e => console.error("Could not update reputation", e));
       }
@@ -8788,7 +8982,7 @@ async function startServer() {
     }
   });
 
-  app.delete("/api/user", authenticateToken, (req: any, res) => {
+  app.delete("/api/user", authenticateToken, async (req: any, res) => {
     const userId = req.user.id;
     try {
       db.transaction(() => {
@@ -8819,6 +9013,11 @@ async function startServer() {
         db.prepare("DELETE FROM posts WHERE user_id = ?").run(userId);
         db.prepare("DELETE FROM users WHERE id = ?").run(userId);
       })();
+
+      // Also purge Firestore — otherwise login / authenticateToken re-hydrate the
+      // Turso row from the durable mirror and the account stays active.
+      await deleteUserFromFirestore(userId);
+
       res.json({ success: true, message: "Account deleted successfully" });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -8909,15 +9108,43 @@ async function startServer() {
     }
   });
 
-  app.delete("/api/admin/users/:id", authenticateToken, checkAdmin, (req, res) => {
+  app.delete("/api/admin/users/:id", authenticateToken, checkAdmin, async (req: any, res) => {
+    const id = req.params.id;
     try {
+      // Same child cleanup as the self-serve delete (DELETE /api/user) so an admin
+      // delete doesn't leave orphan rows behind.
       db.transaction(() => {
-        const id = req.params.id;
+        db.prepare("DELETE FROM messages WHERE sender_id = ?").run(id);
+        db.prepare("DELETE FROM chat_participants WHERE user_id = ?").run(id);
+        db.prepare("DELETE FROM notifications WHERE user_id = ?").run(id);
+        db.prepare("DELETE FROM event_rsvps WHERE user_id = ?").run(id);
+        db.prepare("DELETE FROM user_badges WHERE user_id = ?").run(id);
+        db.prepare("DELETE FROM user_passport_stamps WHERE user_id = ?").run(id);
+        db.prepare("DELETE FROM user_route_progress WHERE user_id = ?").run(id);
+        db.prepare("DELETE FROM reviews WHERE reviewer_user_id = ?").run(id);
+        db.prepare("DELETE FROM recommendations WHERE user_id = ?").run(id);
+        db.prepare("DELETE FROM followers WHERE follower_id = ? OR user_id = ?").run(id, id);
+        db.prepare("DELETE FROM post_likes WHERE user_id = ?").run(id);
+        db.prepare("DELETE FROM post_comments WHERE user_id = ?").run(id);
+        db.prepare("DELETE FROM comments WHERE user_id = ?").run(id);
+        db.prepare("DELETE FROM user_pinned_posts WHERE user_id = ?").run(id);
         db.prepare("DELETE FROM motorcycles WHERE rider_id = ?").run(id);
+        db.prepare("DELETE FROM events WHERE user_id = ?").run(id);
+        db.prepare("DELETE FROM submissions WHERE user_id = ?").run(id);
+        db.prepare("DELETE FROM votes WHERE user_id = ?").run(id);
+        db.prepare("DELETE FROM user_reports WHERE reporter_id = ? OR reported_id = ?").run(id, id);
         db.prepare("DELETE FROM riders WHERE user_id = ?").run(id);
         db.prepare("DELETE FROM ecosystems WHERE user_id = ?").run(id);
+        db.prepare("DELETE FROM ambassadors WHERE user_id = ?").run(id);
+        db.prepare("DELETE FROM club_memberships WHERE user_id = ?").run(id);
+        db.prepare("DELETE FROM posts WHERE user_id = ?").run(id);
         db.prepare("DELETE FROM users WHERE id = ?").run(id);
       })();
+
+      // Purge Firestore too, or the next login resurrects the Turso row.
+      await deleteUserFromFirestore(id);
+
+      logAdminAction(req.user.id, "DELETE_USER", "user", id);
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ error: error.message });

@@ -24,9 +24,11 @@ export default function Admin() {
     (searchParams.get('tab') as any) || 'users'
   );
   const [stagingEvents, setStagingEvents] = useState<any[]>([]);
+  const [stagingStatusFilter, setStagingStatusFilter] = useState<'pending' | 'approved' | 'rejected' | 'all'>('pending');
   const [editingStagingId, setEditingStagingId] = useState<string | null>(null);
   const [stagingDraft, setStagingDraft] = useState<any>({});
   const [stagingBusyId, setStagingBusyId] = useState<string | null>(null);
+  const [clearingStagingId, setClearingStagingId] = useState<string | null>(null);
   const [settings, setSettings] = useState<any>({});
   const [featureAccess, setFeatureAccess] = useState<any[]>([]);
   const [contestSettings, setContestSettings] = useState({ enabled: false, allowedTypes: ['premium'] });
@@ -405,10 +407,10 @@ export default function Admin() {
           fetchStagingEvents(),
           fetchSubmissions(),
           fetchEventPhotos(),
-          fetchSettings(), 
-          fetchBadges(), 
+          fetchSettings(),
+          fetchBadges(),
           fetchStamps(),
-          fetchContests(), 
+          fetchContests(),
           fetchContestPromotionSettings(),
           fetchFeatureAccess(),
           fetchAmbassadorApps(),
@@ -420,6 +422,12 @@ export default function Admin() {
     };
     loadData();
   }, [currentUser]);
+
+  useEffect(() => {
+    if (activeTab === 'staging') {
+      fetchStagingEvents(stagingStatusFilter);
+    }
+  }, [stagingStatusFilter]);
 
   const filteredPlacesControl = placesControl.filter(place => {
     const matchesSearch = place.name.toLowerCase().includes(placesSearchTerm.toLowerCase());
@@ -700,15 +708,62 @@ export default function Admin() {
   };
 
   // ---- Revisão de ingestão (events_staging) ----
-  const fetchStagingEvents = async () => {
+  const fetchStagingEvents = async (status: string = 'pending') => {
     if (!currentUser) return;
     try {
-      const res = await fetchWithAuth('/api/admin/staging-events');
+      const res = await fetchWithAuth(`/api/admin/staging-events?status=${status}`);
       if (res.ok) {
         setStagingEvents(await res.json());
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const clearAllStagingEvents = async (status: 'all' | 'pending' | 'approved' | 'rejected' = 'all') => {
+    if (!confirm(`⚠️ ${t('common.confirmDelete')} Deletar todos os eventos de staging com status "${status}"?`)) return;
+    setClearingStagingId('all');
+    try {
+      const res = await fetchWithAuth('/api/admin/staging-events/clear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        showNotification('success', `✓ ${data.deleted} eventos deletados`);
+        await fetchStagingEvents(stagingStatusFilter);
+      } else {
+        showNotification('error', 'Falha ao deletar eventos');
+      }
+    } catch (err) {
+      console.error(err);
+      showNotification('error', 'Erro ao deletar eventos');
+    } finally {
+      setClearingStagingId(null);
+    }
+  };
+
+  const clearApprovedExternalEvents = async () => {
+    if (!confirm('⚠️ Deletar TODOS os eventos aprovados (source_type=external)? Isso é irreversível.')) return;
+    setClearingStagingId('external');
+    try {
+      const res = await fetchWithAuth('/api/admin/events/clear-approved', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sourceType: 'external' }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        showNotification('success', `✓ ${data.deleted} eventos externos deletados`);
+      } else {
+        showNotification('error', 'Falha ao deletar eventos');
+      }
+    } catch (err) {
+      console.error(err);
+      showNotification('error', 'Erro ao deletar eventos');
+    } finally {
+      setClearingStagingId(null);
     }
   };
 
@@ -1357,6 +1412,47 @@ export default function Admin() {
               {t('admin.staging.title')}
             </h2>
             <p className="text-steel font-light mt-2">{t('admin.staging.subtitle')}</p>
+          </div>
+
+          {/* Filtro de status + Botões de ação em lote */}
+          <div className="mb-8 flex flex-col gap-4">
+            <div className="flex flex-wrap items-center gap-2">
+              {(['pending', 'approved', 'rejected', 'all'] as const).map(status => (
+                <button
+                  key={status}
+                  onClick={() => setStagingStatusFilter(status)}
+                  className={`px-4 py-2.5 rounded-xl text-[10px] font-mono font-black uppercase tracking-widest transition-all ${
+                    stagingStatusFilter === status
+                      ? 'bg-primary text-inverse shadow-xl shadow-primary/20'
+                      : 'bg-engine text-steel hover:text-chrome border border-inverse/5'
+                  }`}
+                >
+                  {status}
+                </button>
+              ))}
+            </div>
+
+            {/* Botões de delete em lote */}
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={() => clearAllStagingEvents(stagingStatusFilter)}
+                disabled={clearingStagingId !== null || stagingEvents.length === 0}
+                className="px-4 py-2.5 rounded-xl border border-accent/20 text-accent hover:bg-accent/10 transition-all flex items-center gap-2 text-xs font-mono font-black uppercase tracking-widest disabled:opacity-50"
+              >
+                <Trash2 className="w-4 h-4" />
+                Deletar {stagingStatusFilter === 'all' ? 'Tudo' : stagingStatusFilter} ({stagingEvents.length})
+              </button>
+
+              <button
+                onClick={clearApprovedExternalEvents}
+                disabled={clearingStagingId !== null}
+                className="px-4 py-2.5 rounded-xl border border-warning/20 text-warning hover:bg-warning/10 transition-all flex items-center gap-2 text-xs font-mono font-black uppercase tracking-widest disabled:opacity-50"
+                title="Deletar todos os eventos aprovados com source_type=external"
+              >
+                <Trash2 className="w-4 h-4" />
+                Deletar Eventos Externos Aprovados
+              </button>
+            </div>
           </div>
 
           {stagingEvents.length === 0 ? (
