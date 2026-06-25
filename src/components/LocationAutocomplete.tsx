@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { MapPin } from 'lucide-react';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface LocationAutocompleteProps {
   value?: string;
@@ -15,12 +16,17 @@ interface LocationAutocompleteProps {
 const HERE_API_KEY = "BNecDxcWcrUQ5X1SzghrH2OMxssFG8pgDA6-D9MrlDk";
 
 export default function LocationAutocomplete({ value, defaultValue, onChange, onSelectDetails, placeholder = "Search location...", types, name, className }: LocationAutocompleteProps) {
+  const { language } = useLanguage();
   const [inputValue, setInputValue] = useState(value || defaultValue || '');
   const [predictions, setPredictions] = useState<any[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
-  
+
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Fallback bias to the centroid of Brazil when geolocation is unavailable/denied.
+  const BRAZIL_CENTROID = { lat: -14.235, lng: -51.925 };
 
   useEffect(() => {
     // Get user location for more precise HERE Maps autosuggest
@@ -34,12 +40,11 @@ export default function LocationAutocomplete({ value, defaultValue, onChange, on
         },
         (error) => {
           console.warn("Geolocation warning:", error);
-          // Default to a central location if denied
-          setUserLocation({ lat: 0, lng: 0 });
+          setUserLocation(BRAZIL_CENTROID);
         }
       );
     } else {
-      setUserLocation({ lat: 0, lng: 0 });
+      setUserLocation(BRAZIL_CENTROID);
     }
   }, []);
 
@@ -67,11 +72,13 @@ export default function LocationAutocomplete({ value, defaultValue, onChange, on
     }
     
     // We need at parameter for autosuggest
-    const atParam = userLocation ? `at=${userLocation.lat},${userLocation.lng}` : 'at=0,0';
-    
+    const at = userLocation || BRAZIL_CENTROID;
+    const atParam = `at=${at.lat},${at.lng}`;
+    const lang = language === 'pt' ? 'pt-BR' : 'en-US';
+
     try {
       const token = localStorage.getItem('token');
-      const resp = await fetch(`/api/places/autocomplete?${atParam}&q=${encodeURIComponent(query)}&lang=en-US`, {
+      const resp = await fetch(`/api/places/autocomplete?${atParam}&q=${encodeURIComponent(query)}&lang=${lang}`, {
         headers: token ? { 'Authorization': `Bearer ${token}` } : {}
       });
       if (resp.ok) {
@@ -88,26 +95,32 @@ export default function LocationAutocomplete({ value, defaultValue, onChange, on
     }
   }
 
-  // Debounce the autosuggest fetching
+  // Clean up any pending debounce timer on unmount.
   useEffect(() => {
-    const delayDebounceFn = setTimeout(() => {
-      if (inputValue && inputValue !== value) {
-        fetchHereAutosuggest(inputValue);
-      }
-    }, 300);
-
-    return () => clearTimeout(delayDebounceFn);
-  }, [inputValue]);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setInputValue(val);
     if (onChange) onChange(val); // Update parent with raw text
-    
+
+    // Debounce the autosuggest fetch on the typed value. This is driven directly
+    // from the keystroke (not from comparing against the `value` prop, which the
+    // parent mirrors back — that comparison made the fetch never fire).
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
     if (!val.trim()) {
       setPredictions([]);
       setIsOpen(false);
+      return;
     }
+
+    debounceRef.current = setTimeout(() => {
+      fetchHereAutosuggest(val);
+    }, 300);
   };
 
   const handleSelectPrediction = (prediction: any) => {

@@ -550,7 +550,7 @@ export default function EventDetails() {
                   <div>
                     <div className="text-[10px] font-mono font-black text-steel uppercase tracking-widest mb-1">{t('eventDetails.attendance')}</div>
                     <div className="font-display font-black uppercase italic text-lg tracking-tight text-chrome group-hover:text-primary transition-colors">
-                      {event.rsvp_count + 1} { (event.rsvp_count + 1) === 1 ? t('eventDetails.rider') : t('eventDetails.riders') }
+                      {event.rsvp_count} { event.rsvp_count === 1 ? t('eventDetails.rider') : t('eventDetails.riders') }
                     </div>
                   </div>
                 </div>

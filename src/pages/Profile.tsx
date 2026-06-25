@@ -2786,13 +2786,13 @@ export default function Profile() {
                           <div className="w-8 h-8 rounded-lg bg-engine flex items-center justify-center border border-inverse/5 group-hover:border-primary/30 transition-colors">
                             <Phone className="w-3.5 h-3.5 text-steel" />
                           </div>
-                          <span className="text-steel group-hover:text-chrome transition-colors">+{data.profile.phone || '1 (555) 0123-4567'}</span>
+                          <span className="text-steel group-hover:text-chrome transition-colors">+{data.profile?.phone || '1 (555) 0123-4567'}</span>
                         </div>
                         <div className="flex items-center gap-4 text-[10px] font-mono uppercase tracking-widest group cursor-pointer">
                           <div className="w-8 h-8 rounded-lg bg-engine flex items-center justify-center border border-inverse/5 group-hover:border-primary/30 transition-colors">
                             <Globe className="w-3.5 h-3.5 text-steel" />
                           </div>
-                          <a href={data.profile.website || "#"} target="_blank" rel="noopener noreferrer" className="text-primary hover:text-oil transition-colors">{data.profile.website || `www.${data.username}.com`}</a>
+                          <a href={data.profile?.website || "#"} target="_blank" rel="noopener noreferrer" className="text-primary hover:text-oil transition-colors">{data.profile?.website || `www.${data.username}.com`}</a>
                         </div>
                       </div>
                     </>

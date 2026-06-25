@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  User, Building2, ArrowRight, ArrowLeft, Check, 
+import {
+  User, Building2, ArrowRight, ArrowLeft, Check,
   MapPin, Wrench, Coffee, Camera, Shield, Zap,
-  Navigation, Users, Calendar, Store
+  Navigation, Users, Calendar, Store, Eye, EyeOff
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -20,7 +20,9 @@ interface OnboardingData {
   fullName: string;
   bio: string;
   location: string;
-  motorcycle: string;
+  motoMake: string;
+  motoModel: string;
+  motoYear: string;
   bloodType?: string;
   businessName: string;
   businessType: string;
@@ -55,6 +57,7 @@ export default function Onboarding() {
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   
   // Check if user came from Google OAuth
   const isGoogleAuth = location.state?.fromGoogleAuth;
@@ -145,7 +148,9 @@ export default function Onboarding() {
     fullName: googleData?.name || '',
     bio: '',
     location: '',
-    motorcycle: '',
+    motoMake: '',
+    motoModel: '',
+    motoYear: '',
     bloodType: '',
     businessName: '',
     businessType: '',
@@ -203,12 +208,6 @@ export default function Onboarding() {
     if (step === 4 && data.type === 'ecosystem') {
       if (!data.businessName || !data.businessType) {
         setError(t('onboarding.errorBusiness'));
-        return;
-      }
-    }
-    if (step === 4 && data.type === 'rider') {
-      if (!data.motorcycle) {
-        setError(t('onboarding.errorMotorcycle'));
         return;
       }
     }
@@ -276,16 +275,17 @@ export default function Onboarding() {
       const endpoint = isGoogleAuth ? '/api/user/onboarding' : '/api/register';
       const method = isGoogleAuth ? 'PUT' : 'POST';
 
-      // Prepare payload based on type
+      // Prepare payload based on type. Strip the helper fields that only exist to
+      // build the garage entry — they are not part of the user record.
+      const { motoMake: _mk, motoModel: _md, motoYear: _yr, ...userData } = data;
       const payload = {
-        ...data,
+        ...userData,
         // Ensure we send the right fields based on type
         ...(data.type === 'rider' ? {
           businessName: undefined,
           businessType: undefined,
           services: undefined
         } : {
-          motorcycle: undefined,
           interests: undefined
         })
       };
@@ -342,6 +342,31 @@ export default function Onboarding() {
           status: 'active'
         }));
         window.dispatchEvent(new Event('auth-change'));
+      }
+
+      // Create the first garage motorcycle, reusing the same endpoint as the Garage.
+      // Optional: only when the rider filled in at least the make.
+      if (data.type === 'rider' && data.motoMake.trim()) {
+        try {
+          const authToken = isGoogleAuth ? localStorage.getItem('token') : result.token;
+          const uname = result.username || data.username;
+          await fetch('/api/motorcycles', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})
+            },
+            body: JSON.stringify({
+              username: uname,
+              make: data.motoMake.trim(),
+              model: data.motoModel.trim(),
+              year: data.motoYear ? parseInt(data.motoYear) : null
+            })
+          });
+        } catch (motoErr) {
+          // Non-blocking: the user can still add bikes later from the Garage.
+          console.error('Failed to add onboarding motorcycle to garage:', motoErr);
+        }
       }
 
       setShowWelcome(true);
@@ -547,14 +572,44 @@ export default function Onboarding() {
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-steel uppercase tracking-wider mb-2">{t('login.password')}</label>
-                  <input
-                    type="password"
-                    value={data.password || ''}
-                    onChange={(e) => setData({ ...data, password: e.target.value })}
-                    name="password"
-                    className="w-full bg-oil/50 border border-inverse/10 rounded-xl px-4 py-3 text-chrome focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
-                    placeholder="••••••••"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={data.password || ''}
+                      onChange={(e) => setData({ ...data, password: e.target.value })}
+                      name="password"
+                      className="w-full bg-oil/50 border border-inverse/10 rounded-xl px-4 py-3 pr-12 text-chrome focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+                      placeholder="••••••••"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(s => !s)}
+                      aria-label={t(showPassword ? 'login.hidePassword' : 'login.showPassword')}
+                      title={t(showPassword ? 'login.hidePassword' : 'login.showPassword')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-steel hover:text-chrome transition-colors"
+                    >
+                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                  {data.password && (
+                    <ul className="mt-3 space-y-1.5">
+                      {[
+                        { ok: data.password.length >= 8, label: t('onboarding.pwReqLength') },
+                        { ok: /[A-Z]/.test(data.password), label: t('onboarding.pwReqUpper') },
+                        { ok: /[a-z]/.test(data.password), label: t('onboarding.pwReqLower') },
+                        { ok: /\d/.test(data.password), label: t('onboarding.pwReqNumber') },
+                        { ok: /[@$!%*?&]/.test(data.password), label: t('onboarding.pwReqSpecial') },
+                      ].map((req, i) => (
+                        <li
+                          key={i}
+                          className={`flex items-center gap-2 text-xs transition-colors ${req.ok ? 'text-success' : 'text-steel'}`}
+                        >
+                          <Check className={`w-3.5 h-3.5 shrink-0 ${req.ok ? 'opacity-100' : 'opacity-40'}`} />
+                          {req.label}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               </motion.div>
             )}
@@ -622,15 +677,41 @@ export default function Onboarding() {
                 {data.type === 'rider' ? (
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-xs font-bold text-steel uppercase tracking-wider mb-2">{t('profile.motorcycle') || 'Current Motorcycle'}</label>
-                      <input
-                        type="text"
-                        autoCapitalize="sentences"
-                        value={data.motorcycle || ''}
-                        onChange={(e) => setData({ ...data, motorcycle: e.target.value })}
-                        className="w-full bg-oil/50 border border-inverse/10 rounded-xl px-4 py-3 text-chrome focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
-                        placeholder={t('onboarding.motorcyclePlaceholder')}
-                      />
+                      <div className="grid sm:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-xs font-bold text-steel uppercase tracking-wider mb-2">{t('profile.make')}</label>
+                          <input
+                            type="text"
+                            autoCapitalize="words"
+                            value={data.motoMake || ''}
+                            onChange={(e) => setData({ ...data, motoMake: e.target.value })}
+                            className="w-full bg-oil/50 border border-inverse/10 rounded-xl px-4 py-3 text-chrome focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+                            placeholder={t('profile.makePlaceholder')}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-steel uppercase tracking-wider mb-2">{t('profile.model')}</label>
+                          <input
+                            type="text"
+                            autoCapitalize="characters"
+                            value={data.motoModel || ''}
+                            onChange={(e) => setData({ ...data, motoModel: e.target.value })}
+                            className="w-full bg-oil/50 border border-inverse/10 rounded-xl px-4 py-3 text-chrome focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+                            placeholder={t('profile.modelPlaceholder')}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-steel uppercase tracking-wider mb-2">{t('profile.year')}</label>
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            value={data.motoYear || ''}
+                            onChange={(e) => setData({ ...data, motoYear: e.target.value })}
+                            className="w-full bg-oil/50 border border-inverse/10 rounded-xl px-4 py-3 text-chrome focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+                            placeholder={t('profile.year')}
+                          />
+                        </div>
+                      </div>
                       <p className="text-xs text-steel mt-2">{t('onboarding.motorcycleHint')}</p>
                     </div>
                     <div>

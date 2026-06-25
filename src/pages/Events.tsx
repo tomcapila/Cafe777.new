@@ -833,7 +833,7 @@ function EventListItem({ event, t, isAdmin, handleRSVP, handlePromote, viewMode 
           </div>
           <div className="flex items-center gap-2 text-primary font-bold bg-primary/5 px-3 py-1 rounded-full border border-primary/10 shadow-sm shadow-primary/5">
             <Users className="w-4 h-4" />
-            {event.rsvp_count + 1} { (event.rsvp_count + 1) === 1 ? t('event.details.riderAttending') : t('event.details.ridersAttending') }
+            {event.rsvp_count} { event.rsvp_count === 1 ? t('event.details.riderAttending') : t('event.details.ridersAttending') }
           </div>
           {event.participation_badge_name && (
             <div className="flex items-center gap-2 text-primary font-bold">

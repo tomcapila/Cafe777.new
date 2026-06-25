@@ -389,17 +389,6 @@ export default function EditProfile() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-2">{t('profile.motorcycle') || 'Current Motorcycle'}</label>
-                  <input 
-                    type="text" 
-                    name="motorcycle" 
-                    autoCapitalize="sentences"
-                    defaultValue={data.motorcycle}
-                    className="input-field"
-                    placeholder="e.g. 2023 Triumph Bonneville T120"
-                  />
-                </div>
-                <div>
                   <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-2">{t('profile.interests') || 'Interests'}</label>
                   <input 
                     type="text" 

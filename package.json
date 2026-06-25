@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx --env-file=.env.local server.ts",
+    "dev": "tsx --use-system-ca --env-file=.env.local server.ts",
     "start": "node dist/server.js",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=esm --outfile=dist/server.js --external:express --external:libsql --external:multer --external:qrcode --external:jsonwebtoken --external:bcryptjs --external:mailersend --external:google-auth-library --external:vite --external:firebase-admin --external:@google/genai",
     "preview": "vite preview",
