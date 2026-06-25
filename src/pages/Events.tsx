@@ -117,7 +117,7 @@ export default function Events() {
       
       const res = await fetchWithAuth(`/api/events?username=${username}&source_type=${sourceFilter}`);
       const data = await res.json();
-      setEvents(data);
+      setEvents(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -218,10 +218,12 @@ export default function Events() {
     }
   };
 
-  const filteredEvents = (activeTab === 'all' ? events : myEvents).filter(event => {
-    const matchesQuery = event.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         event.location.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesDate = searchDate ? event.date.includes(searchDate) : true;
+  const sourceList = activeTab === 'all' ? events : myEvents;
+  const query = searchQuery.toLowerCase();
+  const filteredEvents = (Array.isArray(sourceList) ? sourceList : []).filter(event => {
+    const matchesQuery = (event.title || '').toLowerCase().includes(query) ||
+                         (event.location || '').toLowerCase().includes(query);
+    const matchesDate = searchDate ? (event.date || '').includes(searchDate) : true;
     const matchesCategory = eventCategory === 'all' ? true : event.category === eventCategory;
     return matchesQuery && matchesDate && matchesCategory;
   });

@@ -6013,16 +6013,20 @@ async function startServer() {
     try {
       let query: admin.firestore.Query = collections.events.where("is_approved", "==", 1);
 
-      if (sourceTypeFilter !== 'all') {
-        query = query.where("source_type", "==", sourceTypeFilter);
-      }
-
       if (category && category !== 'all') {
         query = query.where("category", "==", category);
       }
-      
+
       const snapshot = await query.get();
       let events = snapshot.docs.map(doc => ({ ...doc.data() as any, id: doc.id }));
+
+      // Filter source_type in-memory rather than via Firestore .where(): a Firestore
+      // equality clause skips docs that lack the field entirely, so legacy events
+      // (created before source_type existed) would silently disappear from the
+      // "Community" filter. Treat a missing field as 'internal' (the SQLite default).
+      if (sourceTypeFilter !== 'all') {
+        events = events.filter(e => (e.source_type || 'internal') === sourceTypeFilter);
+      }
 
       if (location) {
         events = events.filter(e => e.location?.toLowerCase().includes((location as string).toLowerCase()));
