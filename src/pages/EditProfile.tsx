@@ -138,15 +138,19 @@ export default function EditProfile() {
         throw new Error(result.error || t('profile.updateFailed'));
       }
 
-      // Update localStorage with new user data
-      const updatedUser = { 
-        ...currentUser, 
-        username: result.username,
-        profile_picture_url: result.profile_picture_url || currentUser.profile_picture_url,
-        cover_photo_url: result.cover_photo_url || currentUser.cover_photo_url
-      };
-      localStorage.setItem('user', JSON.stringify(updatedUser));
-      window.dispatchEvent(new Event('auth-change'));
+      // Only sync the saved data into the active session when editing your OWN profile.
+      // An admin/moderator editing another user must NOT have their logged-in session
+      // overwritten with the target user's username/photos — that caused a silent login swap.
+      if (isOwner) {
+        const updatedUser = {
+          ...currentUser,
+          username: result.username,
+          profile_picture_url: result.profile_picture_url || currentUser.profile_picture_url,
+          cover_photo_url: result.cover_photo_url || currentUser.cover_photo_url
+        };
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        window.dispatchEvent(new Event('auth-change'));
+      }
 
       navigate(`/profile/${result.username}`);
     } catch (err: any) {
