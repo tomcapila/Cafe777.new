@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LogIn, Loader2, ArrowRight, Play } from 'lucide-react';
+import { LogIn, Loader2, ArrowRight, Play, Eye, EyeOff } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 
 export default function Login() {
@@ -13,6 +13,7 @@ export default function Login() {
   const [message, setMessage] = useState(location.state?.message || '');
   const [showVideo, setShowVideo] = useState(true);
   const [videoStarted, setVideoStarted] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
   const { t } = useLanguage();
   
   useEffect(() => {
@@ -238,13 +239,24 @@ export default function Login() {
 
                 <div>
                   <label className="block text-xs font-mono uppercase tracking-widest text-steel mb-2">{t('login.password')}</label>
-                  <input 
-                    type="password" 
-                    name="password" 
-                    required
-                    className="input-field"
-                    placeholder="••••••••"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      name="password"
+                      required
+                      className="input-field pr-12"
+                      placeholder="••••••••"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(s => !s)}
+                      aria-label={t(showPassword ? 'login.hidePassword' : 'login.showPassword')}
+                      title={t(showPassword ? 'login.hidePassword' : 'login.showPassword')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-steel hover:text-chrome transition-colors"
+                    >
+                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
                   <div className="text-right mt-2">
                     <a href="/forgot-password" className="text-xs text-primary hover:underline">{t('login.forgotPassword') || 'Forgot password?'}</a>
                   </div>
