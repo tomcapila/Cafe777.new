@@ -426,7 +426,7 @@ export default function Onboarding() {
             CAFE<span className="text-primary">777</span>
           </h1>
           <p className="text-steel">
-            {step === 0 && t('onboarding.step0Desc') || 'Choose how you want to join Cafe777'}
+            {step === 0 && t('onboarding.step0Desc')}
             {step === 1 && t('onboarding.step1Desc')}
             {step === 2 && t('onboarding.step2Desc')}
             {step === 3 && t('onboarding.step3Desc')}
