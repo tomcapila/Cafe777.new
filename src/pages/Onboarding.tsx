@@ -53,20 +53,34 @@ export default function Onboarding() {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useLanguage();
-  
-  const [step, setStep] = useState(0);
+
+  // Detect whether the user arrived via Google OAuth. We combine two signals because
+  // neither is reliable alone:
+  //  1. router location.state.fromGoogleAuth — set when navigated here from the Login page,
+  //     but absent after a refresh or when the flag was set in-page (see below).
+  //  2. a stored JWT whose user carries a google_id — email sign-ups only receive a token
+  //     AFTER /api/register (at the very end), so a token present *during* onboarding means
+  //     the user already authenticated with Google. This survives refreshes and stale
+  //     bundles, and is the authoritative guard against showing the password step (2) to a
+  //     Google user, who has no password.
+  const cameFromGoogle = (() => {
+    if (location.state?.fromGoogleAuth) return true;
+    try {
+      const token = localStorage.getItem('token');
+      const stored = localStorage.getItem('user');
+      if (token && stored && JSON.parse(stored)?.google_id) return true;
+    } catch { /* ignore corrupted localStorage */ }
+    return false;
+  })();
+
+  // Google users skip the registration-method step (0) and the account/password step (2):
+  // they already chose Google and the account already exists with no password.
+  const [step, setStep] = useState(cameFromGoogle ? 1 : 0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  
-  // Check if user came from Google OAuth.
-  // Initialized from router state (when navigated here from the Login page), but also
-  // settable in-place when the user registers with Google directly from step 0 below.
-  // React Router's location.state does NOT observe window.history mutations, so this
-  // MUST live in component state — otherwise handleSubmit would POST to /api/register
-  // (creating a user) instead of PUT /api/user/onboarding (updating the user that
-  // /api/auth/google already created), causing a spurious "Email already exists".
-  const [isGoogleAuth, setIsGoogleAuth] = useState<boolean>(!!location.state?.fromGoogleAuth);
+
+  const [isGoogleAuth, setIsGoogleAuth] = useState<boolean>(cameFromGoogle);
   const [googleData, setGoogleData] = useState<any>(location.state?.googleData || null);
 
   const handleCustomGoogleLogin = () => {
@@ -146,23 +160,31 @@ export default function Onboarding() {
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
-  const [data, setData] = useState<OnboardingData>({
-    type: null,
-    username: googleData?.username || '',
-    email: googleData?.email || '',
-    password: '',
-    fullName: googleData?.name || '',
-    bio: '',
-    location: '',
-    motoMake: '',
-    motoModel: '',
-    motoYear: '',
-    bloodType: '',
-    businessName: '',
-    businessType: '',
-    interests: [],
-    services: [],
-    referralCode: new URLSearchParams(window.location.search).get('ref') || ''
+  const [data, setData] = useState<OnboardingData>(() => {
+    // For Google users, prefill from router state or (on refresh) the stored user, so the
+    // basic fields aren't blank when we skip straight past the account step.
+    let gUser: any = null;
+    if (cameFromGoogle) {
+      try { gUser = JSON.parse(localStorage.getItem('user') || 'null'); } catch { /* ignore */ }
+    }
+    return {
+      type: null,
+      username: googleData?.username || gUser?.username || '',
+      email: googleData?.email || gUser?.email || '',
+      password: '',
+      fullName: googleData?.name || gUser?.fullName || '',
+      bio: '',
+      location: '',
+      motoMake: '',
+      motoModel: '',
+      motoYear: '',
+      bloodType: '',
+      businessName: '',
+      businessType: '',
+      interests: [],
+      services: [],
+      referralCode: new URLSearchParams(window.location.search).get('ref') || ''
+    };
   });
 
   const totalSteps = data.type === 'rider' ? 5 : 5;
