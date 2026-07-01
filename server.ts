@@ -24,6 +24,17 @@ import bcrypt from 'bcryptjs';
 import { MailerSend, EmailParams, Sender, Recipient } from "mailersend";
 import { OAuth2Client } from 'google-auth-library';
 import { fetchOSMPlaces } from './src/services/osmService.ts';
+import {
+  computeGarageStats,
+  computeOilAlert,
+  lastKnownOdometer,
+  latestOilChange,
+  derivePrice,
+  isOdometerDecreasing,
+  FUEL_TYPES,
+  type OilChangeRecord,
+  type RefuelingRecord,
+} from './src/utils/garageCalculations.ts';
 import admin from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
 import firebaseConfig from "./firebase-applet-config.json" with { type: "json" };
@@ -97,6 +108,8 @@ const collections = {
   badges: firestore.collection("badges"),
   user_badges: firestore.collection("user_badges"),
   maintenance_logs: firestore.collection("maintenance_logs"),
+  oil_changes: firestore.collection("oil_changes"),
+  refuelings: firestore.collection("refuelings"),
   comments: firestore.collection("comments"),
   checkins: firestore.collection("checkins"),
   ambassador_posts: firestore.collection("ambassador_posts"),
@@ -112,6 +125,17 @@ const collections = {
   club_chapters: firestore.collection("club_chapters"),
   club_memberships: firestore.collection("club_memberships"),
   ambassador_applications: firestore.collection("ambassador_applications"),
+  // Relatos de Estrada (road reports) — Fase 0. `relatos` is the source of truth
+  // for the full lifecycle (draft→pending→approved→rejected→featured); the SQLite
+  // `relatos` mirror only holds approved/featured for fast public reads.
+  // `places_staging` is admin-only (mirrors events_staging). `routes` is modeled
+  // now (Fase 0) and built in Fase 5.
+  relatos: firestore.collection("relatos"),
+  places_staging: firestore.collection("places_staging"),
+  routes: firestore.collection("routes"),
+  // Gamification (Fase 4): contribution stats for the "Guia" title + per-moto mini-passport.
+  relato_author_stats: firestore.collection("relato_author_stats"),
+  moto_relato_stats: firestore.collection("moto_relato_stats"),
 };
 
 // Generic counter for pseudo-incrementing IDs if needed (though random IDs are preferred in Firestore)
@@ -123,6 +147,834 @@ async function getNextId(collectionName: string) {
     transaction.set(counterRef, { count: newId });
     return newId;
   });
+}
+
+// ---- Garagem (My Garage) helpers --------------------------------------------
+// Ownership check for a motorcycle, robust to the Firestore/SQLite split: tries
+// Firestore first (where moto routes write), falls back to Turso.
+interface OwnershipResult {
+  ok: boolean;
+  status: number;
+  message: string;
+  rider_id: any;
+}
+async function verifyMotoOwnership(motoId: string | number, req: any): Promise<OwnershipResult> {
+  let rider_id: any = null;
+  try {
+    const motoDoc = await collections.motorcycles.doc(motoId.toString()).get();
+    if (motoDoc.exists) rider_id = (motoDoc.data() as any).rider_id;
+  } catch (e) {}
+  if (rider_id == null) {
+    try {
+      const row = db.prepare("SELECT rider_id FROM motorcycles WHERE id = ?").get(motoId) as any;
+      if (row) rider_id = row.rider_id;
+    } catch (e) {}
+  }
+  if (rider_id == null) return { ok: false, status: 404, message: "Motorcycle not found", rider_id: null };
+  if (
+    rider_id.toString() !== req.user.id.toString() &&
+    req.user.role !== "admin" &&
+    req.user.role !== "moderator"
+  ) {
+    return { ok: false, status: 403, message: "Forbidden: not your motorcycle", rider_id };
+  }
+  return { ok: true, status: 200, message: "", rider_id };
+}
+
+// Load a single garage record (oil change / refueling), Firestore-first.
+async function loadGarageRecord(kind: "oil_changes" | "refuelings", id: string): Promise<any | null> {
+  try {
+    const doc = await collections[kind].doc(id).get();
+    if (doc.exists) return { id, ...(doc.data() as any) };
+  } catch (e) {}
+  try {
+    const row = db.prepare(`SELECT * FROM ${kind} WHERE id = ?`).get(id) as any;
+    if (row) return row;
+  } catch (e) {}
+  return null;
+}
+
+// Raw oil_changes + refuelings for a moto. Firestore-primary; falls back per
+// collection to SQLite when Firestore is empty (handles failed dual-writes).
+async function fetchGarageRecords(
+  motoIdNum: number,
+): Promise<{ oil_changes: any[]; refuelings: any[] }> {
+  let oil_changes: any[] = [];
+  let refuelings: any[] = [];
+  try {
+    const [oilSnap, refuelSnap] = await Promise.all([
+      collections.oil_changes.where("motorcycle_id", "==", motoIdNum).get(),
+      collections.refuelings.where("motorcycle_id", "==", motoIdNum).get(),
+    ]);
+    oil_changes = oilSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+    refuelings = refuelSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+  } catch (e) {}
+  // SQLite fallback per collection (in case the Firestore dual-write failed).
+  if (oil_changes.length === 0) {
+    try { oil_changes = db.prepare("SELECT * FROM oil_changes WHERE motorcycle_id = ?").all(motoIdNum) as any[]; } catch (e) {}
+  }
+  if (refuelings.length === 0) {
+    try {
+      refuelings = (db.prepare("SELECT * FROM refuelings WHERE motorcycle_id = ?").all(motoIdNum) as any[])
+        .map((r) => ({ ...r, full_tank: !!r.full_tank }));
+    } catch (e) {}
+  }
+  return { oil_changes, refuelings };
+}
+
+// Build the per-moto garage view (records + derived stats + alert) and apply the
+// server-side premium strip. This is the security half of the gating: freemium
+// viewers never receive the premium analytics, regardless of client behaviour.
+function buildGarageView(moto: any, oil_changes: any[], refuelings: any[], isPremium: boolean) {
+  const stats = computeGarageStats(oil_changes as OilChangeRecord[], refuelings as RefuelingRecord[]);
+  const alertCfg = {
+    active: !!moto.oil_alert_active,
+    interval_km: moto.oil_alert_interval_km ?? null,
+    interval_months: moto.oil_alert_interval_months ?? null,
+  };
+  let garage_stats: any = { ...stats };
+  let oil_alert: any = computeOilAlert(
+    alertCfg,
+    latestOilChange(oil_changes as OilChangeRecord[]),
+    stats.last_known_odometer,
+  );
+  if (!isPremium) {
+    garage_stats.general_kmpl = null;
+    garage_stats.cost_per_km_last = null;
+    garage_stats.cost_per_km_general = null;
+    oil_alert = { state: "locked", km_remaining: null, months_elapsed: null, reason: null };
+  }
+  return { oil_changes, refuelings, garage_stats, oil_alert, oil_alert_config: alertCfg };
+}
+
+// Zod schemas for garage payloads (server never trusts the client).
+const refuelingSchema = z.object({
+  km: z.coerce.number().positive(),
+  liters: z.coerce.number().positive(),
+  fuel_type: z.enum(FUEL_TYPES as [string, ...string[]]),
+  full_tank: z.boolean().optional(),
+  price_per_liter: z.coerce.number().positive().nullable().optional(),
+  total_value: z.coerce.number().positive().nullable().optional(),
+  note: z.string().max(500).nullable().optional(),
+  record_date: z.string().min(1).optional(),
+});
+const oilChangeSchema = z.object({
+  km: z.coerce.number().positive(),
+  oil_type: z.string().min(1).max(120),
+  liters: z.coerce.number().positive(),
+  shop: z.string().max(200).nullable().optional(),
+  shop_ref: z
+    .object({
+      refType: z.enum(["user", "place", "freetext"]),
+      refId: z.string().nullable().optional(),
+      nomeExibicao: z.string().max(200),
+    })
+    .nullable()
+    .optional(),
+  note: z.string().max(500).nullable().optional(),
+  record_date: z.string().min(1).optional(),
+});
+
+// ---- Relatos de Estrada (Fase 0): strict validation + secure-write helpers -----
+// The server never trusts the client for any sensitive field. Top-level relato
+// payloads use Zod's default STRIP mode, so unknown/sensitive keys the client may
+// send (status, verificationLevel, qualitySignals, origin, featuredAt/Until,
+// authorId, ...) are silently dropped — the server assigns them authoritatively.
+// `structuredFields` is the one extensible map (catchall) so new moto-native keys
+// can appear without a schema migration.
+const RELATO_LIMITS = { title: 160, body: 8000, part: 2000, media: 12, links: 10 } as const;
+const RELATO_GPS_RADIUS_KM = 0.5; // within 500m of the place ⇒ verified_gps
+
+const RELATO_ANCHOR_TYPES = ["place", "route"] as const;
+const SF_ROAD_SURFACE = ["asfalto_bom", "asfalto_ruim", "paralelepipedo", "cascalho", "terra", "misto"] as const;
+const SF_SUITABILITY = ["qualquer_moto", "melhor_trail", "evitar_moto_baixa"] as const;
+const SF_TRISTATE = ["sim", "nao", "incerto"] as const;
+const SF_PARKING_FEATURES = ["rua", "patio", "coberto", "vigiado"] as const;
+const SF_AMENITIES = ["banheiro", "agua", "sombra", "comida", "combustivel_proximo"] as const;
+const SF_GROUP_CAPACITY = ["pequeno", "medio", "grande"] as const;
+
+const structuredFieldsSchema = z
+  .object({
+    accessRoadSurface: z.enum(SF_ROAD_SURFACE).optional(),
+    accessSuitability: z.enum(SF_SUITABILITY).optional(),
+    motoParking: z.enum(SF_TRISTATE).optional(),
+    motoParkingFeatures: z.array(z.enum(SF_PARKING_FEATURES)).max(8).optional(),
+    gearStorage: z.enum(SF_TRISTATE).optional(),
+    amenities: z.array(z.enum(SF_AMENITIES)).max(12).optional(),
+    receivesGroup: z.enum(SF_TRISTATE).optional(),
+    groupCapacity: z.enum(SF_GROUP_CAPACITY).optional(),
+  })
+  // Extensible: future moto-native keys enter without migration, but stay typed.
+  .catchall(z.union([z.string().max(120), z.number(), z.boolean(), z.array(z.string().max(120)).max(20)]));
+
+const narrativePartsSchema = z
+  .object({
+    motivacao: z.string().max(RELATO_LIMITS.part).optional(),
+    recepcao: z.string().max(RELATO_LIMITS.part).optional(),
+    paraQuem: z.string().max(RELATO_LIMITS.part).optional(),
+    atencao: z.string().max(RELATO_LIMITS.part).optional(),
+  })
+  .strict();
+
+const mediaItemSchema = z
+  .object({
+    type: z.literal("photo"),
+    url: z.string().url().max(2000).refine((u) => /^https:\/\//i.test(u), "media url must be https"),
+    storageRef: z.string().max(500).optional(),
+  })
+  .strict();
+
+const externalLinkSchema = z
+  .object({
+    kind: z.enum(["website", "gmaps", "other"]),
+    url: z.string().url().max(2000).refine((u) => /^https:\/\//i.test(u), "external link must be https"),
+  })
+  .strict(); // resolvedPlaceId / resolvedCoords are SERVER-assigned, never accepted here
+
+// Client only sends motoId; the server validates ownership and builds the snapshot
+// from the Garagem (a relato must not carry an unvalidated bike snapshot).
+const motoUsedSchema = z.object({ motoId: z.string().min(1).max(64) }).strict();
+
+const evidenceSchema = z
+  .object({
+    coords: z.object({ lat: z.number(), lng: z.number(), accuracy: z.number().optional() }).strict().optional(),
+    checkinId: z.string().max(200).optional(),
+    gpxRef: z.string().max(500).optional(),
+  })
+  .strict();
+
+// New place candidate (Fase 1): when the relato anchors to a place that doesn't
+// exist yet. Goes to places_staging (admin-moderated), NEVER straight to production.
+const newPlaceSchema = z
+  .object({
+    name: z.string().min(2).max(160),
+    coords: z.object({ lat: z.number(), lng: z.number() }).strict(),
+    category: z.string().max(40).optional(),
+    motoAttributes: structuredFieldsSchema.optional(),
+  })
+  .strict();
+
+// New route (Fase 5): start/end/waypoints (NO live breadcrumb) + optional GPX ref.
+// Created directly (origin user_submitted); the route line is derived server-side
+// via routing. privacyLevel gates exposure (origin/destination reveal where you live).
+const ROUTE_WAYPOINT_KINDS = ["curva", "combustivel", "mirante", "perigo", "asfalto_ruim"] as const;
+const routePointSchema = z.object({ lat: z.number(), lng: z.number(), placeRef: z.string().max(200).optional() }).strip();
+const routeWaypointSchema = z
+  .object({ lat: z.number(), lng: z.number(), label: z.string().max(80).optional(), kind: z.enum(ROUTE_WAYPOINT_KINDS).optional() })
+  .strip();
+const newRouteSchema = z
+  .object({
+    name: z.string().min(2).max(160),
+    start: routePointSchema,
+    end: routePointSchema,
+    waypoints: z.array(routeWaypointSchema).max(50).optional(),
+    gpxRef: z.string().max(500).optional(),
+    surfaceTypes: z.array(z.string().max(40)).max(20).optional(),
+    difficulty: z.enum(["leve", "media", "pesada"]).optional(),
+    privacyLevel: z.enum(["public", "community", "private"]).optional(),
+  })
+  .strip();
+
+const relatoCreateSchema = z
+  .object({
+    anchorType: z.enum(RELATO_ANCHOR_TYPES),
+    anchorId: z.string().min(1).max(200).optional(), // existing place_id / route id
+    newPlace: newPlaceSchema.optional(),             // OR a new place candidate (Fase 1)
+    newRoute: newRouteSchema.optional(),             // OR a new route (Fase 5)
+    title: z.string().min(1).max(RELATO_LIMITS.title),
+    body: z.string().max(RELATO_LIMITS.body).optional(),
+    narrativeParts: narrativePartsSchema.optional(),
+    structuredFields: structuredFieldsSchema.optional(),
+    media: z.array(mediaItemSchema).max(RELATO_LIMITS.media).optional(),
+    motoUsed: motoUsedSchema.optional(),
+    externalLinks: z.array(externalLinkSchema).max(RELATO_LIMITS.links).optional(),
+    evidence: evidenceSchema.optional(), // server reads this to ASSIGN verificationLevel
+    requestedStatus: z.enum(["draft", "pending"]).default("draft"), // only status the client may ask for
+  })
+  .superRefine((val, ctx) => {
+    if (val.anchorType === "place") {
+      // Exactly one of anchorId / newPlace must be present for a place relato.
+      if (!!val.anchorId === !!val.newPlace) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "provide exactly one of anchorId or newPlace" });
+      }
+    } else if (val.anchorType === "route") {
+      if (!!val.anchorId === !!val.newRoute) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "provide exactly one of anchorId or newRoute" });
+      }
+    } else if (!val.anchorId) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "anchorId is required for this anchorType" });
+    }
+  });
+
+const relatoEditSchema = z.object({
+  title: z.string().min(1).max(RELATO_LIMITS.title).optional(),
+  body: z.string().max(RELATO_LIMITS.body).optional(),
+  narrativeParts: narrativePartsSchema.optional(),
+  structuredFields: structuredFieldsSchema.optional(),
+  media: z.array(mediaItemSchema).max(RELATO_LIMITS.media).optional(),
+  motoUsed: motoUsedSchema.nullable().optional(),
+  externalLinks: z.array(externalLinkSchema).max(RELATO_LIMITS.links).optional(),
+  evidence: evidenceSchema.optional(),
+  requestedStatus: z.enum(["draft", "pending"]).optional(), // submit a saved draft (draft→pending)
+});
+
+// Plain-text discipline: strip control chars (keep \n \t), cap length, trim. The
+// real XSS defense is rendering as plain text (React escapes) on every surface;
+// this just rejects junk and bounds size. Body/narrative are NEVER rendered as HTML.
+function normalizeRelatoText(s: string, max: number): string {
+  // Strip control chars except tab (\x09) and newline (\x0A); cap length; trim.
+  return (s || "")
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
+    .slice(0, max)
+    .trim();
+}
+
+// Compose `body` from the guided-script parts (when provided), then append any free
+// text. Order mirrors the form. If no parts, `body` stays the free text as-is.
+function composeRelatoBody(parts: any, freeBody?: string): string {
+  const ordered = ["motivacao", "recepcao", "paraQuem", "atencao"];
+  const segments: string[] = [];
+  if (parts && typeof parts === "object") {
+    for (const k of ordered) {
+      const v = parts[k];
+      if (typeof v === "string" && v.trim()) segments.push(v.trim());
+    }
+  }
+  if (typeof freeBody === "string" && freeBody.trim()) segments.push(freeBody.trim());
+  return normalizeRelatoText(segments.join("\n\n"), RELATO_LIMITS.body);
+}
+
+// Firestore-first place coords (for GPS proximity), SQLite fallback.
+async function loadPlaceCoords(placeId: string): Promise<{ lat: number; lng: number } | null> {
+  try {
+    const doc = await collections.places_cache.doc(placeId).get();
+    if (doc.exists) {
+      const d = doc.data() as any;
+      if (typeof d.lat === "number" && typeof d.lng === "number") return { lat: d.lat, lng: d.lng };
+    }
+  } catch (e) { /* fall through */ }
+  try {
+    const row = db.prepare("SELECT lat, lng FROM places_cache WHERE place_id = ?").get(placeId) as any;
+    if (row && row.lat != null && row.lng != null) return { lat: Number(row.lat), lng: Number(row.lng) };
+  } catch (e) { /* not found */ }
+  return null;
+}
+
+// Haversine distance in km (module-scope; the existing getDistanceFromLatLonInKm /
+// haversineM are nested inside the route-setup closure and not reachable here).
+function relatoDistanceKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+// SERVER-ASSIGNED verification level. The client supplies proof; the server decides
+// the level. QR codes are static/unsigned (see Open Questions) → verified_qr is WEAK
+// proof, on par with verified_gps, never a gold standard.
+type VerificationLevel = "verified_qr" | "verified_gps" | "verified_gpx" | "community";
+async function assignVerificationLevel(
+  anchorType: string,
+  anchorId: string,
+  evidence: any,
+  placeCoords?: { lat: number; lng: number } | null,
+): Promise<{ level: VerificationLevel; verificationEvidence: Record<string, any> }> {
+  const capturedAt = new Date().toISOString();
+  if (evidence?.gpxRef) {
+    return { level: "verified_gpx", verificationEvidence: { method: "gpx", gpxRef: String(evidence.gpxRef), capturedAt } };
+  }
+  if (evidence?.checkinId) {
+    return { level: "verified_qr", verificationEvidence: { method: "qr", checkinId: String(evidence.checkinId), capturedAt } };
+  }
+  if (evidence?.coords && anchorType === "place") {
+    // For a new place the coords aren't in places_cache yet — use the supplied ones.
+    const place = placeCoords || (anchorId ? await loadPlaceCoords(anchorId) : null);
+    if (place) {
+      const km = relatoDistanceKm(evidence.coords.lat, evidence.coords.lng, place.lat, place.lng);
+      if (km <= RELATO_GPS_RADIUS_KM) {
+        return {
+          level: "verified_gps",
+          verificationEvidence: {
+            method: "gps",
+            coords: { lat: evidence.coords.lat, lng: evidence.coords.lng, accuracy: evidence.coords.accuracy ?? null },
+            capturedAt,
+          },
+        };
+      }
+    }
+  }
+  return { level: "community", verificationEvidence: { method: "none", capturedAt } };
+}
+
+// Resolve a Google Maps short link (maps.app.goo.gl / goo.gl) to coords / place_id
+// SERVER-side; we persist the resolved values, never the ephemeral short link as the
+// source of truth. Best-effort: failures return {} and the link is just stored.
+//
+// SSRF-hardened: the input is user-supplied (relato externalLinks). A generic goo.gl
+// link can redirect anywhere — including internal addresses — so we follow redirects
+// MANUALLY and re-validate EVERY hop (https + Google-host allowlist + DNS/private-IP
+// block) and cap the chain length. Never auto-follow into an unvalidated host.
+const MAPS_REDIRECT_MAX = 5;
+
+function isAllowedMapsHost(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  if (h === "maps.app.goo.gl" || h === "goo.gl") return true;
+  // google.com, www.google.com, maps.google.com, consent.google.com, google.com.br ...
+  return /^([a-z0-9-]+\.)*google(\.[a-z]{2,3})+$/.test(h);
+}
+
+function isPrivateIpv4(ip: string): boolean {
+  const p = ip.split(".").map(Number);
+  if (p.length !== 4 || p.some((n) => Number.isNaN(n) || n < 0 || n > 255)) return true;
+  const [a, b] = p;
+  if (a === 0 || a === 127 || a === 10) return true;          // this-host / loopback / private
+  if (a === 172 && b >= 16 && b <= 31) return true;            // private
+  if (a === 192 && b === 168) return true;                     // private
+  if (a === 169 && b === 254) return true;                     // link-local (cloud metadata)
+  if (a >= 224) return true;                                   // multicast / reserved
+  return false;
+}
+function isPrivateIpv6(ip: string): boolean {
+  const x = ip.toLowerCase();
+  if (x === "::1" || x === "::") return true;                  // loopback / unspecified
+  if (x.startsWith("fc") || x.startsWith("fd") || x.startsWith("fe80")) return true; // ULA / link-local
+  if (x.startsWith("::ffff:")) return isPrivateIpv4(x.split(":").pop() || ""); // IPv4-mapped
+  return false;
+}
+// Resolve the host and reject if ANY address is loopback/private/link-local.
+async function isPublicHost(hostname: string): Promise<boolean> {
+  try {
+    const { promises: dnsp } = await import("node:dns");
+    const addrs = await dnsp.lookup(hostname, { all: true });
+    if (!addrs.length) return false;
+    return addrs.every((a) => (a.family === 6 ? !isPrivateIpv6(a.address) : !isPrivateIpv4(a.address)));
+  } catch (e) {
+    return false;
+  }
+}
+
+function parseMapsUrl(finalUrl: string): { resolvedCoords?: { lat: number; lng: number }; resolvedPlaceId?: string } {
+  const out: { resolvedCoords?: { lat: number; lng: number }; resolvedPlaceId?: string } = {};
+  const at = finalUrl.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (at) out.resolvedCoords = { lat: parseFloat(at[1]), lng: parseFloat(at[2]) };
+  if (!out.resolvedCoords) {
+    const ll = finalUrl.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+    if (ll) out.resolvedCoords = { lat: parseFloat(ll[1]), lng: parseFloat(ll[2]) };
+  }
+  const pid = finalUrl.match(/[?&]q_place_id=([^&]+)/) || finalUrl.match(/!1s(0x[0-9a-fA-F]+:0x[0-9a-fA-F]+)/);
+  if (pid) out.resolvedPlaceId = decodeURIComponent(pid[1]);
+  return out;
+}
+
+async function resolveMapsShortLink(
+  url: string,
+): Promise<{ resolvedCoords?: { lat: number; lng: number }; resolvedPlaceId?: string }> {
+  try {
+    let current = url;
+    for (let hop = 0; hop < MAPS_REDIRECT_MAX; hop++) {
+      let u: URL;
+      try { u = new URL(current); } catch (e) { return {}; }
+      // Re-validate EVERY hop before issuing the request.
+      if (u.protocol !== "https:") return {};
+      if (!isAllowedMapsHost(u.hostname)) return {};
+      if (!(await isPublicHost(u.hostname))) return {};
+
+      const resp = await fetch(current, { redirect: "manual" });
+      if (resp.status >= 300 && resp.status < 400) {
+        const loc = resp.headers.get("location");
+        if (!loc) return {};
+        current = new URL(loc, current).toString(); // resolve relative; re-checked next loop
+        continue;
+      }
+      // Final (non-redirect) response: parse the resolved URL only (never the body).
+      return parseMapsUrl((resp as any).url || current);
+    }
+    return {}; // redirect chain too long
+  } catch (e) {
+    return {};
+  }
+}
+
+// Resolve external links server-side: enforce https (defense-in-depth beyond Zod)
+// and expand Google Maps short links into resolvedCoords/resolvedPlaceId.
+async function resolveRelatoExternalLinks(links: any[] | undefined): Promise<any[]> {
+  if (!Array.isArray(links)) return [];
+  const out: any[] = [];
+  for (const link of links.slice(0, RELATO_LIMITS.links)) {
+    if (!link || typeof link.url !== "string" || !/^https:\/\//i.test(link.url)) continue;
+    const entry: any = { kind: link.kind, url: link.url };
+    if (link.kind === "gmaps" || /maps\.app\.goo\.gl|goo\.gl\//i.test(link.url)) {
+      const resolved = await resolveMapsShortLink(link.url);
+      if (resolved.resolvedCoords) entry.resolvedCoords = resolved.resolvedCoords;
+      if (resolved.resolvedPlaceId) entry.resolvedPlaceId = resolved.resolvedPlaceId;
+    }
+    out.push(entry);
+  }
+  return out;
+}
+
+// Denormalized moto snapshot for motoUsed — the relato stays truthful even if the
+// bike is later edited/removed from the Garagem. Firestore-first, SQLite fallback.
+async function buildMotoSnapshot(motoId: string | number): Promise<Record<string, any>> {
+  try {
+    const doc = await collections.motorcycles.doc(motoId.toString()).get();
+    if (doc.exists) {
+      const d = doc.data() as any;
+      return { make: d.make ?? null, model: d.model ?? null, year: d.year ?? null, image_url: d.image_url ?? null };
+    }
+  } catch (e) { /* fall through */ }
+  try {
+    const row = db.prepare("SELECT make, model, year, image_url FROM motorcycles WHERE id = ?").get(motoId) as any;
+    if (row) return { make: row.make ?? null, model: row.model ?? null, year: row.year ?? null, image_url: row.image_url ?? null };
+  } catch (e) { /* not found */ }
+  return { make: null, model: null, year: null, image_url: null };
+}
+
+// Normalize a place name for dedup/search: accent-insensitive, alnum only.
+function normalizePlaceName(s: string): string {
+  return (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+}
+
+// Proximity + name dedup against places_cache. Returns the "você quis dizer um
+// destes?" candidates so a user-submitted place can be merged in moderation (Fase 2).
+function dedupPlaces(
+  name: string,
+  coords: { lat: number; lng: number },
+  radiusM = 300,
+): Array<{ placeId: string; name: string; distanceMeters: number; score: number }> {
+  const target = normalizePlaceName(name);
+  const latDelta = radiusM / 111000;
+  const lngDelta = radiusM / (111000 * Math.cos((coords.lat * Math.PI) / 180) || 111000);
+  let rows: any[] = [];
+  try {
+    rows = db
+      .prepare(`SELECT place_id, name, lat, lng FROM places_cache WHERE lat BETWEEN ? AND ? AND lng BETWEEN ? AND ?`)
+      .all(coords.lat - latDelta, coords.lat + latDelta, coords.lng - lngDelta, coords.lng + lngDelta) as any[];
+  } catch (e) { rows = []; }
+  const out: Array<{ placeId: string; name: string; distanceMeters: number; score: number }> = [];
+  for (const r of rows) {
+    if (r.lat == null || r.lng == null) continue;
+    const d = relatoDistanceKm(coords.lat, coords.lng, Number(r.lat), Number(r.lng)) * 1000;
+    const rn = normalizePlaceName(r.name);
+    const nameMatch = !!target && (rn === target || rn.includes(target) || target.includes(rn));
+    if (d > radiusM && !nameMatch) continue;
+    const score = (nameMatch ? 0.6 : 0) + Math.max(0, 1 - d / radiusM) * 0.4;
+    out.push({ placeId: r.place_id, name: r.name, distanceMeters: Math.round(d), score: Number(score.toFixed(2)) });
+  }
+  out.sort((a, b) => b.score - a.score || a.distanceMeters - b.distanceMeters);
+  return out.slice(0, 8);
+}
+
+// Search places_cache by name for the anchor picker (existing place).
+function searchCachedPlaces(
+  q: string,
+  limit = 10,
+): Array<{ placeId: string; name: string; lat: number; lng: number; category: string | null; address: string | null }> {
+  const like = `%${(q || "").toLowerCase().trim()}%`;
+  try {
+    const rows = db
+      .prepare(
+        `SELECT place_id, name, lat, lng, category, full_address FROM places_cache
+         WHERE name IS NOT NULL AND LOWER(name) LIKE ? ORDER BY reviews DESC LIMIT ?`,
+      )
+      .all(like, limit) as any[];
+    return rows.map((r) => ({
+      placeId: r.place_id,
+      name: r.name,
+      lat: Number(r.lat),
+      lng: Number(r.lng),
+      category: r.category ?? null,
+      address: r.full_address ?? null,
+    }));
+  } catch (e) {
+    return [];
+  }
+}
+
+// ---- Fase 2 (moderation) helpers -------------------------------------------
+function relatoTsToStr(v: any): string | null {
+  if (v == null) return null;
+  if (typeof v?.toDate === "function") { try { return v.toDate().toISOString(); } catch (e) { return null; } }
+  if (v instanceof Date) return v.toISOString();
+  return String(v);
+}
+
+// Mirror an approved/featured relato into the SQLite read table (fast public reads
+// for the place page / home / feed in Fase 3). Drafts/pending never land here.
+function upsertRelatoMirror(r: any): void {
+  try {
+    db.prepare(
+      `INSERT OR REPLACE INTO relatos
+       (id, author_id, author_name, anchor_type, anchor_id, title, body, narrative_parts,
+        structured_fields, media, moto_used, external_links, verification_level, verification_evidence,
+        status, quality_saves, quality_helpful_votes, quality_editorial_picks, featured_at, featured_until,
+        created_at, updated_at, last_edited_at, resubmitted_at, approved_at, schema_version)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      r.id, r.authorId ?? null, r.authorName ?? null, r.anchorType ?? null, r.anchorId ?? null,
+      r.title ?? null, r.body ?? null, JSON.stringify(r.narrativeParts ?? null),
+      JSON.stringify(r.structuredFields ?? {}), JSON.stringify(r.media ?? []), JSON.stringify(r.motoUsed ?? null),
+      JSON.stringify(r.externalLinks ?? []), r.verificationLevel ?? null, JSON.stringify(r.verificationEvidence ?? {}),
+      r.status ?? "approved", r.qualitySignals?.saves ?? 0, r.qualitySignals?.helpfulVotes ?? 0, r.qualitySignals?.editorialPicks ?? 0,
+      relatoTsToStr(r.featuredAt), relatoTsToStr(r.featuredUntil), relatoTsToStr(r.createdAt), relatoTsToStr(r.updatedAt),
+      relatoTsToStr(r.lastEditedAt), relatoTsToStr(r.resubmittedAt), relatoTsToStr(r.approvedAt), r.schemaVersion ?? 1,
+    );
+  } catch (e) {
+    console.error("relato mirror upsert failed:", e);
+  }
+}
+
+function removeRelatoMirror(id: string): void {
+  try { db.prepare("DELETE FROM relatos WHERE id = ?").run(id); } catch (e) { /* mirror only */ }
+}
+
+// Denormalized relato_count on places_control (the durable layer; Firestore =
+// source of truth via merge). UPSERT (not INSERT OR REPLACE) preserves other cols.
+function bumpRelatoCount(placeId: string, delta = 1): void {
+  if (!placeId) return;
+  collections.places_control
+    .doc(placeId)
+    .set({ place_id: placeId, relato_count: admin.firestore.FieldValue.increment(delta) }, { merge: true })
+    .catch(() => {});
+  try {
+    db.prepare(
+      `INSERT INTO places_control (place_id, relato_count) VALUES (?, ?)
+       ON CONFLICT(place_id) DO UPDATE SET relato_count = MAX(0, relato_count + ?)`,
+    ).run(placeId, Math.max(0, delta), delta);
+  } catch (e) { /* mirror only */ }
+}
+
+// Create a production place (places_cache + places_control) from a staging
+// candidate, origin=user_submitted. Returns the new place_id.
+async function createPlaceFromStaging(staging: any): Promise<string> {
+  const c = staging.candidate || {};
+  const placeId = `user_${staging.id}`;
+  await collections.places_cache.doc(placeId).set(
+    {
+      place_id: placeId, name: c.name || "Lugar", lat: c.coords?.lat ?? null, lng: c.coords?.lng ?? null,
+      category: c.category || null, source: "user_submitted", last_fetched: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true },
+  );
+  await collections.places_control.doc(placeId).set(
+    {
+      place_id: placeId, is_approved: true, is_hidden: false, needs_revision: false,
+      origin: "user_submitted", moto_attributes: c.motoAttributes || {}, relato_count: 0, schema_version: 1,
+    },
+    { merge: true },
+  );
+  try {
+    db.prepare(`INSERT OR REPLACE INTO places_cache (place_id, name, lat, lng, category, source) VALUES (?, ?, ?, ?, ?, 'user_submitted')`)
+      .run(placeId, c.name || "Lugar", c.coords?.lat ?? null, c.coords?.lng ?? null, c.category || null);
+    db.prepare(
+      `INSERT INTO places_control (place_id, is_approved, origin, moto_attributes, schema_version) VALUES (?, 1, 'user_submitted', ?, 1)
+       ON CONFLICT(place_id) DO UPDATE SET is_approved = 1, origin = 'user_submitted', moto_attributes = excluded.moto_attributes`,
+    ).run(placeId, JSON.stringify(c.motoAttributes || {}));
+  } catch (e) {
+    console.error("createPlaceFromStaging sqlite failed:", e);
+  }
+  return placeId;
+}
+
+// ---- Fase 5 (route reports) ------------------------------------------------
+// Derive the route line server-side from start/end/waypoints via OSRM (public
+// demo, a fixed trusted host — no SSRF). Falls back to raw points on failure.
+async function routeViaOSRM(
+  points: Array<{ lat: number; lng: number }>,
+): Promise<{ polyline: Array<[number, number]>; distanceMeters: number } | null> {
+  try {
+    if (!Array.isArray(points) || points.length < 2) return null;
+    const coords = points.map((p) => `${p.lng},${p.lat}`).join(";");
+    const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
+    // Bound the external routing call so a slow OSRM can't hang route creation.
+    const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000));
+    const resp: any = await Promise.race([fetch(url), timeout]);
+    if (!resp || !resp.ok) return null;
+    const data: any = await resp.json();
+    const route = data?.routes?.[0];
+    if (!route?.geometry?.coordinates) return null;
+    const polyline = route.geometry.coordinates.map((c: number[]) => [c[1], c[0]] as [number, number]); // [lng,lat]→[lat,lng]
+    return { polyline, distanceMeters: Math.round(route.distance || 0) };
+  } catch (e) {
+    return null;
+  }
+}
+
+// Create a route entity (origin user_submitted). The line is derived, not raw GPS.
+async function createRouteEntity(input: any, authorId: any): Promise<string> {
+  const ref = collections.routes.doc();
+  const id = ref.id;
+  const start = input.start;
+  const end = input.end;
+  const waypoints = Array.isArray(input.waypoints) ? input.waypoints : [];
+  const points = [start, ...waypoints, end].filter((p: any) => p && typeof p.lat === "number" && typeof p.lng === "number");
+  const routed = await routeViaOSRM(points);
+  const polyline = routed?.polyline || points.map((p: any) => [p.lat, p.lng]);
+  const polylineJson = JSON.stringify(polyline); // Firestore rejects nested arrays → store as JSON
+  const geometry = { start, end, waypoints };
+  const privacyLevel = ["public", "community", "private"].includes(input.privacyLevel) ? input.privacyLevel : "private";
+  const data: Record<string, any> = {
+    id,
+    name: normalizeRelatoText(input.name || "Rota", 160),
+    geometry,
+    polyline: polylineJson,
+    gpxRef: input.gpxRef || null,
+    distanceMeters: routed?.distanceMeters ?? null,
+    surfaceTypes: Array.isArray(input.surfaceTypes) ? input.surfaceTypes : [],
+    difficulty: input.difficulty || null,
+    privacyLevel,
+    origin: "user_submitted",
+    createdBy: authorId ?? null,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    schemaVersion: 1,
+  };
+  await ref.set(data);
+  try {
+    db.prepare(
+      `INSERT OR REPLACE INTO routes (id, name, geometry, polyline, gpx_ref, distance_meters, surface_types, difficulty, privacy_level, origin, created_by, schema_version)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'user_submitted', ?, 1)`,
+    ).run(id, data.name, JSON.stringify(geometry), polylineJson, data.gpxRef, data.distanceMeters, JSON.stringify(data.surfaceTypes), data.difficulty, privacyLevel, authorId ?? null);
+  } catch (e) {
+    console.error("createRouteEntity sqlite failed:", e);
+  }
+  return id;
+}
+
+// ---- Fase 3 (display) helpers ----------------------------------------------
+function safeJsonParse(s: any, fallback: any = null): any {
+  try { return s ? JSON.parse(s) : fallback; } catch (e) { return fallback; }
+}
+
+// Shape a SQLite relatos-mirror row for the public API (place page / home / feed).
+function parseRelatoMirrorRow(r: any): Record<string, any> {
+  return {
+    id: r.id,
+    authorId: r.author_id,
+    authorName: r.author_name,
+    anchorType: r.anchor_type,
+    anchorId: r.anchor_id,
+    title: r.title,
+    body: r.body,
+    structuredFields: safeJsonParse(r.structured_fields, {}),
+    media: safeJsonParse(r.media, []),
+    motoUsed: safeJsonParse(r.moto_used, null),
+    verificationLevel: r.verification_level,
+    status: r.status,
+    featuredUntil: r.featured_until,
+    createdAt: r.created_at,
+  };
+}
+
+// ---- Fase 4 (gamification) -------------------------------------------------
+// Reward weight by verification level. QR is static/unsigned → weak, on par with
+// GPS (never a gold standard). NEVER weighted by distance/speed/frequency.
+const RELATO_POINTS: Record<string, number> = { community: 1, verified_qr: 3, verified_gps: 3, verified_gpx: 4 };
+
+// "Guia" progression — thresholds by approved-relato count (product's call).
+function computeGuiaTitle(count: number): string | null {
+  if (count >= 15) return "Guia Mestre";
+  if (count >= 5) return "Guia de Estrada";
+  if (count >= 1) return "Guia";
+  return null;
+}
+
+// Award (sign +1) or revoke (-1) a relato's contribution to its author and, when a
+// moto was used, to that moto's mini-passport. Counters floor at 0; the moto place
+// set is monotonic (a place the moto visited stays visited). All counts are discrete
+// events — no distance/speed/frequency, and no public leaderboard is produced here.
+function awardRelatoContribution(r: any, sign: number): void {
+  try {
+    const pts = (RELATO_POINTS[r.verificationLevel] || 1) * sign;
+    const authorId = r.authorId;
+    if (authorId != null) {
+      db.prepare(
+        `INSERT INTO relato_author_stats (user_id, relatos_approved, points, title, updated_at)
+         VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+         ON CONFLICT(user_id) DO UPDATE SET
+           relatos_approved = MAX(0, relatos_approved + ?),
+           points = MAX(0, points + ?),
+           updated_at = CURRENT_TIMESTAMP`,
+      ).run(authorId, Math.max(0, sign), Math.max(0, pts), computeGuiaTitle(Math.max(0, sign)), sign, pts);
+      const row = db.prepare("SELECT relatos_approved, points FROM relato_author_stats WHERE user_id = ?").get(authorId) as any;
+      const title = computeGuiaTitle(row?.relatos_approved || 0);
+      db.prepare("UPDATE relato_author_stats SET title = ? WHERE user_id = ?").run(title, authorId);
+      collections.relato_author_stats.doc(String(authorId)).set(
+        { user_id: authorId, relatos_approved: row?.relatos_approved || 0, points: row?.points || 0, title },
+        { merge: true },
+      ).catch(() => {});
+    }
+
+    const motoId = r.motoUsed?.motoId != null ? Number(r.motoUsed.motoId) : NaN;
+    if (!Number.isNaN(motoId)) {
+      const snap = r.motoUsed?.snapshot || {};
+      const existing = db.prepare("SELECT place_ids FROM moto_relato_stats WHERE moto_id = ?").get(motoId) as any;
+      const placeIds: string[] = existing?.place_ids ? safeJsonParse(existing.place_ids, []) : [];
+      if (sign > 0 && r.anchorType === "place" && r.anchorId && !placeIds.includes(r.anchorId)) placeIds.push(r.anchorId);
+      const placeJson = JSON.stringify(placeIds);
+      db.prepare(
+        `INSERT INTO moto_relato_stats (moto_id, owner_id, make, model, year, relatos_approved, points, place_ids, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+         ON CONFLICT(moto_id) DO UPDATE SET
+           relatos_approved = MAX(0, relatos_approved + ?),
+           points = MAX(0, points + ?),
+           place_ids = ?, make = excluded.make, model = excluded.model, year = excluded.year,
+           owner_id = excluded.owner_id, updated_at = CURRENT_TIMESTAMP`,
+      ).run(motoId, authorId ?? null, snap.make ?? null, snap.model ?? null, snap.year ?? null, Math.max(0, sign), Math.max(0, pts), placeJson, sign, pts, placeJson);
+      collections.moto_relato_stats.doc(String(motoId)).set(
+        { moto_id: motoId, owner_id: authorId ?? null, make: snap.make ?? null, model: snap.model ?? null, year: snap.year ?? null, place_ids: placeIds },
+        { merge: true },
+      ).catch(() => {});
+    }
+  } catch (e) {
+    console.error("awardRelatoContribution failed:", e);
+  }
+}
+
+// Project an approved/featured relato into the MotorFeed as a post (one per relato).
+async function projectRelatoToFeed(r: any): Promise<void> {
+  try {
+    // Privacy (Fase 5 non-goal): route relatos must NOT hit the public feed (start/end
+    // reveal where the rider lives). Only place relatos are projected.
+    if (r.anchorType !== "place") return;
+    const existing = await collections.posts.where("shared_relato_id", "==", r.id).limit(1).get();
+    if (!existing.empty) return; // already projected
+    // Denormalize the author like POST /api/posts does — the feed reads username /
+    // profile_picture_url straight off the post doc and crashes without them.
+    const author: any = (await findUserById(r.authorId)) || {};
+    const postId = await getNextId("posts");
+    const imageUrl = (Array.isArray(r.media) && r.media[0]?.url) || null;
+    // created_at MUST be an ISO string (like POST /api/posts) — a Firestore Timestamp
+    // sorts into a different type-bucket in orderBy('created_at'), breaking the feed's
+    // chronological order. Use the relato's own creation date so it lands where the
+    // author posted it, not at approval time.
+    const createdAt = relatoTsToStr(r.createdAt) || new Date().toISOString();
+    const postData: Record<string, any> = {
+      id: postId, user_id: r.authorId,
+      username: author.username || r.authorName || null,
+      user_type: author.type || null,
+      profile_picture_url: author.profile_picture_url || null,
+      content: r.title || "", image_url: imageUrl,
+      tagged_motorcycle_id: null, privacy_level: "public", shared_event_id: null, shared_relato_id: r.id,
+      is_pinned: 0, respect_count: 0, comment_count: 0, created_at: createdAt,
+    };
+    await collections.posts.doc(postId.toString()).set(postData);
+    try {
+      db.prepare("INSERT OR IGNORE INTO posts (id, user_id, content, image_url, privacy_level, shared_relato_id, created_at) VALUES (?, ?, ?, ?, 'public', ?, ?)")
+        .run(postId, r.authorId, r.title || "", imageUrl, r.id, createdAt);
+    } catch (e) { /* mirror */ }
+  } catch (e) {
+    console.error("projectRelatoToFeed failed:", e);
+  }
+}
+
+async function removeRelatoFeedPost(relatoId: string): Promise<void> {
+  try {
+    const snap = await collections.posts.where("shared_relato_id", "==", relatoId).get();
+    for (const d of snap.docs) await d.ref.delete();
+  } catch (e) { /* best effort */ }
+  try { db.prepare("DELETE FROM posts WHERE shared_relato_id = ?").run(relatoId); } catch (e) { /* mirror */ }
 }
 
 async function ensureSqliteUserExists(userId: number | string) {
@@ -514,6 +1366,35 @@ db.exec(`
     shop TEXT,
     date DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(motorcycle_id) REFERENCES motorcycles(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS oil_changes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    motorcycle_id INTEGER NOT NULL,
+    km INTEGER NOT NULL,
+    oil_type TEXT,
+    liters REAL,
+    shop TEXT,
+    shop_ref TEXT,
+    note TEXT,
+    record_date TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME
+  );
+
+  CREATE TABLE IF NOT EXISTS refuelings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    motorcycle_id INTEGER NOT NULL,
+    km INTEGER NOT NULL,
+    liters REAL NOT NULL,
+    fuel_type TEXT,
+    full_tank INTEGER DEFAULT 1,
+    price_per_liter REAL,
+    total_value REAL,
+    note TEXT,
+    record_date TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME
   );
 
   CREATE TABLE IF NOT EXISTS ecosystems (
@@ -1016,6 +1897,81 @@ db.exec(`
     needs_revision INTEGER DEFAULT 0
   );
 
+  -- Relatos de Estrada (Fase 0). SQLite mirror of the Firestore relatos source
+  -- of truth; only approved/featured relatos are written here (in Fase 2 approve).
+  -- JSON-encoded TEXT columns hold extensible maps (structured_fields, media, etc.).
+  CREATE TABLE IF NOT EXISTS relatos (
+    id TEXT PRIMARY KEY,
+    author_id INTEGER NOT NULL,
+    author_name TEXT,
+    anchor_type TEXT NOT NULL,            -- 'place' | 'route'
+    anchor_id TEXT NOT NULL,
+    title TEXT,
+    body TEXT,                            -- sanitized narrative; rendered as plain text
+    narrative_parts TEXT,                 -- JSON
+    structured_fields TEXT,               -- JSON (moto-native place attributes)
+    media TEXT,                           -- JSON array of {type,url,storageRef}
+    moto_used TEXT,                       -- JSON {motoId, snapshot}
+    external_links TEXT,                  -- JSON array of {kind,url,resolved*}
+    verification_level TEXT,              -- SERVER-ASSIGNED
+    verification_evidence TEXT,           -- JSON audit trail
+    status TEXT NOT NULL DEFAULT 'pending',
+    quality_saves INTEGER DEFAULT 0,
+    quality_helpful_votes INTEGER DEFAULT 0,
+    quality_editorial_picks INTEGER DEFAULT 0,
+    featured_at DATETIME,
+    featured_until DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_edited_at DATETIME,
+    resubmitted_at DATETIME,
+    approved_at DATETIME,
+    schema_version INTEGER DEFAULT 1
+  );
+
+  -- Gamification (Fase 4). Contribution stats for the "Guia" title. Derived from
+  -- approved relatos; recomputable, but maintained incrementally on moderation.
+  CREATE TABLE IF NOT EXISTS relato_author_stats (
+    user_id INTEGER PRIMARY KEY,
+    relatos_approved INTEGER DEFAULT 0,
+    points INTEGER DEFAULT 0,
+    title TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  -- Per-moto mini-passport. Keyed by moto_id but NOT FK-constrained, and carries a
+  -- make/model/year snapshot so the history survives the moto being edited/removed
+  -- from the Garagem. Aggregates ONLY discrete events (relatos/places) — never km,
+  -- speed or frequency.
+  CREATE TABLE IF NOT EXISTS moto_relato_stats (
+    moto_id INTEGER PRIMARY KEY,
+    owner_id INTEGER,
+    make TEXT,
+    model TEXT,
+    year INTEGER,
+    relatos_approved INTEGER DEFAULT 0,
+    points INTEGER DEFAULT 0,
+    place_ids TEXT,                       -- JSON array of distinct place anchorIds
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  -- Route entity (sister of place). Modeled in Fase 0, built in Fase 5. Distinct
+  -- from the existing discovered_routes (the scenic-roads discovery feature).
+  CREATE TABLE IF NOT EXISTS routes (
+    id TEXT PRIMARY KEY,
+    name TEXT,
+    geometry TEXT,                        -- JSON {start,end,waypoints[]}
+    polyline TEXT,                        -- derived from routing, not raw breadcrumb
+    gpx_ref TEXT,                         -- storage ref of imported GPX
+    distance_meters REAL,
+    surface_types TEXT,                   -- JSON array
+    difficulty TEXT,                      -- 'leve' | 'media' | 'pesada'
+    privacy_level TEXT NOT NULL DEFAULT 'private',  -- 'public'|'community'|'private'
+    origin TEXT,                          -- 'user_submitted' | 'curated'
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    schema_version INTEGER DEFAULT 1
+  );
+
   -- Seed default keywords if empty
   INSERT INTO keywords_config (category_name, keywords, radius, icon)
   SELECT 'dealership', '["motorcycle dealership", "concessionária moto", "yamaha", "honda", "bmw motorrad", "triumph"]', 10000, 'Building2'
@@ -1058,6 +2014,21 @@ try {
 try {
   db.prepare("ALTER TABLE places_cache ADD COLUMN import_batch_id TEXT").run();
 } catch (e) { /* Column might already exist */ }
+
+// Relatos de Estrada (Fase 0): durable place-level metadata lives on places_control
+// (NOT places_cache, which is the volatile Google/OSM cache rewritten via
+// INSERT OR REPLACE on every refresh). The Firestore places_control doc is the
+// source of truth (written with { merge: true }); these SQLite columns are the
+// mirror. NOTE for Fase 2: increment relato_count and write moto_attributes via a
+// targeted UPDATE / UPSERT (ON CONFLICT DO UPDATE) — the existing bulk-import and
+// cleanup-agent `INSERT OR REPLACE INTO places_control (...)` statements only list
+// the three control flags and would otherwise reset these columns.
+try { db.prepare("ALTER TABLE places_control ADD COLUMN moto_attributes TEXT").run(); } catch (e) { /* exists */ }
+try { db.prepare("ALTER TABLE places_control ADD COLUMN origin TEXT").run(); } catch (e) { /* exists */ }
+try { db.prepare("ALTER TABLE places_control ADD COLUMN relato_count INTEGER DEFAULT 0").run(); } catch (e) { /* exists */ }
+try { db.prepare("ALTER TABLE places_control ADD COLUMN schema_version INTEGER DEFAULT 1").run(); } catch (e) { /* exists */ }
+// Relatos de Estrada — route owner (Fase 5), for private-route access checks.
+try { db.prepare("ALTER TABLE routes ADD COLUMN created_by INTEGER").run(); } catch (e) { /* exists */ }
 
 // Migration: Add respect_count and comment_count if they don't exist
 try {
@@ -1152,6 +2123,11 @@ try {
   // Ignore if column already exists
 }
 try {
+  db.exec("ALTER TABLE posts ADD COLUMN shared_relato_id TEXT;");
+} catch (e) {
+  // Ignore if column already exists (Relatos de Estrada feed projection — Fase 3)
+}
+try {
   db.exec("ALTER TABLE posts ADD COLUMN is_pinned INTEGER DEFAULT 0;");
 } catch (e) {
   // Ignore if column already exists
@@ -1185,6 +2161,20 @@ try {
 
 try {
   db.exec("ALTER TABLE motorcycles ADD COLUMN image_url TEXT;");
+} catch (e) {}
+
+// Per-moto oil-change alert config (Garagem premium module).
+try {
+  db.exec("ALTER TABLE motorcycles ADD COLUMN oil_alert_active INTEGER DEFAULT 0;");
+} catch (e) {}
+try {
+  db.exec("ALTER TABLE motorcycles ADD COLUMN oil_alert_interval_km INTEGER;");
+} catch (e) {}
+try {
+  db.exec("ALTER TABLE motorcycles ADD COLUMN oil_alert_interval_months INTEGER;");
+} catch (e) {}
+try {
+  db.exec("ALTER TABLE motorcycles ADD COLUMN oil_alert_updated_at TEXT;");
 } catch (e) {}
 
 try {
@@ -1353,6 +2343,13 @@ const insertAmbassador = db.prepare("INSERT INTO ambassadors (user_id, category,
   ["feature_promote_event", "premium"],
   ["feature_create_motoclub", "premium"],
   ["feature_promote_photo_contest", "premium"],
+  // Garagem module: refueling CRUD is freemium; oil module, general economy,
+  // cost-per-km and the oil-change alert are premium.
+  ["feature_refuel_records", "freemium"],
+  ["feature_oil_change_records", "premium"],
+  ["feature_fuel_economy_general", "premium"],
+  ["feature_cost_per_km", "premium"],
+  ["feature_oil_change_alert", "premium"],
   ["photo_contest_enabled", "true"],
   ["photo_contest_allowed_types", JSON.stringify(['premium'])],
   ["api_google_maps", "true"],
@@ -1957,10 +2954,10 @@ async function startServer() {
       const { password: _, ...userInfo } = user;
       
       // Generate JWT
-      const token = jwt.sign({ id: user.id, username: user.username, role: user.role, plan: user.plan }, JWT_SECRET, { expiresIn: '24h' });
-      
-      res.json({ 
-        user: userInfo, 
+      const token = jwt.sign({ id: user.id, username: user.username, role: user.role, plan: user.PLAN ?? user.plan }, JWT_SECRET, { expiresIn: '24h' });
+
+      res.json({
+        user: userInfo,
         token,
         isNewUser,
         googleData: isNewUser ? { email, name, picture, username: user.username } : null
@@ -2062,7 +3059,7 @@ async function startServer() {
       }
 
       const { password: _, ...userInfo } = user;
-      const token = jwt.sign({ id: user.id, username: user.username, role: user.role, plan: user.plan }, JWT_SECRET, { expiresIn: '24h' });
+      const token = jwt.sign({ id: user.id, username: user.username, role: user.role, plan: user.PLAN ?? user.plan }, JWT_SECRET, { expiresIn: '24h' });
       console.log(`[login] total: ${Date.now()-_t0}ms`);
       res.json({ user: userInfo, token });
     } catch (error: any) {
@@ -3510,7 +4507,7 @@ async function startServer() {
       if (Object.keys(settingsMap).length === 0) {
         try {
           const settings = db.prepare("SELECT * FROM settings").all() as any[];
-          settings.forEach(row => settingsMap[row.key] = row.value);
+          settings.forEach((row: any) => settingsMap[row.KEY ?? row.key] = row.value);
         } catch (e) {}
       }
 
@@ -3965,6 +4962,98 @@ async function startServer() {
     } catch (error: any) {
       console.error("OSM Places API Exception:", error);
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Place detail = the living guide (Fase 3): place info + its approved relatos.
+  // Public. Registered AFTER the literal /api/places/* routes so they win.
+  app.get("/api/places/:placeId", async (req, res) => {
+    const placeId = req.params.placeId;
+    try {
+      let place: any = db.prepare(
+        "SELECT place_id, name, lat, lng, rating, reviews, category, city, full_address, source FROM places_cache WHERE place_id = ?",
+      ).get(placeId);
+      if (!place) {
+        try {
+          const doc = await collections.places_cache.doc(placeId).get();
+          if (doc.exists) place = doc.data();
+        } catch (e) { /* not in Firestore either */ }
+      }
+      if (!place) return res.status(404).json({ error: "Place not found" });
+      const control: any = db.prepare(
+        "SELECT moto_attributes, origin, relato_count FROM places_control WHERE place_id = ?",
+      ).get(placeId);
+      const relatos = (db.prepare(
+        `SELECT * FROM relatos WHERE anchor_type = 'place' AND anchor_id = ? AND status IN ('approved','featured')
+         ORDER BY created_at DESC LIMIT 50`,
+      ).all(placeId) as any[]).map(parseRelatoMirrorRow);
+      return res.json({
+        place: {
+          placeId: place.place_id || place.placeId || placeId,
+          name: place.name, lat: place.lat, lng: place.lng, category: place.category,
+          address: place.full_address || place.address || null, city: place.city || null,
+          motoAttributes: control?.moto_attributes ? safeJsonParse(control.moto_attributes, {}) : {},
+          origin: control?.origin || null,
+          relatoCount: control?.relato_count ?? relatos.length,
+        },
+        relatos,
+      });
+    } catch (error: any) {
+      console.error("place detail error:", error);
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Route detail (Fase 5): the routed line + its approved relatos. Auth required and
+  // privacyLevel-gated (start/end reveal where the rider lives): public/community →
+  // any signed-in user; private → owner/admin only.
+  app.get("/api/routes/:id", authenticateToken, async (req: any, res) => {
+    const id = req.params.id;
+    try {
+      let route: any = db.prepare("SELECT * FROM routes WHERE id = ?").get(id);
+      if (route) {
+        route = {
+          ...route,
+          geometry: safeJsonParse(route.geometry, null),
+          polyline: safeJsonParse(route.polyline, []),
+          surfaceTypes: safeJsonParse(route.surface_types, []),
+          privacyLevel: route.privacy_level,
+          distanceMeters: route.distance_meters,
+          gpxRef: route.gpx_ref,
+          createdBy: route.created_by,
+        };
+      } else {
+        const doc = await collections.routes.doc(id).get();
+        if (doc.exists) {
+          route = doc.data();
+          route.polyline = safeJsonParse(route.polyline, []); // stored as JSON string
+        }
+      }
+      if (!route) return res.status(404).json({ error: "Route not found" });
+      const privacy = route.privacyLevel || "private";
+      const isStaff = req.user.role === "admin" || req.user.role === "moderator";
+      const isOwner = route.createdBy != null && String(route.createdBy) === String(req.user.id);
+      if (privacy === "private" && !isOwner && !isStaff) return res.status(403).json({ error: "Forbidden" });
+      const relatos = (db.prepare(
+        `SELECT * FROM relatos WHERE anchor_type = 'route' AND anchor_id = ? AND status IN ('approved','featured') ORDER BY created_at DESC LIMIT 50`,
+      ).all(id) as any[]).map(parseRelatoMirrorRow);
+      return res.json({
+        route: {
+          id,
+          name: route.name,
+          geometry: route.geometry,
+          polyline: route.polyline,
+          distanceMeters: route.distanceMeters ?? null,
+          difficulty: route.difficulty || null,
+          surfaceTypes: route.surfaceTypes ?? [],
+          privacyLevel: privacy,
+          gpxRef: route.gpxRef ?? null,
+        },
+        relatos,
+      });
+    } catch (error: any) {
+      console.error("route detail error:", error);
+      return res.status(500).json({ error: error.message });
     }
   });
 
@@ -5039,12 +6128,24 @@ async function startServer() {
         const motorcyclesSnapshot = await collections.motorcycles.where("rider_id", "==", user.id).get();
         const motorcycles = motorcyclesSnapshot.docs.map(doc => ({ ...doc.data() as any, id: doc.id }));
 
+        // Garagem premium analytics are gated on the OWNER's plan (it's the
+        // owner's tracking feature). buildGarageView strips premium fields when
+        // the owner is freemium, so the data never leaves the server.
+        const ownerIsPremium = (user.PLAN ?? user.plan) === 'premium' || user.role === 'admin';
         const garage = await Promise.all(motorcycles.map(async (moto) => {
           const logsSnapshot = await collections.maintenance_logs
             .where("motorcycle_id", "==", parseInt(moto.id))
             .get();
-          const logs = logsSnapshot.docs.map(d => ({ id: d.id, ...d.data() as any }));
-          return { ...moto, maintenance_logs: logs };
+          let logs = logsSnapshot.docs.map(d => {
+            const data = d.data() as any;
+            return { id: d.id, ...data, date: data.date ?? data.created_at?.toDate?.()?.toISOString?.() ?? null };
+          });
+          if (logs.length === 0) {
+            try { logs = db.prepare("SELECT * FROM maintenance_logs WHERE motorcycle_id = ?").all(parseInt(moto.id)) as any[]; } catch (e) {}
+          }
+          const { oil_changes, refuelings } = await fetchGarageRecords(parseInt(moto.id));
+          const view = buildGarageView(moto, oil_changes, refuelings, ownerIsPremium);
+          return { ...moto, maintenance_logs: logs, ...view };
         }));
 
         // Created events
@@ -5068,19 +6169,32 @@ async function startServer() {
         }));
 
         const { password: _, ...safeUser } = user;
-        res.json({ 
-          ...safeUser, 
-          profile: rider, 
-          garage, 
-          posts, 
-          events: createdEvents, 
-          rsvpd_events: rsvpdEvents.filter(e => e !== null), 
-          recommendations, 
-          followers_count, 
-          following_count, 
-          is_following, 
-          ambassador, 
-          referral_count 
+        // Relatos de Estrada gamification (Fase 4): "Guia" title + per-moto mini-passport.
+        const relatoStats = (db.prepare(
+          "SELECT relatos_approved, points, title FROM relato_author_stats WHERE user_id = ?",
+        ).get(user.id) as any) || { relatos_approved: 0, points: 0, title: null };
+        const motoPassports = (db.prepare(
+          "SELECT moto_id, make, model, year, relatos_approved, points, place_ids FROM moto_relato_stats WHERE owner_id = ?",
+        ).all(user.id) as any[]).map((m) => ({
+          moto_id: m.moto_id, make: m.make, model: m.model, year: m.year,
+          relatos_approved: m.relatos_approved, points: m.points,
+          places: (safeJsonParse(m.place_ids, []) as any[]).length,
+        }));
+        res.json({
+          ...safeUser,
+          profile: rider,
+          garage,
+          posts,
+          events: createdEvents,
+          rsvpd_events: rsvpdEvents.filter(e => e !== null),
+          recommendations,
+          followers_count,
+          following_count,
+          is_following,
+          ambassador,
+          referral_count,
+          relatoStats,
+          motoPassports
         });
       } else {
         const ecosystemDoc = await collections.ecosystems.doc(userId).get();
@@ -5178,9 +6292,15 @@ async function startServer() {
         let garage = [];
         
         if (user.type === "rider") {
+          const ownerIsPremium = (user.PLAN ?? user.plan) === 'premium' || user.role === 'admin';
           profile = db.prepare("SELECT * FROM riders WHERE user_id = ?").get(user.id);
           garage = db.prepare("SELECT * FROM motorcycles WHERE rider_id = ?").all(user.id).map((moto: any) => {
-            return { ...moto, maintenance_logs: db.prepare("SELECT * FROM maintenance_logs WHERE motorcycle_id = ?").all(moto.id) };
+            const maintenance_logs = db.prepare("SELECT * FROM maintenance_logs WHERE motorcycle_id = ?").all(moto.id);
+            const oil_changes = db.prepare("SELECT * FROM oil_changes WHERE motorcycle_id = ?").all(moto.id);
+            const refuelings = (db.prepare("SELECT * FROM refuelings WHERE motorcycle_id = ?").all(moto.id) as any[])
+              .map((r) => ({ ...r, full_tank: !!r.full_tank }));
+            const view = buildGarageView(moto, oil_changes, refuelings, ownerIsPremium);
+            return { ...moto, maintenance_logs, ...view };
           });
         } else {
           profile = db.prepare("SELECT * FROM ecosystems WHERE user_id = ?").get(user.id);
@@ -5233,11 +6353,17 @@ async function startServer() {
       // Try Firestore first; gracefully fall back to SQLite if the query fails
       // (e.g. missing composite index on privacy_level+created_at).
       try {
-        const firestorePostsSnap = await collections.posts
-          .where("privacy_level", "==", "public")
-          .orderBy("created_at", "desc")
-          .limit(50)
-          .get();
+        // Cap the Firestore read so a stuck gRPC connection (Avast/TLS interference
+        // on long-running servers) can't hang the whole feed — fall back to SQLite.
+        const fsTimeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("firestore posts timeout")), 4500));
+        const firestorePostsSnap: any = await Promise.race([
+          collections.posts
+            .where("privacy_level", "==", "public")
+            .orderBy("created_at", "desc")
+            .limit(50)
+            .get(),
+          fsTimeout,
+        ]);
 
         for (const doc of firestorePostsSnap.docs) {
         const data = doc.data() as any;
@@ -5362,6 +6488,37 @@ async function startServer() {
         }
       }
       posts = uniquePosts;
+
+      // Resolve projected Relatos de Estrada (shared_relato_id) from the SQLite
+      // mirror (approved/featured only) so the feed can render a relato card.
+      for (const p of posts) {
+        // Backfill author fields for any post missing them (e.g. older projected
+        // relato posts) — the client reads username straight off the post.
+        if (!p.username && p.user_id != null) {
+          try {
+            const u = db.prepare("SELECT username, type AS user_type, profile_picture_url FROM users WHERE id = ?").get(p.user_id) as any;
+            if (u) {
+              p.username = u.username;
+              p.user_type = p.user_type || u.user_type;
+              p.profile_picture_url = p.profile_picture_url || u.profile_picture_url;
+            }
+          } catch (e) { /* leave as-is */ }
+        }
+        if (p.shared_relato_id && !p.relato) {
+          try {
+            const rm = db.prepare(
+              "SELECT id, title, body, verification_level, anchor_type, anchor_id, media, moto_used, author_name FROM relatos WHERE id = ?",
+            ).get(String(p.shared_relato_id)) as any;
+            if (rm) {
+              p.relato = {
+                id: rm.id, title: rm.title, body: rm.body, verificationLevel: rm.verification_level,
+                anchorType: rm.anchor_type, anchorId: rm.anchor_id, authorName: rm.author_name,
+                media: safeJsonParse(rm.media, []), motoUsed: safeJsonParse(rm.moto_used, null),
+              };
+            }
+          } catch (e) { /* leave as a plain post */ }
+        }
+      }
 
       res.json(posts);
     } catch (error: any) {
@@ -6236,6 +7393,547 @@ async function startServer() {
     }
   });
 
+  // ===== Relatos de Estrada (Fase 0) — secure write path ====================
+  // All creation/transition goes through the server (Admin SDK). The client may
+  // ONLY request a status of 'draft' or 'pending'; status, verificationLevel,
+  // qualitySignals, origin, featuredAt/Until, moderationNotes and author* are
+  // SERVER-ASSIGNED and silently ignored if sent (relatoCreateSchema strips unknown
+  // keys). The Firestore `relatos` doc is the source of truth across the whole
+  // lifecycle; the SQLite mirror is only written on approval (Fase 2), so
+  // draft/pending/rejected never reach public read paths.
+  // Anchor picker (Fase 1): search existing places in places_cache by name.
+  app.get("/api/relatos/places/search", authenticateToken, async (req: any, res) => {
+    const q = String(req.query.q || "").trim();
+    if (q.length < 2) return res.json([]);
+    try {
+      return res.json(searchCachedPlaces(q, 10));
+    } catch (error: any) {
+      console.error("relato place search error:", error);
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Dedup for a NEW place candidate (Fase 1): "você quis dizer um destes aqui perto?".
+  app.get("/api/relatos/places/dedup", authenticateToken, async (req: any, res) => {
+    const name = String(req.query.name || "").trim();
+    const lat = Number(req.query.lat);
+    const lng = Number(req.query.lng);
+    if (!name || Number.isNaN(lat) || Number.isNaN(lng)) {
+      return res.status(400).json({ error: "name, lat and lng are required" });
+    }
+    try {
+      return res.json(dedupPlaces(name, { lat, lng }));
+    } catch (error: any) {
+      console.error("relato dedup error:", error);
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Upload one relato photo → returns { url } for the media[] array (Fase 1).
+  app.post("/api/relatos/media", authenticateToken, upload.single("image"), async (req: any, res) => {
+    if (!req.file) return res.status(400).json({ error: "No image provided" });
+    try {
+      const url = await uploadToFirebase(req.file, "relatos");
+      return res.status(201).json({ type: "photo", url });
+    } catch (error: any) {
+      console.error("relato media upload error:", error);
+      return res.status(500).json({ error: "Upload failed" });
+    }
+  });
+
+  // The author's own relatos (any status) — for "Meus relatos" + draft resume
+  // (works across devices since drafts live server-side). Registered BEFORE the
+  // /:id route so "mine" isn't captured as an id.
+  app.get("/api/relatos/mine", authenticateToken, async (req: any, res) => {
+    const status = String(req.query.status || "all");
+    try {
+      const snap = await collections.relatos.where("authorId", "==", req.user.id).get();
+      let items = snap.docs.map((d: any) => ({ id: d.id, ...(d.data() as any) }));
+      if (status !== "all") items = items.filter((r: any) => r.status === status);
+      const ts = (v: any) => String(v?.toDate?.()?.toISOString?.() || v || "");
+      items.sort((a: any, b: any) => ts(b.createdAt).localeCompare(ts(a.createdAt)));
+      return res.json(items);
+    } catch (error: any) {
+      console.error("relato mine error:", error);
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Featured "Relato da Semana" for the home slot (public). Reads the SQLite mirror.
+  // Registered BEFORE /api/relatos/:id so "featured" is not captured as an id.
+  app.get("/api/relatos/featured", async (req, res) => {
+    try {
+      const now = new Date().toISOString();
+      // anchor_type='place' only: route relatos stay off the public home (privacy).
+      const rows = db.prepare(
+        "SELECT * FROM relatos WHERE status = 'featured' AND anchor_type = 'place' AND (featured_until IS NULL OR featured_until > ?) ORDER BY featured_at DESC LIMIT 5",
+      ).all(now) as any[];
+      return res.json(rows.map(parseRelatoMirrorRow));
+    } catch (error: any) {
+      console.error("relato featured error:", error);
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/relatos", authenticateToken, async (req: any, res) => {
+    const parsed = relatoCreateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues[0].message });
+    }
+    const input = parsed.data;
+    try {
+      const title = normalizeRelatoText(input.title, RELATO_LIMITS.title);
+      const body = composeRelatoBody(input.narrativeParts, input.body);
+      if (!title) return res.status(400).json({ error: "title is required" });
+      if (!body) return res.status(400).json({ error: "relato needs a body or guided-script answers" });
+
+      // motoUsed (optional): validate ownership and build the snapshot server-side.
+      let motoUsed: any = null;
+      if (input.motoUsed?.motoId) {
+        const ownership = await verifyMotoOwnership(input.motoUsed.motoId, req);
+        if (!ownership.ok) return res.status(ownership.status).json({ error: ownership.message });
+        motoUsed = { motoId: String(input.motoUsed.motoId), snapshot: await buildMotoSnapshot(input.motoUsed.motoId) };
+      }
+
+      const externalLinks = await resolveRelatoExternalLinks(input.externalLinks);
+
+      // SERVER assigns the verification level from the supplied proof.
+      const { level: verificationLevel, verificationEvidence } = await assignVerificationLevel(
+        input.anchorType, input.anchorId || "", input.evidence, input.newPlace?.coords,
+      );
+
+      const narrativeParts = input.narrativeParts
+        ? Object.fromEntries(
+            Object.entries(input.narrativeParts).map(([k, v]) => [k, normalizeRelatoText(String(v ?? ""), RELATO_LIMITS.part)]),
+          )
+        : null;
+
+      const ref = collections.relatos.doc();
+      const id = ref.id;
+
+      // Anchor: an existing place_id/route id, OR a NEW place candidate → goes to
+      // places_staging (with proximity+name dedup). User-submitted places NEVER land
+      // straight in production places_cache; an admin merges/creates in Fase 2.
+      let anchorId = input.anchorId || "";
+      let stagingWrite: { ref: any; data: Record<string, any> } | null = null;
+      if (input.anchorType === "place" && input.newPlace) {
+        const stagingRef = collections.places_staging.doc();
+        anchorId = stagingRef.id;
+        const dedupCandidates = dedupPlaces(input.newPlace.name, input.newPlace.coords);
+        stagingWrite = {
+          ref: stagingRef,
+          data: {
+            id: stagingRef.id,
+            candidate: {
+              name: normalizeRelatoText(input.newPlace.name, RELATO_LIMITS.title),
+              coords: input.newPlace.coords,
+              category: input.newPlace.category || null,
+              motoAttributes: input.newPlace.motoAttributes || input.structuredFields || {},
+            },
+            dedupCandidates,
+            sourceRelatoId: id,
+            status: "pending",
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            schemaVersion: 1,
+          },
+        };
+      }
+      // New route (Fase 5): created directly (no staging); the line is routed.
+      if (input.anchorType === "route" && input.newRoute) {
+        anchorId = await createRouteEntity(input.newRoute, req.user.id);
+      }
+
+      const now = admin.firestore.FieldValue.serverTimestamp();
+      const relato: Record<string, any> = {
+        id,
+        authorId: req.user.id,
+        authorName: req.user.username || null,
+        anchorType: input.anchorType,
+        anchorId,
+        title,
+        body,
+        narrativeParts,
+        structuredFields: input.structuredFields || {},
+        media: input.media || [],
+        motoUsed,
+        externalLinks,
+        verificationLevel,        // SERVER-ASSIGNED
+        verificationEvidence,     // audit trail
+        status: input.requestedStatus, // 'draft' | 'pending' only (validated)
+        moderationNotes: null,    // admin-only, never set by the client
+        qualitySignals: { saves: 0, helpfulVotes: 0, editorialPicks: 0 },
+        featuredAt: null,
+        featuredUntil: null,
+        createdAt: now,
+        updatedAt: now,
+        lastEditedAt: null,
+        resubmittedAt: null,
+        approvedAt: null,
+        schemaVersion: 1,
+      };
+      await ref.set(relato);
+      if (stagingWrite) {
+        try { await stagingWrite.ref.set(stagingWrite.data); }
+        catch (e) { console.error("places_staging write failed:", e); }
+      }
+      return res.status(201).json({ id, status: relato.status, verificationLevel, anchorId });
+    } catch (error: any) {
+      console.error("Error creating relato:", error);
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Author edit. Only the OWN relato, only while {draft, pending, rejected}, OR a
+  // published one (which re-enqueues to pending — prevents approving clean text then
+  // swapping the content). Never touches server-assigned fields. Same sanitization
+  // as creation. rejected→edit re-submits to pending (correction cycle).
+  app.put("/api/relatos/:id", authenticateToken, async (req: any, res) => {
+    const { id } = req.params;
+    const parsed = relatoEditSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues[0].message });
+    }
+    const input = parsed.data;
+    try {
+      const ref = collections.relatos.doc(id);
+      const snap = await ref.get();
+      if (!snap.exists) return res.status(404).json({ error: "Relato not found" });
+      const existing = snap.data() as any;
+
+      if (existing.authorId?.toString() !== req.user.id.toString()) {
+        return res.status(403).json({ error: "Forbidden: not your relato" });
+      }
+
+      const current = String(existing.status || "");
+      const editable = ["draft", "pending", "rejected"];
+      const isPublished = current === "approved" || current === "featured";
+      if (!editable.includes(current) && !isPublished) {
+        return res.status(409).json({ error: `Relato in status '${current}' cannot be edited` });
+      }
+
+      const update: Record<string, any> = {
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastEditedAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+
+      // Narrative fields (recompose body if guided-script parts are provided).
+      if (input.title !== undefined || input.body !== undefined || input.narrativeParts !== undefined) {
+        const title = input.title !== undefined ? normalizeRelatoText(input.title, RELATO_LIMITS.title) : existing.title;
+        const narrativeParts = input.narrativeParts !== undefined
+          ? Object.fromEntries(
+              Object.entries(input.narrativeParts).map(([k, v]) => [k, normalizeRelatoText(String(v ?? ""), RELATO_LIMITS.part)]),
+            )
+          : existing.narrativeParts;
+        const body = input.narrativeParts !== undefined
+          ? composeRelatoBody(narrativeParts, input.body)
+          : (input.body !== undefined ? normalizeRelatoText(input.body, RELATO_LIMITS.body) : existing.body);
+        if (!title) return res.status(400).json({ error: "title is required" });
+        if (!body) return res.status(400).json({ error: "relato needs a body or guided-script answers" });
+        update.title = title;
+        update.narrativeParts = narrativeParts;
+        update.body = body;
+      }
+      if (input.structuredFields !== undefined) update.structuredFields = input.structuredFields;
+      if (input.media !== undefined) update.media = input.media;
+      if (input.externalLinks !== undefined) update.externalLinks = await resolveRelatoExternalLinks(input.externalLinks);
+      if (input.motoUsed !== undefined) {
+        if (input.motoUsed === null) {
+          update.motoUsed = null;
+        } else {
+          const ownership = await verifyMotoOwnership(input.motoUsed.motoId, req);
+          if (!ownership.ok) return res.status(ownership.status).json({ error: ownership.message });
+          update.motoUsed = { motoId: String(input.motoUsed.motoId), snapshot: await buildMotoSnapshot(input.motoUsed.motoId) };
+        }
+      }
+      if (input.evidence !== undefined) {
+        const { level, verificationEvidence } = await assignVerificationLevel(existing.anchorType, existing.anchorId, input.evidence);
+        update.verificationLevel = level;        // SERVER re-assigns; client cannot force
+        update.verificationEvidence = verificationEvidence;
+      }
+
+      // Server-controlled status lifecycle.
+      if (current === "rejected") {
+        update.status = "pending";
+        update.resubmittedAt = admin.firestore.FieldValue.serverTimestamp();
+      } else if (isPublished) {
+        update.status = "pending"; // re-enqueue; anti bait-and-switch
+        update.resubmittedAt = admin.firestore.FieldValue.serverTimestamp();
+        // Fully unpublish: pull from public read mirror + feed, decrement count and
+        // revoke the contribution until it is re-approved.
+        removeRelatoMirror(id);
+        await removeRelatoFeedPost(id);
+        if (existing.anchorType === "place" && existing.anchorId) bumpRelatoCount(existing.anchorId, -1);
+        awardRelatoContribution({ id, ...existing }, -1);
+      } else if (current === "draft" && input.requestedStatus === "pending") {
+        update.status = "pending"; // author submits a saved draft for moderation
+      }
+
+      await ref.update(update);
+      return res.json({ success: true, status: update.status || current });
+    } catch (error: any) {
+      console.error("Error editing relato:", error);
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Single relato. Public for approved/featured; author/admin for any other status.
+  // Registered AFTER /places/* and /mine so those aren't captured as :id.
+  app.get("/api/relatos/:id", authenticateToken, async (req: any, res) => {
+    try {
+      const doc = await collections.relatos.doc(req.params.id).get();
+      if (!doc.exists) return res.status(404).json({ error: "Relato not found" });
+      const r = doc.data() as any;
+      const isPublic = r.status === "approved" || r.status === "featured";
+      const isOwner = r.authorId?.toString() === req.user.id.toString();
+      const isStaff = req.user.role === "admin" || req.user.role === "moderator";
+      if (!isPublic && !isOwner && !isStaff) return res.status(403).json({ error: "Forbidden" });
+      // moderationNotes: visible to the author (correction cycle) and staff; never to
+      // third parties (matters for a public relato that carried an old rejection note).
+      if (!isStaff && !isOwner) delete r.moderationNotes;
+      return res.json({ id: doc.id, ...r });
+    } catch (error: any) {
+      console.error("relato get error:", error);
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ===== Relatos de Estrada — admin moderation (Fase 2) =====================
+  // Mirrors the events_staging admin model. Status transitions ONLY via these
+  // admin endpoints (authenticateToken + checkAdmin + logAdminAction).
+
+  app.get("/api/admin/relatos", authenticateToken, checkAdmin, async (req: any, res) => {
+    const status = String(req.query.status || "pending");
+    try {
+      const snap = status === "all"
+        ? await collections.relatos.get()
+        : await collections.relatos.where("status", "==", status).get();
+      const items = snap.docs.map((d: any) => ({ id: d.id, ...(d.data() as any) }));
+      const ts = (v: any) => relatoTsToStr(v) || "";
+      items.sort((a: any, b: any) => ts(b.updatedAt || b.createdAt).localeCompare(ts(a.updatedAt || a.createdAt)));
+      return res.json(items);
+    } catch (error: any) {
+      console.error("admin relatos list error:", error);
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Admin curation edit (whitelist of content fields; same plain-text sanitization).
+  app.put("/api/admin/relatos/:id", authenticateToken, checkAdmin, async (req: any, res) => {
+    const { id } = req.params;
+    try {
+      const ref = collections.relatos.doc(id);
+      const doc = await ref.get();
+      if (!doc.exists) return res.status(404).json({ error: "Relato not found" });
+      const update: Record<string, any> = { editedAt: admin.firestore.FieldValue.serverTimestamp(), editedBy: req.user.id };
+      if (typeof req.body.title === "string") update.title = normalizeRelatoText(req.body.title, RELATO_LIMITS.title);
+      if (typeof req.body.body === "string") update.body = normalizeRelatoText(req.body.body, RELATO_LIMITS.body);
+      if (req.body.structuredFields && typeof req.body.structuredFields === "object" && !Array.isArray(req.body.structuredFields)) {
+        update.structuredFields = req.body.structuredFields;
+      }
+      await ref.update(update);
+      const fresh = (await ref.get()).data() as any;
+      if (fresh && (fresh.status === "approved" || fresh.status === "featured")) upsertRelatoMirror({ id, ...fresh });
+      logAdminAction(req.user.id, "EDIT_RELATO", "relatos", id);
+      return res.json({ success: true });
+    } catch (error: any) {
+      console.error("admin relato edit error:", error);
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Approve → status approved, mirror to SQLite, bump places_control.relato_count.
+  app.put("/api/admin/relatos/:id/approve", authenticateToken, checkAdmin, async (req: any, res) => {
+    const { id } = req.params;
+    try {
+      const ref = collections.relatos.doc(id);
+      const doc = await ref.get();
+      if (!doc.exists) return res.status(404).json({ error: "Relato not found" });
+      const r = doc.data() as any;
+      if (r.status === "approved" || r.status === "featured") return res.status(409).json({ error: "Already published" });
+      // A user-submitted place must be resolved (merged/created) before approval.
+      if (r.anchorType === "place" && r.anchorId) {
+        try {
+          const st = await collections.places_staging.doc(r.anchorId).get();
+          if (st.exists && (st.data() as any).status === "pending") {
+            return res.status(409).json({ error: "Resolve the place candidate before approving this relato" });
+          }
+        } catch (e) { /* no staging → it is a real place */ }
+      }
+      const patch: Record<string, any> = { status: "approved", approvedAt: admin.firestore.FieldValue.serverTimestamp(), reviewedBy: req.user.id, moderationNotes: null };
+      await ref.update(patch);
+      upsertRelatoMirror({ id, ...r, ...patch, status: "approved" });
+      if (r.anchorType === "place" && r.anchorId) bumpRelatoCount(r.anchorId, 1);
+      await projectRelatoToFeed({ id, ...r, status: "approved" });
+      awardRelatoContribution({ id, ...r }, 1);
+      logAdminAction(req.user.id, "APPROVE_RELATO", "relatos", id);
+      return res.json({ success: true });
+    } catch (error: any) {
+      console.error("admin relato approve error:", error);
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Reject with moderationNotes (drives the author correction cycle).
+  app.put("/api/admin/relatos/:id/reject", authenticateToken, checkAdmin, async (req: any, res) => {
+    const { id } = req.params;
+    try {
+      const ref = collections.relatos.doc(id);
+      const doc = await ref.get();
+      if (!doc.exists) return res.status(404).json({ error: "Relato not found" });
+      const r = doc.data() as any;
+      const notes = typeof req.body.moderationNotes === "string" ? req.body.moderationNotes.slice(0, 2000) : null;
+      await ref.update({ status: "rejected", moderationNotes: notes, reviewedBy: req.user.id });
+      // Pull from public surfaces (and decrement count/contribution if published).
+      const wasPublished = r.status === "approved" || r.status === "featured";
+      removeRelatoMirror(id);
+      await removeRelatoFeedPost(id);
+      if (wasPublished && r.anchorType === "place" && r.anchorId) bumpRelatoCount(r.anchorId, -1);
+      if (wasPublished) awardRelatoContribution({ id, ...r }, -1);
+      logAdminAction(req.user.id, "REJECT_RELATO", "relatos", id);
+      return res.json({ success: true });
+    } catch (error: any) {
+      console.error("admin relato reject error:", error);
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Feature ("Relato da Semana") with a time window. Must already be approvable.
+  app.put("/api/admin/relatos/:id/feature", authenticateToken, checkAdmin, async (req: any, res) => {
+    const { id } = req.params;
+    const days = Math.min(60, Math.max(1, Number(req.body.days) || 7));
+    try {
+      const ref = collections.relatos.doc(id);
+      const doc = await ref.get();
+      if (!doc.exists) return res.status(404).json({ error: "Relato not found" });
+      const r = doc.data() as any;
+      const until = admin.firestore.Timestamp.fromDate(new Date(Date.now() + days * 86400000));
+      const patch: Record<string, any> = {
+        status: "featured",
+        featuredAt: admin.firestore.FieldValue.serverTimestamp(),
+        featuredUntil: until,
+        approvedAt: r.approvedAt || admin.firestore.FieldValue.serverTimestamp(),
+        reviewedBy: req.user.id,
+      };
+      await ref.update(patch);
+      const wasPublished = r.status === "approved" || r.status === "featured";
+      upsertRelatoMirror({ id, ...r, ...patch, status: "featured", featuredUntil: until });
+      if (!wasPublished && r.anchorType === "place" && r.anchorId) bumpRelatoCount(r.anchorId, 1);
+      await projectRelatoToFeed({ id, ...r, status: "featured" });
+      if (!wasPublished) awardRelatoContribution({ id, ...r }, 1);
+      logAdminAction(req.user.id, "FEATURE_RELATO", "relatos", id, `${days}d`);
+      return res.json({ success: true });
+    } catch (error: any) {
+      console.error("admin relato feature error:", error);
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Unfeature → back to approved (stays published).
+  app.put("/api/admin/relatos/:id/unfeature", authenticateToken, checkAdmin, async (req: any, res) => {
+    const { id } = req.params;
+    try {
+      const ref = collections.relatos.doc(id);
+      const doc = await ref.get();
+      if (!doc.exists) return res.status(404).json({ error: "Relato not found" });
+      const r = doc.data() as any;
+      const patch: Record<string, any> = { status: "approved", featuredUntil: null };
+      await ref.update(patch);
+      upsertRelatoMirror({ id, ...r, ...patch, status: "approved" });
+      logAdminAction(req.user.id, "UNFEATURE_RELATO", "relatos", id);
+      return res.json({ success: true });
+    } catch (error: any) {
+      console.error("admin relato unfeature error:", error);
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ----- places_staging resolution -----
+  app.get("/api/admin/places-staging", authenticateToken, checkAdmin, async (req: any, res) => {
+    const status = String(req.query.status || "pending");
+    try {
+      const snap = status === "all"
+        ? await collections.places_staging.get()
+        : await collections.places_staging.where("status", "==", status).get();
+      const items = snap.docs.map((d: any) => ({ id: d.id, ...(d.data() as any) }));
+      return res.json(items);
+    } catch (error: any) {
+      console.error("admin places-staging list error:", error);
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Merge the candidate into an existing place: repoint the source relato.
+  app.put("/api/admin/places-staging/:id/merge", authenticateToken, checkAdmin, async (req: any, res) => {
+    const { id } = req.params;
+    const targetPlaceId = String(req.body.placeId || "");
+    if (!targetPlaceId) return res.status(400).json({ error: "placeId is required" });
+    try {
+      const ref = collections.places_staging.doc(id);
+      const doc = await ref.get();
+      if (!doc.exists) return res.status(404).json({ error: "Staging candidate not found" });
+      const s = doc.data() as any;
+      await ref.update({ status: "merged", reviewedBy: req.user.id, mergedPlaceId: targetPlaceId });
+      if (s.sourceRelatoId) await collections.relatos.doc(s.sourceRelatoId).update({ anchorId: targetPlaceId }).catch(() => {});
+      logAdminAction(req.user.id, "MERGE_PLACE_STAGING", "places_staging", id, `-> ${targetPlaceId}`);
+      return res.json({ success: true, placeId: targetPlaceId });
+    } catch (error: any) {
+      console.error("admin places-staging merge error:", error);
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Create a new production place from the candidate (origin=user_submitted).
+  app.put("/api/admin/places-staging/:id/create", authenticateToken, checkAdmin, async (req: any, res) => {
+    const { id } = req.params;
+    try {
+      const ref = collections.places_staging.doc(id);
+      const doc = await ref.get();
+      if (!doc.exists) return res.status(404).json({ error: "Staging candidate not found" });
+      const s = doc.data() as any;
+      const placeId = await createPlaceFromStaging({ ...s, id });
+      await ref.update({ status: "created", reviewedBy: req.user.id, createdPlaceId: placeId });
+      if (s.sourceRelatoId) await collections.relatos.doc(s.sourceRelatoId).update({ anchorId: placeId }).catch(() => {});
+      logAdminAction(req.user.id, "CREATE_PLACE_STAGING", "places_staging", id, `-> ${placeId}`);
+      return res.json({ success: true, placeId });
+    } catch (error: any) {
+      console.error("admin places-staging create error:", error);
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put("/api/admin/places-staging/:id/reject", authenticateToken, checkAdmin, async (req: any, res) => {
+    const { id } = req.params;
+    try {
+      const ref = collections.places_staging.doc(id);
+      const doc = await ref.get();
+      if (!doc.exists) return res.status(404).json({ error: "Staging candidate not found" });
+      await ref.update({ status: "rejected", reviewedBy: req.user.id });
+      logAdminAction(req.user.id, "REJECT_PLACE_STAGING", "places_staging", id);
+      return res.json({ success: true });
+    } catch (error: any) {
+      console.error("admin places-staging reject error:", error);
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Featured window expiry: demote expired "Relato da Semana" back to approved.
+  // Runs in every instance (like checkContests) — idempotent.
+  async function checkFeaturedRelatos() {
+    try {
+      const snap = await collections.relatos.where("status", "==", "featured").get();
+      const now = Date.now();
+      for (const d of snap.docs) {
+        const r = d.data() as any;
+        const until = r.featuredUntil?.toDate ? r.featuredUntil.toDate().getTime() : (r.featuredUntil ? new Date(r.featuredUntil).getTime() : 0);
+        if (until && until < now) {
+          await d.ref.update({ status: "approved", featuredUntil: null });
+          upsertRelatoMirror({ id: d.id, ...r, status: "approved", featuredUntil: null });
+        }
+      }
+    } catch (e) { /* best effort */ }
+  }
+  setInterval(checkFeaturedRelatos, 5 * 60 * 1000);
+
   app.get("/api/events/:id/attendees", authenticateToken, async (req: any, res) => {
     const { id } = req.params;
     try {
@@ -7023,16 +8721,24 @@ async function startServer() {
         return res.status(403).json({ error: "Forbidden: You can only delete your own motorcycles" });
       }
 
-      // Delete associated maintenance logs
-      const logsSnapshot = await collections.maintenance_logs.where("motorcycle_id", "==", parseInt(id)).get();
+      // Delete associated maintenance logs, oil changes and refuelings (cascade)
+      const [logsSnapshot, oilSnapshot, refuelSnapshot] = await Promise.all([
+        collections.maintenance_logs.where("motorcycle_id", "==", parseInt(id)).get(),
+        collections.oil_changes.where("motorcycle_id", "==", parseInt(id)).get(),
+        collections.refuelings.where("motorcycle_id", "==", parseInt(id)).get(),
+      ]);
       const batch = firestore.batch();
       logsSnapshot.docs.forEach(doc => batch.delete(doc.ref));
+      oilSnapshot.docs.forEach(doc => batch.delete(doc.ref));
+      refuelSnapshot.docs.forEach(doc => batch.delete(doc.ref));
       batch.delete(collections.motorcycles.doc(id));
       await batch.commit();
 
       // Dual-delete from SQLite
       try {
         db.prepare("DELETE FROM maintenance_logs WHERE motorcycle_id = ?").run(id);
+        db.prepare("DELETE FROM oil_changes WHERE motorcycle_id = ?").run(id);
+        db.prepare("DELETE FROM refuelings WHERE motorcycle_id = ?").run(id);
         db.prepare("DELETE FROM motorcycles WHERE id = ?").run(id);
       } catch (sqe) {}
 
@@ -7059,12 +8765,14 @@ async function startServer() {
       }
 
       const logId = await getNextId("maintenance_logs");
+      const logDate = new Date().toISOString();
       await collections.maintenance_logs.doc(logId.toString()).set({
         id: logId,
         motorcycle_id: parseInt(id),
         service,
         km: parseInt(km) || null,
         shop: shop || null,
+        date: logDate,
         created_at: admin.firestore.FieldValue.serverTimestamp()
       });
 
@@ -7077,6 +8785,413 @@ async function startServer() {
     } catch (err) {
       console.error("Error adding maintenance log to Firestore:", err);
       res.status(500).json({ error: "Failed to add maintenance log" });
+    }
+  });
+
+  app.put("/api/maintenance/:logId", authenticateToken, async (req: any, res) => {
+    const { logId } = req.params;
+    const { service, km, shop } = req.body;
+    if (!service) return res.status(400).json({ error: "service is required" });
+    try {
+      // Verify ownership via motorcycle parent
+      const logRow = db.prepare("SELECT motorcycle_id FROM maintenance_logs WHERE id = ?").get(parseInt(logId)) as any;
+      if (!logRow) return res.status(404).json({ error: "Maintenance log not found" });
+      const motoRow = db.prepare("SELECT rider_id FROM motorcycles WHERE id = ?").get(logRow.motorcycle_id) as any;
+      if (!motoRow) return res.status(404).json({ error: "Motorcycle not found" });
+      if (motoRow.rider_id.toString() !== req.user.id.toString() && req.user.role !== 'admin' && req.user.role !== 'moderator') {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      db.prepare("UPDATE maintenance_logs SET service = ?, km = ?, shop = ? WHERE id = ?")
+        .run(service, parseInt(km) || null, shop || null, parseInt(logId));
+      try {
+        await collections.maintenance_logs.doc(logId).update({
+          service,
+          km: parseInt(km) || null,
+          shop: shop || null,
+          updated_at: admin.firestore.FieldValue.serverTimestamp()
+        });
+      } catch (_) {}
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[maintenance PUT]", err);
+      res.status(500).json({ error: "Failed to update maintenance log" });
+    }
+  });
+
+  app.delete("/api/maintenance/:logId", authenticateToken, async (req: any, res) => {
+    const { logId } = req.params;
+    try {
+      const logRow = db.prepare("SELECT motorcycle_id FROM maintenance_logs WHERE id = ?").get(parseInt(logId)) as any;
+      if (!logRow) return res.status(404).json({ error: "Maintenance log not found" });
+      const motoRow = db.prepare("SELECT rider_id FROM motorcycles WHERE id = ?").get(logRow.motorcycle_id) as any;
+      if (!motoRow) return res.status(404).json({ error: "Motorcycle not found" });
+      if (motoRow.rider_id.toString() !== req.user.id.toString() && req.user.role !== 'admin' && req.user.role !== 'moderator') {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      db.prepare("DELETE FROM maintenance_logs WHERE id = ?").run(parseInt(logId));
+      try { await collections.maintenance_logs.doc(logId).delete(); } catch (_) {}
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[maintenance DELETE]", err);
+      res.status(500).json({ error: "Failed to delete maintenance log" });
+    }
+  });
+
+  // ===========================================================================
+  // Garagem — Abastecimento (refueling, freemium CRUD) + Troca de Óleo (oil,
+  // premium) + alerta de troca. Stats are derived on read; these routes only
+  // persist raw records (dual-write Firestore + SQLite, like the moto routes).
+  // ===========================================================================
+
+  // --- Refuelings (freemium: authenticated, no premium gate) ---
+  app.post("/api/motorcycles/:id/refuelings", authenticateToken, async (req: any, res) => {
+    const { id } = req.params;
+    const parsed = refuelingSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
+    }
+    try {
+      const owner = await verifyMotoOwnership(id, req);
+      if (!owner.ok) return res.status(owner.status).json({ error: owner.message });
+
+      const d = parsed.data;
+      const { price_per_liter, total_value } = derivePrice({
+        liters: d.liters,
+        price_per_liter: d.price_per_liter ?? null,
+        total_value: d.total_value ?? null,
+      });
+      const full_tank = d.full_tank ?? true;
+      const record_date = d.record_date || new Date().toISOString();
+
+      // Non-blocking decreasing-odometer warning (computed against current records).
+      const { oil_changes, refuelings } = await fetchGarageRecords(parseInt(id));
+      const odometer_warning = isOdometerDecreasing(d.km, lastKnownOdometer(oil_changes, refuelings));
+
+      const recId = await getNextId("refuelings");
+      const recData = {
+        id: recId,
+        motorcycle_id: parseInt(id),
+        km: d.km,
+        liters: d.liters,
+        fuel_type: d.fuel_type,
+        full_tank,
+        price_per_liter,
+        total_value,
+        note: d.note ?? null,
+        record_date,
+        created_at: admin.firestore.FieldValue.serverTimestamp(),
+      };
+      await collections.refuelings.doc(recId.toString()).set(recData);
+      try {
+        db.prepare(
+          "INSERT INTO refuelings (id, motorcycle_id, km, liters, fuel_type, full_tank, price_per_liter, total_value, note, record_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ).run(recId, parseInt(id), d.km, d.liters, d.fuel_type, full_tank ? 1 : 0, price_per_liter, total_value, d.note ?? null, record_date);
+      } catch (sqe) {}
+
+      res.json({ success: true, id: recId, odometer_warning });
+    } catch (err) {
+      console.error("Error adding refueling:", err);
+      res.status(500).json({ error: "Failed to add refueling" });
+    }
+  });
+
+  app.put("/api/refuelings/:id", authenticateToken, async (req: any, res) => {
+    const { id } = req.params;
+    const parsed = refuelingSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
+    }
+    try {
+      const rec = await loadGarageRecord("refuelings", id);
+      if (!rec) return res.status(404).json({ error: "Refueling not found" });
+      const owner = await verifyMotoOwnership(rec.motorcycle_id, req);
+      if (!owner.ok) return res.status(owner.status).json({ error: owner.message });
+
+      const d = parsed.data;
+      const { price_per_liter, total_value } = derivePrice({
+        liters: d.liters,
+        price_per_liter: d.price_per_liter ?? null,
+        total_value: d.total_value ?? null,
+      });
+      const full_tank = d.full_tank ?? rec.full_tank ?? true;
+      const record_date = d.record_date || rec.record_date || new Date().toISOString();
+
+      // Warning against the other records (exclude this one being edited).
+      const { oil_changes, refuelings } = await fetchGarageRecords(parseInt(rec.motorcycle_id));
+      const others = refuelings.filter((r) => r.id.toString() !== id.toString());
+      const odometer_warning = isOdometerDecreasing(d.km, lastKnownOdometer(oil_changes, others));
+
+      const updateData = {
+        km: d.km,
+        liters: d.liters,
+        fuel_type: d.fuel_type,
+        full_tank,
+        price_per_liter,
+        total_value,
+        note: d.note ?? null,
+        record_date,
+        updated_at: admin.firestore.FieldValue.serverTimestamp(),
+      };
+      await collections.refuelings.doc(id).set(updateData, { merge: true });
+      try {
+        db.prepare(
+          "UPDATE refuelings SET km = ?, liters = ?, fuel_type = ?, full_tank = ?, price_per_liter = ?, total_value = ?, note = ?, record_date = ?, updated_at = ? WHERE id = ?",
+        ).run(d.km, d.liters, d.fuel_type, full_tank ? 1 : 0, price_per_liter, total_value, d.note ?? null, record_date, new Date().toISOString(), id);
+      } catch (sqe) {}
+
+      res.json({ success: true, odometer_warning });
+    } catch (err) {
+      console.error("Error updating refueling:", err);
+      res.status(500).json({ error: "Failed to update refueling" });
+    }
+  });
+
+  app.delete("/api/refuelings/:id", authenticateToken, async (req: any, res) => {
+    const { id } = req.params;
+    try {
+      const rec = await loadGarageRecord("refuelings", id);
+      if (!rec) return res.status(404).json({ error: "Refueling not found" });
+      const owner = await verifyMotoOwnership(rec.motorcycle_id, req);
+      if (!owner.ok) return res.status(owner.status).json({ error: owner.message });
+
+      try {
+        await collections.refuelings.doc(id).delete();
+      } catch (e) {}
+      try {
+        db.prepare("DELETE FROM refuelings WHERE id = ?").run(id);
+      } catch (sqe) {}
+
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Error deleting refueling:", err);
+      res.status(500).json({ error: "Failed to delete refueling" });
+    }
+  });
+
+  // --- Oil changes (premium: feature_oil_change_records) ---
+  app.post(
+    "/api/motorcycles/:id/oil-changes",
+    authenticateToken,
+    checkFeatureAccess("oil_change_records"),
+    async (req: any, res) => {
+      const { id } = req.params;
+      const parsed = oilChangeSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
+      }
+      try {
+        const owner = await verifyMotoOwnership(id, req);
+        if (!owner.ok) return res.status(owner.status).json({ error: owner.message });
+
+        const d = parsed.data;
+        const record_date = d.record_date || new Date().toISOString();
+
+        const { oil_changes, refuelings } = await fetchGarageRecords(parseInt(id));
+        const odometer_warning = isOdometerDecreasing(d.km, lastKnownOdometer(oil_changes, refuelings));
+
+        const recId = await getNextId("oil_changes");
+        const recData = {
+          id: recId,
+          motorcycle_id: parseInt(id),
+          km: d.km,
+          oil_type: d.oil_type,
+          liters: d.liters,
+          shop: d.shop ?? null,
+          shop_ref: d.shop_ref ?? null,
+          note: d.note ?? null,
+          record_date,
+          created_at: admin.firestore.FieldValue.serverTimestamp(),
+        };
+        await collections.oil_changes.doc(recId.toString()).set(recData);
+        try {
+          db.prepare(
+            "INSERT INTO oil_changes (id, motorcycle_id, km, oil_type, liters, shop, shop_ref, note, record_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          ).run(recId, parseInt(id), d.km, d.oil_type, d.liters, d.shop ?? null, d.shop_ref ? JSON.stringify(d.shop_ref) : null, d.note ?? null, record_date);
+        } catch (sqe) {}
+
+        res.json({ success: true, id: recId, odometer_warning });
+      } catch (err) {
+        console.error("Error adding oil change:", err);
+        res.status(500).json({ error: "Failed to add oil change" });
+      }
+    },
+  );
+
+  app.put(
+    "/api/oil-changes/:id",
+    authenticateToken,
+    checkFeatureAccess("oil_change_records"),
+    async (req: any, res) => {
+      const { id } = req.params;
+      const parsed = oilChangeSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
+      }
+      try {
+        const rec = await loadGarageRecord("oil_changes", id);
+        if (!rec) return res.status(404).json({ error: "Oil change not found" });
+        const owner = await verifyMotoOwnership(rec.motorcycle_id, req);
+        if (!owner.ok) return res.status(owner.status).json({ error: owner.message });
+
+        const d = parsed.data;
+        const record_date = d.record_date || rec.record_date || new Date().toISOString();
+
+        const { oil_changes, refuelings } = await fetchGarageRecords(parseInt(rec.motorcycle_id));
+        const others = oil_changes.filter((r) => r.id.toString() !== id.toString());
+        const odometer_warning = isOdometerDecreasing(d.km, lastKnownOdometer(others, refuelings));
+
+        const updateData = {
+          km: d.km,
+          oil_type: d.oil_type,
+          liters: d.liters,
+          shop: d.shop ?? null,
+          shop_ref: d.shop_ref ?? null,
+          note: d.note ?? null,
+          record_date,
+          updated_at: admin.firestore.FieldValue.serverTimestamp(),
+        };
+        await collections.oil_changes.doc(id).set(updateData, { merge: true });
+        try {
+          db.prepare(
+            "UPDATE oil_changes SET km = ?, oil_type = ?, liters = ?, shop = ?, shop_ref = ?, note = ?, record_date = ?, updated_at = ? WHERE id = ?",
+          ).run(d.km, d.oil_type, d.liters, d.shop ?? null, d.shop_ref ? JSON.stringify(d.shop_ref) : null, d.note ?? null, record_date, new Date().toISOString(), id);
+        } catch (sqe) {}
+
+        res.json({ success: true, odometer_warning });
+      } catch (err) {
+        console.error("Error updating oil change:", err);
+        res.status(500).json({ error: "Failed to update oil change" });
+      }
+    },
+  );
+
+  app.delete(
+    "/api/oil-changes/:id",
+    authenticateToken,
+    checkFeatureAccess("oil_change_records"),
+    async (req: any, res) => {
+      const { id } = req.params;
+      try {
+        const rec = await loadGarageRecord("oil_changes", id);
+        if (!rec) return res.status(404).json({ error: "Oil change not found" });
+        const owner = await verifyMotoOwnership(rec.motorcycle_id, req);
+        if (!owner.ok) return res.status(owner.status).json({ error: owner.message });
+
+        try {
+          await collections.oil_changes.doc(id).delete();
+        } catch (e) {}
+        try {
+          db.prepare("DELETE FROM oil_changes WHERE id = ?").run(id);
+        } catch (sqe) {}
+
+        res.json({ success: true });
+      } catch (err) {
+        console.error("Error deleting oil change:", err);
+        res.status(500).json({ error: "Failed to delete oil change" });
+      }
+    },
+  );
+
+  // --- Oil-change alert config (premium: feature_oil_change_alert) ---
+  app.put(
+    "/api/motorcycles/:id/oil-alert",
+    authenticateToken,
+    checkFeatureAccess("oil_change_alert"),
+    async (req: any, res) => {
+      const { id } = req.params;
+      const schema = z
+        .object({
+          active: z.boolean(),
+          interval_km: z.coerce.number().positive().nullable().optional(),
+          interval_months: z.coerce.number().positive().nullable().optional(),
+        })
+        .refine((v) => !v.active || (v.interval_km != null && v.interval_km > 0), {
+          message: "interval_km is required when the alert is active",
+          path: ["interval_km"],
+        });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
+      }
+      try {
+        const owner = await verifyMotoOwnership(id, req);
+        if (!owner.ok) return res.status(owner.status).json({ error: owner.message });
+
+        const d = parsed.data;
+        const oil_alert_active = d.active;
+        const oil_alert_interval_km = d.interval_km ?? null;
+        const oil_alert_interval_months = d.interval_months ?? null;
+        const oil_alert_updated_at = new Date().toISOString();
+
+        await collections.motorcycles.doc(id).set(
+          {
+            oil_alert_active,
+            oil_alert_interval_km,
+            oil_alert_interval_months,
+            oil_alert_updated_at,
+            updated_at: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        );
+        try {
+          db.prepare(
+            "UPDATE motorcycles SET oil_alert_active = ?, oil_alert_interval_km = ?, oil_alert_interval_months = ?, oil_alert_updated_at = ? WHERE id = ?",
+          ).run(oil_alert_active ? 1 : 0, oil_alert_interval_km, oil_alert_interval_months, oil_alert_updated_at, id);
+        } catch (sqe) {}
+
+        res.json({
+          success: true,
+          oil_alert_config: {
+            active: oil_alert_active,
+            interval_km: oil_alert_interval_km,
+            interval_months: oil_alert_interval_months,
+          },
+        });
+      } catch (err) {
+        console.error("Error updating oil alert:", err);
+        res.status(500).json({ error: "Failed to update oil alert" });
+      }
+    },
+  );
+
+  // --- Oficina autocomplete: ecosystem users + cached places by name prefix ---
+  app.get("/api/garage/oficina-search", authenticateToken, async (req: any, res) => {
+    const q = (req.query.q as string || "").trim();
+    if (q.length < 2) return res.json({ results: [] });
+    const like = `${q.toLowerCase()}%`;
+    const results: Array<{ refType: string; refId: string | null; nomeExibicao: string; address: string | null }> = [];
+    try {
+      // Ecosystem-type users (workshops, shops, etc.), matched by business name.
+      try {
+        const ecos = db
+          .prepare(
+            `SELECT e.user_id AS id, e.company_name AS name, e.full_address AS address
+             FROM ecosystems e
+             JOIN users u ON u.id = e.user_id
+             WHERE u.type = 'ecosystem' AND LOWER(e.company_name) LIKE ?
+             LIMIT 10`,
+          )
+          .all(like) as any[];
+        ecos.forEach((e) =>
+          results.push({ refType: "user", refId: String(e.id), nomeExibicao: e.name, address: e.address ?? null }),
+        );
+      } catch (e) {}
+      // Cached places by name prefix.
+      try {
+        const places = db
+          .prepare(
+            `SELECT place_id AS id, name, full_address AS address FROM places_cache WHERE LOWER(name) LIKE ? LIMIT 10`,
+          )
+          .all(like) as any[];
+        places.forEach((p) =>
+          results.push({ refType: "place", refId: String(p.id), nomeExibicao: p.name, address: p.address ?? null }),
+        );
+      } catch (e) {}
+
+      res.json({ results: results.slice(0, 10) });
+    } catch (err) {
+      console.error("Oficina search failed:", err);
+      res.status(500).json({ error: "Search failed" });
     }
   });
 
@@ -8643,20 +10758,24 @@ async function startServer() {
   // Tracking protection bypass: changed from /api/feature-access
   app.get("/api/f-access", (req, res) => {
     try {
-      const settings = db.prepare("SELECT key, value FROM settings WHERE key LIKE 'feature_%'").all() as any[];
+      const all = (db.prepare("SELECT key, value FROM settings").all() as any[])
+        .map((r: any) => ({ key: r.KEY ?? r.key, value: r.value }));
       const access: Record<string, string> = {};
-      settings.forEach(s => {
+      all.filter(s => s.key?.startsWith('feature_')).forEach(s => {
         access[s.key.replace('feature_', '')] = s.value;
       });
       res.json(access);
     } catch (err) {
+      console.error("[f-access]", err);
       res.status(500).json({ error: "Failed to fetch feature access settings" });
     }
   });
 
   app.get("/api/admin/feature-access", authenticateToken, checkAdmin, (req, res) => {
     try {
-      const settings = db.prepare("SELECT key, value FROM settings WHERE key LIKE 'feature_%'").all() as any[];
+      const settings = (db.prepare("SELECT key, value FROM settings").all() as any[])
+        .map((r: any) => ({ key: r.KEY ?? r.key, value: r.value }))
+        .filter((s: any) => s.key?.startsWith('feature_'));
       res.json(settings);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -8668,22 +10787,21 @@ async function startServer() {
 
     try {
       const stmt = db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)");
-      db.transaction(() => {
-        if (featureKey && allowedPlan && ['freemium', 'premium'].includes(allowedPlan)) {
-          stmt.run(featureKey, allowedPlan);
-        } else if (features && typeof features === 'object') {
-          for (const [feature, access] of Object.entries(features)) {
-            if (['freemium', 'premium'].includes(access as string)) {
-              stmt.run(`feature_${feature}`, access);
-            }
+      if (featureKey && allowedPlan && ['freemium', 'premium'].includes(allowedPlan)) {
+        stmt.run(featureKey, allowedPlan);
+      } else if (features && typeof features === 'object') {
+        for (const [feature, access] of Object.entries(features)) {
+          if (['freemium', 'premium'].includes(access as string)) {
+            stmt.run(`feature_${feature}`, access);
           }
-        } else {
-          throw new Error("Invalid features configuration");
         }
-      })();
+      } else {
+        return res.status(400).json({ error: "Invalid features configuration" });
+      }
       res.json({ message: "Feature access configuration updated" });
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      console.error("[admin/feature-access POST]", error);
+      res.status(500).json({ error: error.message });
     }
   });
 
@@ -9158,8 +11276,8 @@ async function startServer() {
   app.get("/api/settings", (req, res) => {
     try {
       const settings = db.prepare("SELECT * FROM settings").all() as any[];
-      const settingsMap = settings.reduce((acc, curr) => {
-        acc[curr.key] = curr.value === 'true' ? true : curr.value === 'false' ? false : curr.value;
+      const settingsMap = settings.reduce((acc: any, curr: any) => {
+        acc[curr.KEY ?? curr.key] = curr.value === 'true' ? true : curr.value === 'false' ? false : curr.value;
         return acc;
       }, {});
       res.json(settingsMap);
@@ -9171,13 +11289,13 @@ async function startServer() {
   app.get("/api/admin/settings", authenticateToken, checkAdmin, (req, res) => {
     try {
       const settings = db.prepare("SELECT * FROM settings").all() as any[];
-      const settingsMap = settings.reduce((acc, curr) => {
+      const settingsMap = settings.reduce((acc: any, curr: any) => {
         let val = curr.value;
         if (val === 'true') val = true;
         else if (val === 'false') val = false;
         else if (!isNaN(Number(val)) && val !== '') val = Number(val);
-        
-        acc[curr.key] = val;
+
+        acc[curr.KEY ?? curr.key] = val;
         return acc;
       }, {});
       res.json(settingsMap);

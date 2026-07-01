@@ -47,6 +47,26 @@ service cloud.firestore {
     // Escrita é exclusiva do serviço de ingestão e do backend via Admin SDK
     // (que ignora estas regras). A aprovação move o doc para /events.
     match /events_staging/{id} { allow read: if isAdmin(); allow write: if false; }
+    // Relatos de Estrada (Fase 0). Public reads: only approved/featured. The author
+    // reads their own in any status; admins read everything. ALL writes go through
+    // the backend (Admin SDK, which bypasses these rules) — clients can never set
+    // status/verificationLevel/qualitySignals/origin/featured*. These rules are
+    // defense in depth for any direct client access. moderationNotes is admin-only.
+    match /relatos/{id} {
+      allow read: if existing().status in ['approved', 'featured']
+                   || isAdmin()
+                   || isOwner(string(existing().authorId));
+      allow write: if false;
+    }
+    // User-submitted place candidates pending moderation: admin-only, like staging.
+    match /places_staging/{id} { allow read: if isAdmin(); allow write: if false; }
+    // Routes (built in Fase 5): read gated by privacyLevel; writes via Admin SDK.
+    match /routes/{id} {
+      allow read: if existing().privacyLevel == 'public'
+                   || (isSignedIn() && existing().privacyLevel == 'community')
+                   || isAdmin();
+      allow write: if false;
+    }
     match /contests/{id} { allow read, write: if isSignedIn(); }
     match /submissions/{id} { allow read, write: if isSignedIn(); }
     match /votes/{id} { allow read, write: if isSignedIn(); }

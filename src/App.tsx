@@ -34,6 +34,9 @@ const About = lazy(() => import('./pages/About'));
 const Messages = lazy(() => import('./pages/Messages'));
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
 const PartsAndService = lazy(() => import('./pages/PartsAndService'));
+const CreateRelato = lazy(() => import('./pages/CreateRelato'));
+const PlaceDetail = lazy(() => import('./pages/PlaceDetail'));
+const RouteDetail = lazy(() => import('./pages/RouteDetail'));
 
 function PageLoader() {
   return (
@@ -75,6 +78,9 @@ export default function App() {
                 <Route path="/notifications" element={<NotificationsPage />} />
                 <Route path="/scan" element={<ScannerPage />} />
                 <Route path="/roads" element={<RoadsDiscovery />} />
+                <Route path="/relatos/new" element={<CreateRelato />} />
+                <Route path="/place/:placeId" element={<PlaceDetail />} />
+                <Route path="/route/:routeId" element={<RouteDetail />} />
                 <Route path="/clubs" element={<MotoClubsHub />} />
                 <Route path="/passport" element={<Passport />} />
                 <Route path="/ambassador" element={<AmbassadorDashboard />} />

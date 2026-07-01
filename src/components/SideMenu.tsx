@@ -3,9 +3,9 @@ import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  X, MapPin, Camera, Bell, User, LogOut, Bike, 
+  X, MapPin, Camera, Bell, User, LogOut, Bike,
   Gauge, Users, Calendar, Shield, Settings, HelpCircle,
-  ChevronRight, MessageSquare, Crown
+  ChevronRight, MessageSquare, Crown, ScrollText
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import PremiumBadge from './PremiumBadge';
@@ -163,8 +163,12 @@ export default function SideMenu({ isOpen, onClose, user, onLogout }: SideMenuPr
                   <span className="font-bold">{t('menu.mapExplorer')}</span>
                 </Link>
                 <Link to="/roads" onClick={handleInteraction} className="flex items-center gap-4 text-chrome hover:text-primary transition-colors p-3 rounded-xl hover:bg-inverse/5 group">
-                  <Bike className="w-5 h-5 text-steel group-hover:text-primary transition-colors" /> 
+                  <Bike className="w-5 h-5 text-steel group-hover:text-primary transition-colors" />
                   <span className="font-bold">{t('menu.legendaryRoads')}</span>
+                </Link>
+                <Link to="/relatos/new" onClick={handleInteraction} className="flex items-center gap-4 text-chrome hover:text-primary transition-colors p-3 rounded-xl hover:bg-inverse/5 group">
+                  <ScrollText className="w-5 h-5 text-steel group-hover:text-primary transition-colors" />
+                  <span className="font-bold">{t('menu.relatos')}</span>
                 </Link>
                 <Link to="/contest" onClick={handleInteraction} className="flex items-center gap-4 text-chrome hover:text-primary transition-colors p-3 rounded-xl hover:bg-inverse/5 group">
                   <Camera className="w-5 h-5 text-steel group-hover:text-primary transition-colors" /> 

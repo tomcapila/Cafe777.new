@@ -1,7 +1,7 @@
 import { fetchWithAuth } from '../utils/api';
 import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ShieldAlert, Trash2, Ban, CheckCircle, Search, UserX, Settings, Users, Calendar, Star, ShieldCheck, XCircle, Camera, MapPin, Activity, Heart, Wrench, Mountain, ToggleLeft, ToggleRight, Trophy, Plus, Edit2, Shield, Image, Upload, AlertCircle, Sparkles, Inbox, AlertTriangle, Save, X, ExternalLink } from 'lucide-react';
+import { ShieldAlert, Trash2, Ban, CheckCircle, Search, UserX, Settings, Users, Calendar, Star, ShieldCheck, XCircle, Camera, MapPin, Activity, Heart, Wrench, Mountain, ToggleLeft, ToggleRight, Trophy, Plus, Edit2, Shield, Image, Upload, AlertCircle, Sparkles, Inbox, AlertTriangle, Save, X, ExternalLink, ScrollText } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useFeatureFlags } from '../contexts/FeatureFlagContext';
 import { useNotification } from '../contexts/NotificationContext';
@@ -20,9 +20,14 @@ export default function Admin() {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [searchParams, setSearchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState<'users' | 'events' | 'staging' | 'submissions' | 'event_photos' | 'settings' | 'badges' | 'contests' | 'ambassadors' | 'places'>(
+  const [activeTab, setActiveTab] = useState<'users' | 'events' | 'staging' | 'submissions' | 'event_photos' | 'settings' | 'badges' | 'contests' | 'ambassadors' | 'places' | 'relatos'>(
     (searchParams.get('tab') as any) || 'users'
   );
+  const [relatos, setRelatos] = useState<any[]>([]);
+  const [relatoFilter, setRelatoFilter] = useState<'pending' | 'approved' | 'rejected' | 'featured' | 'all'>('pending');
+  const [relatoBusyId, setRelatoBusyId] = useState<string | null>(null);
+  const [rejectNotes, setRejectNotes] = useState<Record<string, string>>({});
+  const [placesStaging, setPlacesStaging] = useState<any[]>([]);
   const [stagingEvents, setStagingEvents] = useState<any[]>([]);
   const [stagingStatusFilter, setStagingStatusFilter] = useState<'pending' | 'approved' | 'rejected' | 'all'>('pending');
   const [editingStagingId, setEditingStagingId] = useState<string | null>(null);
@@ -251,7 +256,12 @@ export default function Admin() {
       });
       if (res.ok) {
         const data = await res.json();
-        setFeatureAccess(data);
+        // libsql remote mode returns the 'key' column as 'KEY' (reserved word).
+        // Normalize here so the rest of the UI can use feature.key consistently.
+        const normalized = Array.isArray(data)
+          ? data.map((r: any) => ({ key: r.KEY ?? r.key, value: r.value })).filter((r: any) => r.key)
+          : [];
+        setFeatureAccess(normalized);
       }
     } catch (err) {
       console.error(err);
@@ -428,6 +438,14 @@ export default function Admin() {
       fetchStagingEvents(stagingStatusFilter);
     }
   }, [stagingStatusFilter]);
+
+  useEffect(() => {
+    if (activeTab === 'relatos') {
+      fetchRelatos(relatoFilter);
+      fetchPlacesStaging();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, relatoFilter]);
 
   const filteredPlacesControl = placesControl.filter(place => {
     const matchesSearch = place.name.toLowerCase().includes(placesSearchTerm.toLowerCase());
@@ -718,6 +736,54 @@ export default function Admin() {
     } catch (err) {
       console.error(err);
     }
+  };
+
+  // ---- Revisão de Relatos de Estrada (Fase 2) ----
+  const fetchRelatos = async (status: string = 'pending') => {
+    if (!currentUser) return;
+    try {
+      const res = await fetchWithAuth(`/api/admin/relatos?status=${status}`);
+      if (res.ok) setRelatos(await res.json());
+    } catch (err) { console.error(err); }
+  };
+  const fetchPlacesStaging = async () => {
+    if (!currentUser) return;
+    try {
+      const res = await fetchWithAuth('/api/admin/places-staging?status=pending');
+      if (res.ok) setPlacesStaging(await res.json());
+    } catch (err) { console.error(err); }
+  };
+  const relatoAction = async (id: string, action: 'approve' | 'reject' | 'feature' | 'unfeature', body?: any) => {
+    setRelatoBusyId(id);
+    try {
+      const res = await fetchWithAuth(`/api/admin/relatos/${id}/${action}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined,
+      });
+      if (res.ok) {
+        showNotification('success', t('admin.relatos.notification.done'));
+        await fetchRelatos(relatoFilter);
+      } else {
+        const d = await res.json().catch(() => ({}));
+        showNotification('error', d?.error || t('admin.relatos.notification.failed'));
+      }
+    } catch (e) { showNotification('error', t('admin.relatos.notification.failed')); }
+    finally { setRelatoBusyId(null); }
+  };
+  const stagingPlaceAction = async (id: string, action: 'merge' | 'create' | 'reject', body?: any) => {
+    setRelatoBusyId(id);
+    try {
+      const res = await fetchWithAuth(`/api/admin/places-staging/${id}/${action}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined,
+      });
+      if (res.ok) {
+        showNotification('success', t('admin.relatos.notification.placeDone'));
+        setPlacesStaging((prev) => prev.filter((p) => p.id !== id));
+      } else {
+        const d = await res.json().catch(() => ({}));
+        showNotification('error', d?.error || t('admin.relatos.notification.failed'));
+      }
+    } catch (e) { showNotification('error', t('admin.relatos.notification.failed')); }
+    finally { setRelatoBusyId(null); }
   };
 
   const clearAllStagingEvents = async (status: 'all' | 'pending' | 'approved' | 'rejected' = 'all') => {
@@ -1060,6 +1126,18 @@ export default function Admin() {
             {t('admin.tab.staging')}
             {stagingEvents.length > 0 && (
               <span className="ml-1 px-2 py-0.5 rounded-full bg-accent/20 text-accent text-[9px] font-black">{stagingEvents.length}</span>
+            )}
+          </button>
+          <button
+            onClick={() => handleTabChange('relatos')}
+            className={`flex items-center gap-2 px-6 py-3 rounded-xl text-[10px] font-mono font-black uppercase tracking-widest transition-all whitespace-nowrap shrink-0 ${
+              activeTab === 'relatos' ? 'bg-primary text-inverse shadow-xl shadow-primary/20' : 'text-steel hover:text-chrome'
+            }`}
+          >
+            <ScrollText className="w-4 h-4" />
+            {t('admin.tab.relatos')}
+            {relatos.length > 0 && (
+              <span className="ml-1 px-2 py-0.5 rounded-full bg-accent/20 text-accent text-[9px] font-black">{relatos.length}</span>
             )}
           </button>
           <button
@@ -3239,10 +3317,141 @@ export default function Admin() {
             })}
           </div>
         </div>
+      ) : activeTab === 'relatos' ? (
+        <div className="space-y-8">
+          <div>
+            <h2 className="text-3xl font-display font-black uppercase italic tracking-tighter flex items-center gap-4 text-primary">
+              <ScrollText className="w-8 h-8" />
+              {t('admin.relatos.title')}
+            </h2>
+            <p className="text-steel font-light mt-2">{t('admin.relatos.subtitle')}</p>
+          </div>
+
+          {/* Resolução de lugares pendentes (places_staging) — desbloqueia aprovação */}
+          {placesStaging.length > 0 && (
+            <div className="glass-card p-6 border-warning/20 space-y-4">
+              <h3 className="font-mono font-black uppercase tracking-widest text-xs text-warning flex items-center gap-2">
+                <MapPin className="w-4 h-4" /> {t('admin.relatos.staging.title')} ({placesStaging.length})
+              </h3>
+              {placesStaging.map((p) => (
+                <div key={p.id} className="rounded-2xl border border-inverse/10 p-4 space-y-3">
+                  <div>
+                    <div className="font-bold text-chrome break-words">{p.candidate?.name}</div>
+                    <div className="text-xs text-steel">
+                      {Number(p.candidate?.coords?.lat).toFixed(5)}, {Number(p.candidate?.coords?.lng).toFixed(5)}
+                      {p.candidate?.category ? ` · ${p.candidate.category}` : ''}
+                    </div>
+                  </div>
+                  {Array.isArray(p.dedupCandidates) && p.dedupCandidates.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="text-[10px] font-mono font-black uppercase tracking-widest text-steel">{t('admin.relatos.staging.dedup')}</div>
+                      {p.dedupCandidates.map((c: any) => (
+                        <div key={c.placeId} className="flex items-center justify-between gap-2 text-sm">
+                          <span className="text-chrome break-words">{c.name} <span className="text-steel">· {c.distanceMeters} m</span></span>
+                          <button disabled={relatoBusyId === p.id} onClick={() => stagingPlaceAction(p.id, 'merge', { placeId: c.placeId })}
+                            className="btn-secondary text-xs shrink-0">{t('admin.relatos.staging.merge')}</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex flex-wrap gap-2 justify-end pt-2 border-t border-inverse/5">
+                    <button disabled={relatoBusyId === p.id} onClick={() => stagingPlaceAction(p.id, 'reject')} className="btn-secondary text-xs border-accent/20 text-accent">{t('admin.relatos.staging.reject')}</button>
+                    <button disabled={relatoBusyId === p.id} onClick={() => stagingPlaceAction(p.id, 'create')} className="btn-primary text-xs">{t('admin.relatos.staging.create')}</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Filtro de status */}
+          <div className="flex flex-wrap gap-2">
+            {(['pending', 'approved', 'featured', 'rejected', 'all'] as const).map((s) => (
+              <button key={s} onClick={() => setRelatoFilter(s)}
+                className={`px-4 py-2.5 rounded-xl text-[10px] font-mono font-black uppercase tracking-widest transition-all ${relatoFilter === s ? 'bg-primary text-inverse shadow-xl shadow-primary/20' : 'bg-engine text-steel hover:text-chrome border border-inverse/5'}`}>
+                {s}
+              </button>
+            ))}
+          </div>
+
+          {relatos.length === 0 ? (
+            <div className="glass-card p-10 text-center text-steel">{t('admin.relatos.empty')}</div>
+          ) : (
+            <div className="space-y-6">
+              {relatos.map((r) => (
+                <div key={r.id} className="glass-card p-6 space-y-4">
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div className="min-w-0">
+                      <h3 className="text-lg font-display font-black text-chrome break-words">{r.title}</h3>
+                      <div className="text-xs text-steel mt-1 break-all">{t('admin.relatos.by')} {r.authorName || r.authorId} · {r.anchorType} {r.anchorId}</div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <span className="badge-chrome">{r.status}</span>
+                      <span className="badge-primary">{r.verificationLevel}</span>
+                    </div>
+                  </div>
+
+                  {(r.lastEditedAt || r.resubmittedAt) && (
+                    <div className="flex flex-wrap gap-3 text-[10px] font-mono uppercase tracking-widest">
+                      {r.lastEditedAt && <span className="text-steel">{t('admin.relatos.edited')}</span>}
+                      {r.resubmittedAt && <span className="text-warning">{t('admin.relatos.resubmitted')}</span>}
+                    </div>
+                  )}
+
+                  <p className="text-sm text-chrome/90 whitespace-pre-wrap break-words">{r.body}</p>
+
+                  {r.structuredFields && Object.keys(r.structuredFields).length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {Object.entries(r.structuredFields).map(([k, v]) => (
+                        <span key={k} className="px-2 py-1 rounded-lg bg-oil/60 text-[10px] font-mono text-steel">{k}: {Array.isArray(v) ? v.join(',') : String(v)}</span>
+                      ))}
+                    </div>
+                  )}
+
+                  {Array.isArray(r.media) && r.media.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {r.media.map((m: any, i: number) => (
+                        <img key={i} src={m.url} alt="" className="w-16 h-16 rounded-lg object-cover border border-inverse/10" />
+                      ))}
+                    </div>
+                  )}
+
+                  {r.status === 'rejected' && r.moderationNotes && (
+                    <div className="text-xs text-accent break-words">{t('admin.relatos.notes')}: {r.moderationNotes}</div>
+                  )}
+
+                  <textarea rows={2} placeholder={t('admin.relatos.notesPlaceholder')} value={rejectNotes[r.id] || ''}
+                    onChange={(e) => setRejectNotes((prev) => ({ ...prev, [r.id]: e.target.value }))}
+                    className="input-field resize-y text-sm" />
+
+                  <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-inverse/5">
+                    <button disabled={relatoBusyId === r.id} onClick={() => relatoAction(r.id, 'reject', { moderationNotes: rejectNotes[r.id] || '' })}
+                      className="btn-secondary flex items-center gap-2 text-sm border-accent/20 text-accent">
+                      <XCircle className="w-4 h-4" /> {t('admin.relatos.action.reject')}
+                    </button>
+                    {r.status === 'featured' ? (
+                      <button disabled={relatoBusyId === r.id} onClick={() => relatoAction(r.id, 'unfeature')} className="btn-secondary flex items-center gap-2 text-sm">
+                        <Star className="w-4 h-4" /> {t('admin.relatos.action.unfeature')}
+                      </button>
+                    ) : (
+                      <button disabled={relatoBusyId === r.id} onClick={() => relatoAction(r.id, 'feature', { days: 7 })} className="btn-secondary flex items-center gap-2 text-sm">
+                        <Star className="w-4 h-4" /> {t('admin.relatos.action.feature')}
+                      </button>
+                    )}
+                    {r.status !== 'approved' && r.status !== 'featured' && (
+                      <button disabled={relatoBusyId === r.id} onClick={() => relatoAction(r.id, 'approve')} className="btn-primary flex items-center gap-2 text-sm">
+                        <CheckCircle className="w-4 h-4" /> {t('admin.relatos.action.approve')}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       ) : (
         <div className="glass-card p-10 border-inverse/5 shadow-2xl relative overflow-hidden group">
           <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full -mr-32 -mt-32 blur-[120px] opacity-0 group-hover:opacity-100 transition-opacity" />
-          
+
           <h2 className="text-3xl font-display font-black uppercase italic tracking-tighter mb-10 flex items-center gap-4 text-primary relative z-10">
             <Settings className="w-8 h-8" />
             {t('admin.settings.title')}

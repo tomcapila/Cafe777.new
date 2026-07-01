@@ -9,6 +9,7 @@
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=esm --outfile=dist/server.js --external:express --external:libsql --external:multer --external:qrcode --external:jsonwebtoken --external:bcryptjs --external:mailersend --external:google-auth-library --external:vite --external:firebase-admin --external:@google/genai",
     "preview": "vite preview",
     "test-routes": "node ./test_routes.cjs",
+    "test": "vitest run",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
@@ -72,6 +73,7 @@
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.27.4",
     "tsx": "^4.21.0",
-    "typescript": "~5.8.2"
+    "typescript": "~5.8.2",
+    "vitest": "^3.2.6"
   }
 }

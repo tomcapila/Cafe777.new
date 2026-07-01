@@ -1,12 +1,26 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { MapPin, Navigation, Compass, Calendar, Users, Activity, ChevronRight, Zap, Play, Wrench, Route, Shield, Heart, Flag, Bike, Award } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
+import { fetchWithAuth } from '../utils/api';
 import Gauges from '../components/Gauges';
 
 export default function Home() {
   const { t } = useLanguage();
+  const [featured, setFeatured] = useState<any>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetchWithAuth('/api/relatos/featured');
+        if (res.ok) {
+          const list = await res.json();
+          if (Array.isArray(list) && list.length) setFeatured(list[0]);
+        }
+      } catch (e) { /* no featured slot */ }
+    })();
+  }, []);
 
   return (
     <div className="min-h-screen bg-engine">
@@ -57,6 +71,31 @@ export default function Home() {
           </motion.div>
         </div>
       </section>
+
+      {/* Relato da Semana (featured) — only when curated */}
+      {featured && (
+        <section className="max-w-5xl mx-auto px-6 -mt-12 relative z-30">
+          <Link
+            to={featured.anchorType === 'place' && featured.anchorId ? `/place/${encodeURIComponent(featured.anchorId)}` : '/motorfeed'}
+            className="block glass-card p-6 border-primary/30 hover:border-primary/60 transition-all group"
+          >
+            <div className="flex items-center gap-2 text-[10px] font-mono font-black uppercase tracking-widest text-primary mb-3">
+              <Award className="w-4 h-4" /> {t('home.featured.tag')}
+            </div>
+            <div className="flex gap-4 items-start">
+              {featured.media?.[0]?.url && (
+                <img src={featured.media[0].url} alt="" className="w-24 h-24 rounded-xl object-cover border border-inverse/10 shrink-0" />
+              )}
+              <div className="min-w-0 flex-1">
+                <h3 className="text-2xl font-display font-black uppercase italic tracking-tight text-chrome group-hover:text-primary transition-colors break-words">{featured.title}</h3>
+                <p className="text-sm text-steel font-light mt-1 line-clamp-2 break-words">{featured.body}</p>
+                <div className="text-xs text-steel mt-2">{t('home.featured.by')} {featured.authorName}</div>
+              </div>
+              <ChevronRight className="w-5 h-5 text-steel group-hover:text-primary transition-colors shrink-0" />
+            </div>
+          </Link>
+        </section>
+      )}
 
       {/* Stats Gauges Section */}
       <section className="py-16 bg-engine relative z-10 border-t border-inverse/5 overflow-hidden">

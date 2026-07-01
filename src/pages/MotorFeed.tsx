@@ -2,14 +2,15 @@ import { fetchWithAuth } from '../utils/api';
 import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Clock, Heart, MessageSquare, Share2, Bike, Calendar, MapPin, ArrowRight, Search, Filter, Plus, X, ImageIcon, Send, Upload, ChevronRight, Pin, PinOff, CornerDownRight, Trash2 } from 'lucide-react';
+import { Clock, Heart, MessageSquare, Share2, Bike, Calendar, MapPin, ArrowRight, Search, Filter, Plus, X, ImageIcon, Send, Upload, ChevronRight, Pin, PinOff, CornerDownRight, Trash2, ScrollText } from 'lucide-react';
 import { useNotification } from '../contexts/NotificationContext';
 
 import { useLanguage } from '../contexts/LanguageContext';
+import { verificationLabel } from '../utils/relatoLabels';
 import PremiumBadge from '../components/PremiumBadge';
 
 export default function MotorFeed() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
@@ -509,6 +510,26 @@ export default function MotorFeed() {
             </div>
           )}
 
+          {/* Novo Relato — alternativa ao post tradicional (Relatos de Estrada) */}
+          {currentUser && (
+            <Link
+              to="/relatos/new"
+              className="glass-card p-4 flex items-start gap-4 cursor-pointer hover:border-primary/30 transition-all group"
+            >
+              <div className="p-2.5 bg-primary/10 rounded-lg text-primary group-hover:bg-primary group-hover:text-inverse transition-all shrink-0">
+                <ScrollText className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-bold text-chrome group-hover:text-primary transition-colors">{t('feed.relato.cta')}</span>
+                  <span className="text-[9px] font-mono font-black uppercase tracking-widest text-steel">{t('feed.relato.tag')}</span>
+                </div>
+                <p className="text-xs text-steel font-light mt-1 leading-relaxed">{t('feed.relato.desc')}</p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-steel group-hover:text-primary transition-colors shrink-0 mt-1" />
+            </Link>
+          )}
+
           {error && (
             <div className="bg-error/10 border border-error/20 text-error p-4 rounded-xl">
               {error}
@@ -531,13 +552,13 @@ export default function MotorFeed() {
               >
                 <div className="p-6 sm:p-8">
                   <div className="flex items-center justify-between mb-6">
-                    <Link to={`/profile/${post.username}`} className="flex items-center gap-3 group/author">
+                    <Link to={post.username ? `/profile/${post.username}` : '#'} className="flex items-center gap-3 group/author">
                       <div className="w-10 h-10 rounded-full bg-oil border border-inverse/10 overflow-hidden">
                         {post.profile_picture_url ? (
-                          <img 
-                            src={post.profile_picture_url} 
-                            alt={post.username} 
-                            className="w-full h-full object-cover" 
+                          <img
+                            src={post.profile_picture_url}
+                            alt={post.username || ''}
+                            className="w-full h-full object-cover"
                             onError={(e) => {
                               const target = e.target as HTMLImageElement;
                               target.src = 'https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?w=400&h=400&auto=format&fit=crop&q=80';
@@ -545,7 +566,7 @@ export default function MotorFeed() {
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-steel font-bold uppercase text-xs">
-                            {post.username.charAt(0)}
+                            {(post.username || '?').charAt(0)}
                           </div>
                         )}
                       </div>
@@ -632,6 +653,30 @@ export default function MotorFeed() {
                           </div>
                         </div>
                         <ArrowRight className="w-5 h-5 text-primary opacity-0 group-hover/card:opacity-100 transition-all -translate-x-2 group-hover:translate-x-0" />
+                      </div>
+                    </Link>
+                  )}
+
+                  {post.relato && (
+                    <Link
+                      to={post.relato.anchorType === 'place' && post.relato.anchorId ? `/place/${encodeURIComponent(post.relato.anchorId)}` : '/motorfeed'}
+                      className="block mb-6 group/relato"
+                    >
+                      <div className="p-4 rounded-2xl border border-primary/20 bg-primary/5 hover:border-primary/40 transition-all">
+                        <div className="flex items-center gap-2 text-[9px] font-mono font-black text-primary uppercase tracking-widest mb-2">
+                          <ScrollText className="w-3 h-3" /> {t('feed.relato.label')}
+                          <span className="ml-auto text-steel normal-case tracking-normal">{verificationLabel(post.relato.verificationLevel, language)}</span>
+                        </div>
+                        <div className="flex gap-3 items-start">
+                          {post.relato.media?.[0]?.url && (
+                            <img src={post.relato.media[0].url} alt="" className="w-16 h-16 rounded-xl object-cover border border-inverse/10 shrink-0" />
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <h4 className="text-base font-display font-black uppercase italic tracking-tight text-chrome group-hover/relato:text-primary transition-colors line-clamp-1">{post.relato.title}</h4>
+                            <p className="text-xs text-steel line-clamp-2 mt-1 break-words">{post.relato.body}</p>
+                          </div>
+                          <ArrowRight className="w-4 h-4 text-primary shrink-0 opacity-0 group-hover/relato:opacity-100 transition-all" />
+                        </div>
                       </div>
                     </Link>
                   )}

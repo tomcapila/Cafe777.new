@@ -51,9 +51,10 @@ export default function MotoClubsHub() {
     fetchData();
   }, [currentUser]);
 
-  const fetchData = async () => {
+  // silent=true re-fetches without the full-page spinner (used after mutations).
+  const fetchData = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const [myRes, allRes, ambassadorRes, appStatusRes] = await Promise.all([
         currentUser ? fetchWithAuth('/api/clubs/my') : Promise.resolve(null),
         fetchWithAuth('/api/clubs'),
@@ -78,7 +79,9 @@ export default function MotoClubsHub() {
           setAmbassadorStatus(statusData.status);
         }
 
-        if (myData.ownedClubs.length > 0) {
+        // Auto-navigation only on the initial load — a silent refresh must keep
+        // the user's current tab/club selection instead of jumping to my_clubs.
+        if (!silent && myData.ownedClubs.length > 0) {
           setSelectedClubId(myData.ownedClubs[0].club_id);
           setActiveTab('my_clubs');
         }
@@ -102,7 +105,7 @@ export default function MotoClubsHub() {
         body: JSON.stringify({})
       });
       if (res.ok) {
-        fetchData();
+        fetchData(true);
       } else {
         const data = await res.json();
         alert(data.error || 'Failed to apply');
@@ -121,7 +124,7 @@ export default function MotoClubsHub() {
       });
       if (res.ok) {
         setSelectedClubId(null);
-        fetchData();
+        fetchData(true);
       }
     } catch (err) {
       console.error(err);
@@ -148,7 +151,7 @@ export default function MotoClubsHub() {
         showNotification('success', 'MotoClub created successfully!');
         setIsCreatingClub(false);
         setNewClubData({ name: '', description: '', chapter_label: 'Chapter', external_link: '' });
-        fetchData();
+        fetchData(true);
       } else {
         const data = await res.json();
         showNotification('error', data.error || 'Failed to create MotoClub');
@@ -485,9 +488,10 @@ function ClubManager({ clubId, isOwner, membershipId, onLeave, onChat }: { clubI
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
-  const fetchClubData = async () => {
+  // silent=true re-fetches without the full-page spinner (used after mutations).
+  const fetchClubData = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const res = await fetchWithAuth(`/api/clubs/${clubId}`);
       if (res.ok) {
         const data = await res.json();
@@ -512,7 +516,7 @@ function ClubManager({ clubId, isOwner, membershipId, onLeave, onChat }: { clubI
         body: JSON.stringify({ status })
       });
       if (res.ok) {
-        fetchClubData();
+        fetchClubData(true);
       } else {
         const data = await res.json();
         showNotification('error', data.error || 'Failed to update member status');
@@ -531,7 +535,7 @@ function ClubManager({ clubId, isOwner, membershipId, onLeave, onChat }: { clubI
         body: JSON.stringify({ role_id: roleId })
       });
       if (res.ok) {
-        fetchClubData();
+        fetchClubData(true);
       } else {
         const data = await res.json();
         showNotification('error', data.error || 'Failed to assign role');
@@ -550,7 +554,7 @@ function ClubManager({ clubId, isOwner, membershipId, onLeave, onChat }: { clubI
         body: JSON.stringify({ chapter_id: chapterId })
       });
       if (res.ok) {
-        fetchClubData();
+        fetchClubData(true);
       } else {
         const data = await res.json();
         showNotification('error', data.error || 'Failed to assign chapter');
@@ -593,7 +597,7 @@ function ClubManager({ clubId, isOwner, membershipId, onLeave, onChat }: { clubI
         setShowAddMember(false);
         setSearchQuery('');
         setSearchResults([]);
-        fetchClubData();
+        fetchClubData(true);
       } else {
         const data = await res.json();
         showNotification('error', data.error || 'Failed to add member');

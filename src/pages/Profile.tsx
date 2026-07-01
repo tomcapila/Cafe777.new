@@ -4,8 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   MapPin, Calendar, Wrench, Bike, ShieldCheck, 
   ArrowLeft, Building2, Phone, Globe, MessageSquare, 
-  Heart, Share2, Send, Image as ImageIcon, Tag, Plus, Clock, Star, Trash2, Edit2,
-  User, Users, ArrowRight, X, Activity, Mountain, ChevronDown, MoreHorizontal, Pin, PinOff, Crown
+  Heart, Share2, Send, Image as ImageIcon, Tag, Plus, Clock, Star, Trash2, Edit2, Pencil,
+  User, Users, ArrowRight, X, Activity, Mountain, ChevronDown, MoreHorizontal, Pin, PinOff, Crown, Fuel, ScrollText
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import LocationAutocomplete from '../components/LocationAutocomplete';
@@ -15,6 +15,8 @@ import { ChatWindow } from '../components/ChatWindow';
 import { createChat, findChat } from '../services/messagingService';
 import PremiumBadge from '../components/PremiumBadge';
 import { useFeatureAccess } from '../hooks/useFeatureAccess';
+import GarageDetailModal from '../components/garage/GarageDetailModal';
+import OilAlertCard from '../components/garage/OilAlertCard';
 
 export default function Profile() {
   const { username } = useParams();
@@ -88,6 +90,11 @@ export default function Profile() {
   const [isAddingMoto, setIsAddingMoto] = useState(false);
   const [editingMotoId, setEditingMotoId] = useState<number | null>(null);
   const [activeMaintenanceMotoId, setActiveMaintenanceMotoId] = useState<number | null>(null);
+  const [detailMotoId, setDetailMotoId] = useState<number | null>(null);
+  const [editingMaintenanceLog, setEditingMaintenanceLog] = useState<{ id: number; service: string; km: string; shop: string } | null>(null);
+  const [deletingMaintenanceLogId, setDeletingMaintenanceLogId] = useState<number | null>(null);
+  const [detailInitialTab, setDetailInitialTab] = useState<'refuel' | 'oil'>('refuel');
+  const [detailAlertSettings, setDetailAlertSettings] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'updates');
   const [activeTooltipBadgeId, setActiveTooltipBadgeId] = useState<number | null>(null);
@@ -178,8 +185,11 @@ export default function Profile() {
     }
   };
 
-  const fetchProfile = async (retryCount = 0) => {
-    if (retryCount === 0) setLoading(true);
+  // silent=true re-fetches the profile WITHOUT flipping the full-page `loading`
+  // flag, so garage mutations (refuel/oil/maintenance) update in place instead
+  // of unmounting the whole page to the centered spinner.
+  const fetchProfile = async (retryCount = 0, silent = false) => {
+    if (retryCount === 0 && !silent) setLoading(true);
     try {
       const storedUser = localStorage.getItem('user');
       let viewerId = '';
@@ -194,7 +204,7 @@ export default function Profile() {
       if (!res.ok) {
         if (retryCount < 3) {
           console.log(`Profile not found, retrying... (${retryCount + 1})`);
-          setTimeout(() => fetchProfile(retryCount + 1), 1000);
+          setTimeout(() => fetchProfile(retryCount + 1, silent), 1000);
           return;
         }
         throw new Error('Profile not found');
@@ -202,7 +212,9 @@ export default function Profile() {
       const result = await res.json();
       setData(result);
 
-      if (result.type === 'rider') {
+      // Passport stamps don't change from the silent-refresh mutations
+      // (garage/posts/events/recs/RSVP), so skip the extra call on silent.
+      if (!silent && result.type === 'rider') {
         fetchPassportStamps(result.id);
       }
       setLoading(false);
@@ -211,6 +223,11 @@ export default function Profile() {
       setLoading(false);
     }
   };
+
+  // Silent refresh used by all profile mutations (garage, posts, events,
+  // recommendations, RSVP): re-fetches without flipping the full-page `loading`
+  // flag, so the view updates in place instead of unmounting to the spinner.
+  const refreshProfile = () => fetchProfile(0, true);
 
   const fetchPassportStamps = async (userId: number) => {
     try {
@@ -265,7 +282,7 @@ export default function Profile() {
         setPostPreview(null);
         setTaggedMotorcycleId('');
         showNotification('success', t('profile.postSuccess'));
-        fetchProfile(); // Refresh posts
+        refreshProfile(); // Refresh posts in place (no full-page spinner)
       } else {
         const err = await res.json();
         showNotification('error', err.error || t('profile.postFailed'));
@@ -527,7 +544,7 @@ export default function Profile() {
         setIsCreatingEvent(false);
         setEditingEventId(null);
         setNotification({ message: t('profile.eventSuccess'), type: 'success' });
-        fetchProfile(); // Refresh events
+        refreshProfile(); // Refresh events in place (no full-page spinner)
         setTimeout(() => setNotification(null), 3000);
       } else {
         setNotification({ message: t('profile.eventFailed'), type: 'error' });
@@ -587,7 +604,7 @@ export default function Profile() {
     try {
       const res = await fetchWithAuth(`/api/recommendations/${id}`, { method: 'DELETE' });
       if (res.ok) {
-        fetchProfile(); // Refresh profile
+        refreshProfile(); // Refresh in place (no full-page spinner)
       }
     } catch (err) {
       console.error(err);
@@ -610,7 +627,7 @@ export default function Profile() {
       });
       if (res.ok) {
         setNewRec({ type: 'road', item_id: '', item_name: '', description: '' });
-        fetchProfile(); // Refresh profile
+        refreshProfile(); // Refresh in place (no full-page spinner)
       }
     } catch (err) {
       console.error(err);
@@ -642,7 +659,7 @@ export default function Profile() {
         if (motoImageInputRef.current) motoImageInputRef.current.value = '';
         setIsAddingMoto(false);
         setEditingMotoId(null);
-        fetchProfile(); // Refresh garage
+        refreshProfile(); // Refresh garage without full-page spinner
       }
     } catch (err) {
       console.error(err);
@@ -659,7 +676,7 @@ export default function Profile() {
         method: 'DELETE',
       });
       if (res.ok) {
-        fetchProfile();
+        refreshProfile();
       }
     } catch (err) {
       console.error('Failed to delete motorcycle:', err);
@@ -681,12 +698,45 @@ export default function Profile() {
       if (res.ok) {
         setMaintenanceData({ service: '', km: '', shop: '' });
         setActiveMaintenanceMotoId(null);
-        fetchProfile(); // Refresh garage
+        refreshProfile(); // Refresh garage without full-page spinner
       }
     } catch (err) {
       console.error(err);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleMaintenanceEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingMaintenanceLog) return;
+    setIsSubmitting(true);
+    try {
+      const res = await fetchWithAuth(`/api/maintenance/${editingMaintenanceLog.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ service: editingMaintenanceLog.service, km: editingMaintenanceLog.km, shop: editingMaintenanceLog.shop }),
+      });
+      if (res.ok) {
+        setEditingMaintenanceLog(null);
+        refreshProfile();
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleMaintenanceDelete = async (logId: number) => {
+    setDeletingMaintenanceLogId(logId);
+    try {
+      const res = await fetchWithAuth(`/api/maintenance/${logId}`, { method: 'DELETE' });
+      if (res.ok) refreshProfile();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDeletingMaintenanceLogId(null);
     }
   };
 
@@ -699,7 +749,7 @@ export default function Profile() {
         body: JSON.stringify({ username: currentUser.username }),
       });
       if (res.ok) {
-        fetchProfile();
+        refreshProfile();
       }
     } catch (err) {
       console.error(err);
@@ -872,6 +922,12 @@ export default function Profile() {
                     <Star className="w-5 h-5 text-accent fill-accent" />
                     <span className="text-accent font-mono text-[10px] uppercase font-bold tracking-widest">{t('profile.ambassador')}</span>
                     <span className="text-accent/80 font-mono text-[10px] uppercase font-bold tracking-widest ml-2 border-l border-accent/20 pl-2">{t('profile.reputation')}: {data.ambassador.reputation_score}</span>
+                  </div>
+                )}
+                {data.relatoStats?.title && (
+                  <div className="p-1.5 bg-primary/10 rounded-lg border border-primary/20 backdrop-blur-sm flex items-center gap-2" title={t('profile.guiaTitle')}>
+                    <ScrollText className="w-5 h-5 text-primary" />
+                    <span className="text-primary font-mono text-[10px] uppercase font-bold tracking-widest">{data.relatoStats.title}</span>
                   </div>
                 )}
               </div>
@@ -1369,6 +1425,54 @@ export default function Profile() {
                           </div>
 
                           <div className="p-6 flex-1 flex flex-col">
+                            {/* Garagem: oil-change alert + detail (fuel/oil) entry point */}
+                            <div className="space-y-3 mb-5">
+                              <OilAlertCard
+                                moto={moto}
+                                canAlert={canAccess('oil_change_alert', currentUser?.plan, currentUser?.role, currentUser?.type)}
+                                isOwner={canEdit}
+                                onConfigure={() => {
+                                  setDetailMotoId(moto.id);
+                                  setDetailInitialTab('oil');
+                                  setDetailAlertSettings(true);
+                                }}
+                              />
+                              <button
+                                onClick={() => {
+                                  setDetailMotoId(moto.id);
+                                  setDetailInitialTab('refuel');
+                                  setDetailAlertSettings(false);
+                                }}
+                                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-inverse/10 bg-oil/40 text-xs font-mono font-black uppercase tracking-widest text-steel hover:text-primary hover:border-primary/30 transition-all"
+                              >
+                                <Fuel className="w-4 h-4" />
+                                {t('garage.openDetail')}
+                              </button>
+
+                              {/* Mini-passaporte da moto (Relatos de Estrada — Fase 4) */}
+                              {(() => {
+                                const mp = data.motoPassports?.find((m: any) => String(m.moto_id) === String(moto.id));
+                                if (!mp || (mp.relatos_approved || 0) === 0) return null;
+                                return (
+                                  <div className="p-4 rounded-xl border border-primary/15 bg-primary/5">
+                                    <div className="flex items-center gap-2 text-[10px] font-mono font-black uppercase tracking-widest text-primary mb-2">
+                                      <ScrollText className="w-3.5 h-3.5" /> {t('profile.motoPassport')}
+                                    </div>
+                                    <div className="flex gap-6">
+                                      <div>
+                                        <div className="text-xl font-display font-black text-chrome">{mp.relatos_approved}</div>
+                                        <div className="text-[9px] font-mono uppercase tracking-widest text-steel">{t('profile.motoPassport.reports')}</div>
+                                      </div>
+                                      <div>
+                                        <div className="text-xl font-display font-black text-chrome">{mp.places}</div>
+                                        <div className="text-[9px] font-mono uppercase tracking-widest text-steel">{t('profile.motoPassport.places')}</div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })()}
+                            </div>
+
                             {activeMaintenanceMotoId === moto.id && (
                               <motion.div 
                                 initial={{ opacity: 0, y: -10 }}
@@ -1427,30 +1531,93 @@ export default function Profile() {
                                   </span>
                                 </div>
                                 <div className="space-y-3">
-                                  {moto.maintenance_logs.slice(0, 3).map((log: any) => (
+                                  {moto.maintenance_logs.slice(0, 3).map((log: any) => {
+                                    const rawDate = log.date ? log.date.replace(' ', 'T') : null;
+                                    const parsedDate = rawDate ? new Date(rawDate) : null;
+                                    const displayDate = parsedDate && !isNaN(parsedDate.getTime())
+                                      ? parsedDate.toLocaleDateString('pt-BR', { month: 'short', day: 'numeric' })
+                                      : null;
+                                    const isEditing = editingMaintenanceLog?.id === log.id;
+                                    return (
                                     <div key={log.id} className="bg-engine/40 p-4 rounded-2xl border border-inverse/5 group/log hover:border-primary/20 transition-all">
-                                      <div className="flex justify-between items-start mb-2">
-                                        <div className="font-display font-bold text-sm text-chrome group-hover/log:text-primary transition-colors">{log.service}</div>
-                                        <div className="text-[9px] font-mono text-steel bg-oil px-2 py-0.5 rounded uppercase">
-                                          {new Date(log.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                                        </div>
-                                      </div>
-                                      <div className="flex gap-4 text-[10px] font-mono text-steel uppercase tracking-widest">
-                                        {log.km && (
-                                          <div className="flex items-center gap-1.5">
-                                            <span className="text-steel">KM:</span>
-                                            <span className="text-steel">{log.km.toLocaleString()}</span>
+                                      {isEditing ? (
+                                        <form onSubmit={handleMaintenanceEdit} className="space-y-2">
+                                          <input
+                                            type="text"
+                                            value={editingMaintenanceLog.service}
+                                            onChange={e => setEditingMaintenanceLog(prev => prev ? { ...prev, service: e.target.value } : null)}
+                                            className="input-field w-full text-sm"
+                                            required
+                                          />
+                                          <div className="flex gap-2">
+                                            <input
+                                              type="number"
+                                              value={editingMaintenanceLog.km}
+                                              onChange={e => setEditingMaintenanceLog(prev => prev ? { ...prev, km: e.target.value } : null)}
+                                              placeholder="KM"
+                                              className="input-field flex-1 text-sm"
+                                            />
+                                            <input
+                                              type="text"
+                                              value={editingMaintenanceLog.shop}
+                                              onChange={e => setEditingMaintenanceLog(prev => prev ? { ...prev, shop: e.target.value } : null)}
+                                              placeholder={t('profile.shop')}
+                                              className="input-field flex-1 text-sm"
+                                            />
                                           </div>
-                                        )}
-                                        {log.shop && (
-                                          <div className="flex items-center gap-1.5">
-                                            <span className="text-steel">{t('profile.shop')}:</span>
-                                            <span className="text-steel truncate max-w-[80px]">{log.shop}</span>
+                                          <div className="flex gap-2">
+                                            <button type="submit" disabled={isSubmitting} className="btn-primary flex-1 text-xs py-1.5">{t('profile.save')}</button>
+                                            <button type="button" onClick={() => setEditingMaintenanceLog(null)} className="btn-secondary flex-1 text-xs py-1.5">{t('profile.cancel')}</button>
                                           </div>
-                                        )}
-                                      </div>
+                                        </form>
+                                      ) : (
+                                        <>
+                                          <div className="flex justify-between items-start mb-2">
+                                            <div className="font-display font-bold text-sm text-chrome group-hover/log:text-primary transition-colors">{log.service}</div>
+                                            <div className="flex items-center gap-1.5">
+                                              {displayDate && (
+                                                <span className="text-[9px] font-mono text-steel bg-oil px-2 py-0.5 rounded uppercase">{displayDate}</span>
+                                              )}
+                                              {canEdit && (
+                                                <>
+                                                  <button
+                                                    onClick={() => setEditingMaintenanceLog({ id: log.id, service: log.service, km: log.km?.toString() ?? '', shop: log.shop ?? '' })}
+                                                    className="p-1 text-steel hover:text-primary transition-colors opacity-0 group-hover/log:opacity-100"
+                                                    title={t('profile.edit')}
+                                                  >
+                                                    <Pencil className="w-3 h-3" />
+                                                  </button>
+                                                  <button
+                                                    onClick={() => handleMaintenanceDelete(log.id)}
+                                                    disabled={deletingMaintenanceLogId === log.id}
+                                                    className="p-1 text-steel hover:text-error transition-colors opacity-0 group-hover/log:opacity-100"
+                                                    title={t('profile.delete')}
+                                                  >
+                                                    <Trash2 className="w-3 h-3" />
+                                                  </button>
+                                                </>
+                                              )}
+                                            </div>
+                                          </div>
+                                          <div className="flex gap-4 text-[10px] font-mono text-steel uppercase tracking-widest">
+                                            {log.km && (
+                                              <div className="flex items-center gap-1.5">
+                                                <span className="text-steel">KM:</span>
+                                                <span className="text-steel">{log.km.toLocaleString()}</span>
+                                              </div>
+                                            )}
+                                            {log.shop && (
+                                              <div className="flex items-center gap-1.5">
+                                                <span className="text-steel">{t('profile.shop')}:</span>
+                                                <span className="text-steel truncate max-w-[80px]">{log.shop}</span>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </>
+                                      )}
                                     </div>
-                                  ))}
+                                    );
+                                  })}
                                   {moto.maintenance_logs.length > 3 && (
                                     <button className="w-full py-2 text-[10px] font-mono font-bold text-steel hover:text-primary uppercase tracking-widest transition-colors">
                                       {t('profile.viewAllHistory')}
@@ -1475,6 +1642,16 @@ export default function Profile() {
                       <p className="text-steel text-sm">{t('profile.noMoto')}</p>
                     </div>
                   )}
+
+                  <GarageDetailModal
+                    isOpen={detailMotoId != null}
+                    moto={data.garage?.find((m: any) => m.id === detailMotoId) || null}
+                    isOwner={canEdit}
+                    initialTab={detailInitialTab}
+                    initialAlertSettings={detailAlertSettings}
+                    onClose={() => setDetailMotoId(null)}
+                    onChanged={() => refreshProfile()}
+                  />
                 </section>
               </motion.div>
             )}

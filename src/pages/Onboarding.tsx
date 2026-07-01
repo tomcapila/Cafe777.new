@@ -59,9 +59,15 @@ export default function Onboarding() {
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   
-  // Check if user came from Google OAuth
-  const isGoogleAuth = location.state?.fromGoogleAuth;
-  const googleData = location.state?.googleData;
+  // Check if user came from Google OAuth.
+  // Initialized from router state (when navigated here from the Login page), but also
+  // settable in-place when the user registers with Google directly from step 0 below.
+  // React Router's location.state does NOT observe window.history mutations, so this
+  // MUST live in component state — otherwise handleSubmit would POST to /api/register
+  // (creating a user) instead of PUT /api/user/onboarding (updating the user that
+  // /api/auth/google already created), causing a spurious "Email already exists".
+  const [isGoogleAuth, setIsGoogleAuth] = useState<boolean>(!!location.state?.fromGoogleAuth);
+  const [googleData, setGoogleData] = useState<any>(location.state?.googleData || null);
 
   const handleCustomGoogleLogin = () => {
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
@@ -105,18 +111,18 @@ export default function Onboarding() {
       window.dispatchEvent(new Event('auth-change'));
       
       if (result.isNewUser) {
-        // Since we are already in onboarding, we can just jump to step 1 but set googleData
+        // Since we are already in onboarding, we can just jump to step 1 but set googleData.
         setData(prev => ({
           ...prev,
           username: result.googleData.username || prev.username,
           email: result.googleData.email || prev.email,
           fullName: result.googleData.name || prev.fullName
         }));
-        // We set location.state artificially so useEffect will trigger correctly on step 2
-        window.history.replaceState({ 
-          fromGoogleAuth: true,
-          googleData: result.googleData
-        }, '');
+        // Flag this as a Google-auth onboarding via React state (NOT window.history —
+        // React Router won't see that). This makes handleSubmit hit PUT /api/user/onboarding
+        // to update the already-created user, instead of POSTing /api/register again.
+        setIsGoogleAuth(true);
+        setGoogleData(result.googleData);
         setStep(1); // Proceed to profile type selection
       } else {
         navigate(`/profile/${result.user.username}`);
