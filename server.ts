@@ -2090,6 +2090,13 @@ try {
 try {
   db.exec("ALTER TABLE users ADD COLUMN referred_by INTEGER REFERENCES users(id);");
 } catch (e) {}
+try {
+  // Marks whether a user finished onboarding. DEFAULT 1 so every pre-existing user is
+  // treated as onboarded; new Google accounts are inserted with 0 (see /api/auth/google)
+  // until they complete onboarding — so an abandoned Google sign-up is never mistaken for
+  // a finished rider profile, and is routed back to onboarding on the next login.
+  db.exec("ALTER TABLE users ADD COLUMN onboarding_complete INTEGER DEFAULT 1;");
+} catch (e) {}
 
 // Backfill referral codes for existing users
 const usersWithoutReferral = db.prepare("SELECT id FROM users WHERE referral_code IS NULL").all() as any[];
@@ -2924,21 +2931,25 @@ async function startServer() {
         isNewUser = true;
         const username = email.split('@')[0] + Math.floor(Math.random() * 1000);
         const newReferralCode = `GOOGLE_${googleId.substring(0, 8)}`.toUpperCase();
-        const result = db.prepare("INSERT INTO users (username, email, google_id, type, profile_picture_url, status, fullName, referral_code, referralCode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").run(
+        // `type` is NOT NULL CHECK(rider|ecosystem), so we store a placeholder — it is
+        // meaningless until onboarding sets the real type. onboarding_complete=0 marks the
+        // account as not-yet-onboarded, so it is routed back to onboarding on every login
+        // until finished. We intentionally do NOT create a `riders` row here: onboarding
+        // creates the correct detail row (riders OR ecosystems) once a profile type is
+        // chosen, so a user who selects "Empresa" is never left with a stray rider identity.
+        const result = db.prepare("INSERT INTO users (username, email, google_id, type, profile_picture_url, status, fullName, referral_code, referralCode, onboarding_complete) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)").run(
           username,
           email,
           googleId,
-          'rider', // Default to rider, will be updated in onboarding
+          'rider', // placeholder; the real type is chosen in onboarding
           picture || null,
           'active',
           name || null,
           newReferralCode,
           newReferralCode
         );
-        
+
         const userId = result.lastInsertRowid;
-        db.prepare("INSERT INTO riders (user_id, name) VALUES (?, ?)").run(userId, name || username);
-        
         user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as any;
       } else if (!user.google_id) {
         // Link Google ID to existing email account
@@ -2950,17 +2961,23 @@ async function startServer() {
         return res.status(403).json({ error: `Account is ${user.status}` });
       }
 
+      // Route to onboarding not only for brand-new accounts, but also for any Google user
+      // whose onboarding never completed (picked a type but abandoned it, or hit an older
+      // buggy build). Otherwise they'd be stuck forever on the placeholder rider profile,
+      // unable to finish signing up as a rider or a business.
+      const needsOnboarding = isNewUser || !user.onboarding_complete;
+
       // Don't return the password
       const { password: _, ...userInfo } = user;
-      
+
       // Generate JWT
       const token = jwt.sign({ id: user.id, username: user.username, role: user.role, plan: user.PLAN ?? user.plan }, JWT_SECRET, { expiresIn: '24h' });
 
       res.json({
         user: userInfo,
         token,
-        isNewUser,
-        googleData: isNewUser ? { email, name, picture, username: user.username } : null
+        isNewUser: needsOnboarding,
+        googleData: needsOnboarding ? { email, name, picture, username: user.username } : null
       });
     } catch (error: any) {
       console.error("Google Auth Error:", error);
@@ -10996,7 +11013,12 @@ async function startServer() {
     const servicesStr = Array.isArray(services) ? services.join(',') : services;
 
     try {
-      db.transaction(() => {
+      // Writes diretas em auto-commit — NÃO usar db.transaction. Em Turso remote mode
+      // (Hrana) o BEGIN abre uma transação interativa e o primeiro write (o UPDATE users)
+      // fica preso num stream que nunca commita, fazendo a atualização do onboarding
+      // "sumir" silenciosamente (mesmo problema já corrigido no /api/register). Cada
+      // statement abaixo auto-commita individualmente e persiste de imediato.
+      {
         let referredBy = null;
         let isAmbassadorInvite = false;
         if (referralCode) {
@@ -11015,9 +11037,10 @@ async function startServer() {
         // Update user type and status based on type
         const newStatus = type === 'rider' ? 'active' : 'pending';
         db.prepare(`
-          UPDATE users 
-          SET type = ?, 
-              status = ?, 
+          UPDATE users
+          SET type = ?,
+              status = ?,
+              onboarding_complete = 1,
               referred_by = COALESCE(referred_by, ?),
               fullName = ?,
               location = ?,
@@ -11047,6 +11070,8 @@ async function startServer() {
         );
 
         if (type === "rider") {
+          // Drop any stray ecosystem identity (e.g. the user switched type mid-onboarding).
+          db.prepare("DELETE FROM ecosystems WHERE user_id = ?").run(userId);
           // Check if rider record exists, if not create it, else update
           const rider = db.prepare("SELECT * FROM riders WHERE user_id = ?").get(userId);
           if (rider) {
@@ -11056,6 +11081,9 @@ async function startServer() {
           }
           console.log(`Rider updated with motorcycle: ${motorcycle}, interests: ${interests}`);
         } else {
+          // Drop the placeholder rider identity left by Google auth / an earlier flow, so a
+          // business account is never left with a stray rider row.
+          db.prepare("DELETE FROM riders WHERE user_id = ?").run(userId);
           // Check if eco record exists, if not create it, else update
           const eco = db.prepare("SELECT * FROM ecosystems WHERE user_id = ?").get(userId);
           if (eco) {
@@ -11069,8 +11097,8 @@ async function startServer() {
         if (isAmbassadorInvite) {
           db.prepare("UPDATE invite_links SET is_used = 1, used_by_user_id = ? WHERE code = ?").run(userId, referralCode);
         }
-      })();
-      
+      }
+
       const user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as any;
 
       // Espelha no Firestore. O register grava as duas fontes; o onboarding, até
