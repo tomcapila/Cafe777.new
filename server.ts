@@ -35,8 +35,12 @@ import {
   type OilChangeRecord,
   type RefuelingRecord,
 } from './src/utils/garageCalculations.ts';
-import admin from "firebase-admin";
-import { getFirestore } from "firebase-admin/firestore";
+// firebase-admin v14 removeu a API de namespace do export default
+// (`admin.credential`, `admin.firestore`, `admin.storage`, `admin.apps`).
+// Tudo agora vem de subpaths modulares.
+import { initializeApp, getApps, getApp, cert, applicationDefault } from "firebase-admin/app";
+import { getFirestore, FieldValue, Timestamp, type Query } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
 import firebaseConfig from "./firebase-applet-config.json" with { type: "json" };
 import { GoogleGenAI } from "@google/genai";
 
@@ -44,38 +48,40 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Initialize Firebase Admin
-if (!admin.apps.length) {
+if (!getApps().length) {
   let credential;
   const serviceAccountPath = path.resolve(__dirname, 'serviceAccountKey.json');
 
   if (fs.existsSync(serviceAccountPath)) {
     console.log("Firebase Admin initializing with serviceAccountKey.json");
     const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
-    credential = admin.credential.cert(serviceAccount);
+    credential = cert(serviceAccount);
   } else if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
     console.log("Firebase Admin initializing with FIREBASE_SERVICE_ACCOUNT_KEY secret");
     try {
       const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
-      credential = admin.credential.cert(serviceAccount);
+      credential = cert(serviceAccount);
     } catch (e) {
       console.error("Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY JSON:", e);
-      credential = admin.credential.applicationDefault();
+      credential = applicationDefault();
     }
   } else {
     console.log("Firebase Admin initializing with applicationDefault() (may lack permissions if unconfigured)");
-    credential = admin.credential.applicationDefault();
+    credential = applicationDefault();
   }
 
-  admin.initializeApp({
+  initializeApp({
     credential,
     projectId: firebaseConfig.projectId,
     storageBucket: firebaseConfig.storageBucket
   });
 }
 
-// @ts-expect-error firebase-admin@10 types don't expose the 2-arg `getFirestore(app, databaseId)` overload yet, but it works at runtime.
-const firestore = getFirestore(admin.app(), firebaseConfig.firestoreDatabaseId);
-const bucket = admin.storage().bucket();
+// O `@ts-expect-error` que havia aqui era para a sobrecarga de 2 argumentos
+// `getFirestore(app, databaseId)`, ausente nos tipos do v10. O v14 a expõe,
+// então a diretiva virou erro ("unused") e foi removida.
+const firestore = getFirestore(getApp(), firebaseConfig.firestoreDatabaseId);
+const bucket = getStorage().bucket();
 console.log(`Firestore initialized for database: ${firebaseConfig.firestoreDatabaseId}`);
 
 // Firestore Helpers to mimic some SQLite behaviors
@@ -756,7 +762,7 @@ function bumpRelatoCount(placeId: string, delta = 1): void {
   if (!placeId) return;
   collections.places_control
     .doc(placeId)
-    .set({ place_id: placeId, relato_count: admin.firestore.FieldValue.increment(delta) }, { merge: true })
+    .set({ place_id: placeId, relato_count: FieldValue.increment(delta) }, { merge: true })
     .catch(() => {});
   try {
     db.prepare(
@@ -774,7 +780,7 @@ async function createPlaceFromStaging(staging: any): Promise<string> {
   await collections.places_cache.doc(placeId).set(
     {
       place_id: placeId, name: c.name || "Lugar", lat: c.coords?.lat ?? null, lng: c.coords?.lng ?? null,
-      category: c.category || null, source: "user_submitted", last_fetched: admin.firestore.FieldValue.serverTimestamp(),
+      category: c.category || null, source: "user_submitted", last_fetched: FieldValue.serverTimestamp(),
     },
     { merge: true },
   );
@@ -847,7 +853,7 @@ async function createRouteEntity(input: any, authorId: any): Promise<string> {
     privacyLevel,
     origin: "user_submitted",
     createdBy: authorId ?? null,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
     schemaVersion: 1,
   };
   await ref.set(data);
@@ -2665,7 +2671,7 @@ const updateAmbassadorReputation = async (userId: number | string) => {
 
     await collections.ambassadors.doc(userId.toString()).set({
       reputation_score: totalReputation,
-      updated_at: admin.firestore.FieldValue.serverTimestamp()
+      updated_at: FieldValue.serverTimestamp()
     }, { merge: true });
 
     // Dual-write to SQLite
@@ -3361,7 +3367,7 @@ async function startServer() {
         description: description || "",
         votes_count: 0,
         approved: 0,
-        created_at: admin.firestore.FieldValue.serverTimestamp()
+        created_at: FieldValue.serverTimestamp()
       };
 
       await collections.submissions.doc(submissionId.toString()).set(submissionData);
@@ -4122,7 +4128,7 @@ async function startServer() {
           rating: r.rating, reviews: r.reviews, category: r.category,
           source_keyword: r.source_keyword, full_address: r.full_address, city: r.city,
           import_batch_id: importBatchId,
-          last_fetched: admin.firestore.FieldValue.serverTimestamp(),
+          last_fetched: FieldValue.serverTimestamp(),
         }, { merge: true });
         opsInBatch++;
 
@@ -4463,7 +4469,7 @@ async function startServer() {
         full_address,
         rating: Number(rating || 0),
         reviews: Number(reviews || 0),
-        last_fetched: admin.firestore.FieldValue.serverTimestamp()
+        last_fetched: FieldValue.serverTimestamp()
       };
 
       await cacheRef.set(updateData, { merge: true });
@@ -4856,7 +4862,7 @@ async function startServer() {
             const batch = firestore.batch();
             for (const p of chunk) {
               const cacheRef = collections.places_cache.doc(p.place_id);
-              batch.set(cacheRef, { ...p, last_fetched: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+              batch.set(cacheRef, { ...p, last_fetched: FieldValue.serverTimestamp() }, { merge: true });
             }
             await batch.commit();
           }
@@ -5214,7 +5220,7 @@ async function startServer() {
         privacyLevel: "private",       // SERVER-ASSIGNED
         startedAt: startedAtIso,
         endedAt: endedAtIso,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp(),
         schemaVersion: 1,
       });
 
@@ -5494,7 +5500,7 @@ async function startServer() {
       const badges = db.prepare(queryStr).all(...params);
       if (badges.length > 0) return res.json(badges);
       // Fallback to Firestore when SQLite is empty.
-      let query: admin.firestore.Query = collections.badges.where("is_active", "==", 1);
+      let query: Query = collections.badges.where("is_active", "==", 1);
       if (creator_id) query = query.where("creator_id", "==", parseInt(creator_id as string));
       const snapshot = await query.get();
       const fsBadges = await Promise.all(snapshot.docs.map(async (doc) => {
@@ -6109,7 +6115,7 @@ async function startServer() {
             // Update summary
             const summaryId = `${rev.target_type}_${route_id}`;
             await collections.rating_summaries.doc(summaryId).update({
-              verified_reviews: admin.firestore.FieldValue.increment(1)
+              verified_reviews: FieldValue.increment(1)
             });
           }
         }
@@ -7196,7 +7202,7 @@ async function startServer() {
         user_id: Number(userId),
         image_url: imageUrl,
         status: 'pending',
-        created_at: admin.firestore.FieldValue.serverTimestamp()
+        created_at: FieldValue.serverTimestamp()
       };
 
       await collections.event_photos.doc(photoId.toString()).set(photoData);
@@ -7397,7 +7403,7 @@ async function startServer() {
     }
 
     try {
-      let query: admin.firestore.Query = collections.events.where("is_approved", "==", 1);
+      let query: Query = collections.events.where("is_approved", "==", 1);
 
       if (category && category !== 'all') {
         query = query.where("category", "==", category);
@@ -7524,7 +7530,7 @@ async function startServer() {
         created_by_user_id: user.id.toString(),
         ingested_at: null as null,
         is_verified: false,
-        created_at: admin.firestore.FieldValue.serverTimestamp()
+        created_at: FieldValue.serverTimestamp()
       };
 
       await collections.events.doc(newId.toString()).set(eventData);
@@ -7595,7 +7601,7 @@ async function startServer() {
         price: price !== undefined ? price : (event.price || null),
         external_link: external_link !== undefined ? external_link : (event.external_link || null),
         price_starting_from: price_starting_from !== undefined ? (price_starting_from ? 1 : 0) : (event.price_starting_from || 0),
-        updated_at: admin.firestore.FieldValue.serverTimestamp()
+        updated_at: FieldValue.serverTimestamp()
       };
 
       await collections.events.doc(id).update(updateData);
@@ -7762,7 +7768,7 @@ async function startServer() {
             dedupCandidates,
             sourceRelatoId: id,
             status: "pending",
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            createdAt: FieldValue.serverTimestamp(),
             schemaVersion: 1,
           },
         };
@@ -7772,7 +7778,7 @@ async function startServer() {
         anchorId = await createRouteEntity(input.newRoute, req.user.id);
       }
 
-      const now = admin.firestore.FieldValue.serverTimestamp();
+      const now = FieldValue.serverTimestamp();
       const relato: Record<string, any> = {
         id,
         authorId: req.user.id,
@@ -7841,8 +7847,8 @@ async function startServer() {
       }
 
       const update: Record<string, any> = {
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        lastEditedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+        lastEditedAt: FieldValue.serverTimestamp(),
       };
 
       // Narrative fields (recompose body if guided-script parts are provided).
@@ -7883,10 +7889,10 @@ async function startServer() {
       // Server-controlled status lifecycle.
       if (current === "rejected") {
         update.status = "pending";
-        update.resubmittedAt = admin.firestore.FieldValue.serverTimestamp();
+        update.resubmittedAt = FieldValue.serverTimestamp();
       } else if (isPublished) {
         update.status = "pending"; // re-enqueue; anti bait-and-switch
-        update.resubmittedAt = admin.firestore.FieldValue.serverTimestamp();
+        update.resubmittedAt = FieldValue.serverTimestamp();
         // Fully unpublish: pull from public read mirror + feed, decrement count and
         // revoke the contribution until it is re-approved.
         removeRelatoMirror(id);
@@ -7953,7 +7959,7 @@ async function startServer() {
       const ref = collections.relatos.doc(id);
       const doc = await ref.get();
       if (!doc.exists) return res.status(404).json({ error: "Relato not found" });
-      const update: Record<string, any> = { editedAt: admin.firestore.FieldValue.serverTimestamp(), editedBy: req.user.id };
+      const update: Record<string, any> = { editedAt: FieldValue.serverTimestamp(), editedBy: req.user.id };
       if (typeof req.body.title === "string") update.title = normalizeRelatoText(req.body.title, RELATO_LIMITS.title);
       if (typeof req.body.body === "string") update.body = normalizeRelatoText(req.body.body, RELATO_LIMITS.body);
       if (req.body.structuredFields && typeof req.body.structuredFields === "object" && !Array.isArray(req.body.structuredFields)) {
@@ -7988,7 +7994,7 @@ async function startServer() {
           }
         } catch (e) { /* no staging → it is a real place */ }
       }
-      const patch: Record<string, any> = { status: "approved", approvedAt: admin.firestore.FieldValue.serverTimestamp(), reviewedBy: req.user.id, moderationNotes: null };
+      const patch: Record<string, any> = { status: "approved", approvedAt: FieldValue.serverTimestamp(), reviewedBy: req.user.id, moderationNotes: null };
       await ref.update(patch);
       upsertRelatoMirror({ id, ...r, ...patch, status: "approved" });
       if (r.anchorType === "place" && r.anchorId) bumpRelatoCount(r.anchorId, 1);
@@ -8035,12 +8041,12 @@ async function startServer() {
       const doc = await ref.get();
       if (!doc.exists) return res.status(404).json({ error: "Relato not found" });
       const r = doc.data() as any;
-      const until = admin.firestore.Timestamp.fromDate(new Date(Date.now() + days * 86400000));
+      const until = Timestamp.fromDate(new Date(Date.now() + days * 86400000));
       const patch: Record<string, any> = {
         status: "featured",
-        featuredAt: admin.firestore.FieldValue.serverTimestamp(),
+        featuredAt: FieldValue.serverTimestamp(),
         featuredUntil: until,
-        approvedAt: r.approvedAt || admin.firestore.FieldValue.serverTimestamp(),
+        approvedAt: r.approvedAt || FieldValue.serverTimestamp(),
         reviewedBy: req.user.id,
       };
       await ref.update(patch);
@@ -8229,7 +8235,7 @@ async function startServer() {
               ambassador_id: 0,
               creator_type: 'event_host',
               creator_id: req.user.id,
-              created_at: admin.firestore.FieldValue.serverTimestamp()
+              created_at: FieldValue.serverTimestamp()
             });
             
             const stampDocInfo = await collections.passport_stamps.doc(event.participation_stamp_id.toString()).get();
@@ -8239,7 +8245,7 @@ async function startServer() {
                 user_id: userId,
                 type: 'stamp_awarded',
                 content: `You've earned the "${stampName}" stamp for participating in an event!`,
-                created_at: admin.firestore.FieldValue.serverTimestamp()
+                created_at: FieldValue.serverTimestamp()
               });
             }
 
@@ -8266,7 +8272,7 @@ async function startServer() {
               user_id: userId,
               badge_id: event.participation_badge_id,
               awarded_by: req.user.id,
-              created_at: admin.firestore.FieldValue.serverTimestamp()
+              created_at: FieldValue.serverTimestamp()
             });
 
             const badgeDocInfo = await collections.badges.doc(event.participation_badge_id.toString()).get();
@@ -8276,7 +8282,7 @@ async function startServer() {
                 user_id: userId,
                 type: 'badge_awarded',
                 content: `You've earned the "${badgeName}" badge for participating in an event!`,
-                created_at: admin.firestore.FieldValue.serverTimestamp()
+                created_at: FieldValue.serverTimestamp()
               });
             }
 
@@ -8328,7 +8334,7 @@ async function startServer() {
           event_id: id,
           user_id: user.id,
           checked_in: 0,
-          created_at: admin.firestore.FieldValue.serverTimestamp()
+          created_at: FieldValue.serverTimestamp()
         });
         // Dual-write to SQLite
         try {
@@ -8694,7 +8700,7 @@ async function startServer() {
         ingested_at: new Date().toISOString(),
         is_verified: false,
         staging_id: id,
-        created_at: admin.firestore.FieldValue.serverTimestamp(),
+        created_at: FieldValue.serverTimestamp(),
       };
       await collections.events.doc(newId.toString()).set(eventData);
 
@@ -8855,7 +8861,7 @@ async function startServer() {
         model,
         year: parseInt(year),
         image_url: photo_url,
-        created_at: admin.firestore.FieldValue.serverTimestamp()
+        created_at: FieldValue.serverTimestamp()
       };
 
       await collections.motorcycles.doc(motoId.toString()).set(motoData);
@@ -8868,7 +8874,7 @@ async function startServer() {
           service: last_service || "Initial Entry",
           km: parseInt(last_km) || null,
           shop: last_shop || null,
-          created_at: admin.firestore.FieldValue.serverTimestamp()
+          created_at: FieldValue.serverTimestamp()
         };
         await collections.maintenance_logs.doc(logId.toString()).set(logData);
 
@@ -8919,7 +8925,7 @@ async function startServer() {
         model: model || moto.model,
         year: year ? parseInt(year) : moto.year,
         image_url: photo_url !== undefined ? photo_url : moto.image_url,
-        updated_at: admin.firestore.FieldValue.serverTimestamp()
+        updated_at: FieldValue.serverTimestamp()
       };
 
       await collections.motorcycles.doc(id).update(updateData);
@@ -9005,7 +9011,7 @@ async function startServer() {
         km: parseInt(km) || null,
         shop: shop || null,
         date: logDate,
-        created_at: admin.firestore.FieldValue.serverTimestamp()
+        created_at: FieldValue.serverTimestamp()
       });
 
       // Dual-write to SQLite
@@ -9040,7 +9046,7 @@ async function startServer() {
           service,
           km: parseInt(km) || null,
           shop: shop || null,
-          updated_at: admin.firestore.FieldValue.serverTimestamp()
+          updated_at: FieldValue.serverTimestamp()
         });
       } catch (_) {}
       res.json({ success: true });
@@ -9111,7 +9117,7 @@ async function startServer() {
         total_value,
         note: d.note ?? null,
         record_date,
-        created_at: admin.firestore.FieldValue.serverTimestamp(),
+        created_at: FieldValue.serverTimestamp(),
       };
       await collections.refuelings.doc(recId.toString()).set(recData);
       try {
@@ -9162,7 +9168,7 @@ async function startServer() {
         total_value,
         note: d.note ?? null,
         record_date,
-        updated_at: admin.firestore.FieldValue.serverTimestamp(),
+        updated_at: FieldValue.serverTimestamp(),
       };
       await collections.refuelings.doc(id).set(updateData, { merge: true });
       try {
@@ -9232,7 +9238,7 @@ async function startServer() {
           shop_ref: d.shop_ref ?? null,
           note: d.note ?? null,
           record_date,
-          created_at: admin.firestore.FieldValue.serverTimestamp(),
+          created_at: FieldValue.serverTimestamp(),
         };
         await collections.oil_changes.doc(recId.toString()).set(recData);
         try {
@@ -9280,7 +9286,7 @@ async function startServer() {
           shop_ref: d.shop_ref ?? null,
           note: d.note ?? null,
           record_date,
-          updated_at: admin.firestore.FieldValue.serverTimestamp(),
+          updated_at: FieldValue.serverTimestamp(),
         };
         await collections.oil_changes.doc(id).set(updateData, { merge: true });
         try {
@@ -9361,7 +9367,7 @@ async function startServer() {
             oil_alert_interval_km,
             oil_alert_interval_months,
             oil_alert_updated_at,
-            updated_at: admin.firestore.FieldValue.serverTimestamp(),
+            updated_at: FieldValue.serverTimestamp(),
           },
           { merge: true },
         );
@@ -9621,7 +9627,7 @@ async function startServer() {
       // 3. Sync to Firestore in background (fail silently but log if not permission error)
       try {
         const userUpdate: any = {
-          updated_at: admin.firestore.FieldValue.serverTimestamp()
+          updated_at: FieldValue.serverTimestamp()
         };
         if (profile_picture_url) userUpdate.profile_picture_url = profile_picture_url;
         if (cover_photo_url) userUpdate.cover_photo_url = cover_photo_url;
@@ -9639,7 +9645,7 @@ async function startServer() {
             age: profileData.age || null,
             city: profileData.city || null,
             blood_type: profileData.blood_type || null,
-            updated_at: admin.firestore.FieldValue.serverTimestamp()
+            updated_at: FieldValue.serverTimestamp()
           }, { merge: true });
         } else {
           userUpdate.businessName = profileData.company_name || user.businessName;
@@ -9656,7 +9662,7 @@ async function startServer() {
             phone: profileData.phone || null,
             website: profileData.website || null,
             chapter_label: profileData.chapter_label || 'Chapter',
-            updated_at: admin.firestore.FieldValue.serverTimestamp()
+            updated_at: FieldValue.serverTimestamp()
           }, { merge: true });
         }
 
