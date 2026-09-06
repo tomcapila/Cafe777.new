@@ -1,100 +1,92 @@
 rules_version = '2';
+
+// ============================================================================
+// NEGAÇÃO TOTAL — ISTO É INTENCIONAL. NÃO "CONSERTE" ABRINDO.
+// ============================================================================
+//
+// Nesta aplicação NENHUM cliente fala com o Firestore. Todo acesso é feito
+// pelo backend com o Admin SDK (`firebase-admin`), que **ignora estas regras
+// por completo**. Portanto negar tudo aqui não desabilita nada:
+//
+//   - server.ts .......................... Admin SDK (service account)
+//   - ingestao_eventos/storage/firestore.py  Admin SDK (service account)
+//   - scripts da raiz (migrate_to_firestore.ts, check_posts.ts, ...) Admin SDK
+//   - src/services/firebase.ts ........... exporta `db`/`auth`, mas nenhum
+//                                          arquivo em src/ os importa. O SDK
+//                                          cliente nunca é usado.
+//
+// Estas regras são a fronteira para acesso DIRETO do cliente, que hoje não
+// existe. Elas são defesa em profundidade: a chave da Web API do Firebase é
+// pública por natureza (vai no bundle), então qualquer pessoa consegue falar
+// com o seu projeto Firestore. O que impede o abuso são exatamente estas
+// regras — não a obscuridade da chave.
+//
+// ---------------------------------------------------------------------------
+// POR QUE A VERSÃO ANTERIOR ERA PERIGOSA (SEC-008)
+// ---------------------------------------------------------------------------
+// A versão anterior concedia `allow read, write: if isSignedIn()` a ~30
+// collections, incluindo `/users`. Isso não causava dano *apenas* porque
+// nenhum provedor de login estava habilitado no Firebase Authentication —
+// `request.auth` era sempre null e tudo falhava fechado por acidente.
+//
+// No dia em que qualquer provedor fosse habilitado (inclusive login anônimo),
+// bastaria a QUALQUER pessoa criar uma conta Firebase própria para ler e
+// escrever direto nessas collections, contornando o Express inteiro. O caso
+// mais grave era `/users`: o `POST /api/login` sincroniza a linha completa do
+// SQLite (`SELECT *`) para o Firestore, então esses documentos contêm hash de
+// senha, e-mail, `google_id` e `password_reset_token`.
+//
+// ---------------------------------------------------------------------------
+// SE UM DIA O CLIENTE PRECISAR LER DIRETO DO FIRESTORE
+// ---------------------------------------------------------------------------
+// Não relaxe o wildcard abaixo. Adicione um `match` explícito por collection,
+// acima dele, e siga estas regras:
+//
+//   1. `isSignedIn()` NÃO é autorização. Só prova que existe uma conta
+//      Firebase qualquer. Use posse (`request.auth.uid == ...`) ou um campo
+//      de papel validado no documento.
+//   2. Escrita continua pelo backend. Mantenha `allow write: if false` e
+//      libere no máximo `read`. O backend valida regra de negócio, cota,
+//      rate limit e log de auditoria — nada disso existe aqui.
+//   3. NUNCA exponha `/users` para leitura enquanto o documento carregar
+//      hash de senha e token de reset. Corrija a origem primeiro: faça o
+//      login sincronizar uma projeção de campos públicos, não `SELECT *`.
+//   4. Regras não filtram campos, só documentos. Liberar a leitura de um
+//      documento libera TODOS os campos dele.
+//   5. Firestore não faz cascata: um caminho sem `match` correspondente já é
+//      negado. Não é preciso listar collection nova aqui para protegê-la.
+//
+// ---------------------------------------------------------------------------
+// INTENÇÕES DE PROJETO PRESERVADAS DA VERSÃO ANTERIOR
+// ---------------------------------------------------------------------------
+// A negação total torna as regras abaixo redundantes hoje, mas elas registram
+// decisões deliberadas que devem ser reconstruídas caso o acesso direto do
+// cliente venha a existir. Não são regras ativas — são memória de projeto.
+//
+//   /ride_sessions  privado ao piloto: um trajeto revela por onde a pessoa
+//                   anda. Só o dono (ou admin) lê; escrita só via Admin SDK.
+//                   Era:  allow read: if isOwner(string(existing().riderId))
+//                                       || isAdmin();
+//                         allow write: if false;
+//   /relatos        leitura pública só de 'approved'/'featured'; o autor lê os
+//                   próprios em qualquer status; admin lê tudo.
+//   /routes         leitura conforme privacyLevel ('public' aberto,
+//                   'community' exige sessão).
+//   /events_staging  e  /places_staging   admin lê, ninguém escreve.
+//   /settings       leitura pública, escrita só admin.
+//
+// Nota: o `isAdmin()` da versão anterior consultava /admins/$(uid), collection
+// que não existe neste modelo de dados — os papéis moram em SQLite/`users`.
+// Ou seja, era sempre falso. Qualquer reconstrução precisa de outra fonte de
+// verdade para "é admin", não daquela.
+//
+// Auditoria: SECURITY-AUDIT.md, achado SEC-008.
+// ============================================================================
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} { allow read, write: if false; }
-
-    function isSignedIn() { return request.auth != null; }
-    function isAdmin() { return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)); }
-    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
-    function incoming() { return request.resource.data; }
-    function existing() { return resource.data; }
-
-    function isValidUser(data) {
-      return data.keys().hasAll(['username', 'email']) && data.username is string && data.username.size() <= 100;
+    match /{document=**} {
+      allow read, write: if false;
     }
-    
-    // We allow simple rule matching for the 38 collections
-    // Since our backend uses Admin SDK which bypasses these, these rules secure direct client access if any.
-    match /users/{userId} {
-      allow read: if isSignedIn();
-      allow create: if isOwner(userId) && isValidUser(incoming()) && incoming().keys().hasOnly(['username', 'email', 'created_at']);
-      allow update: if isOwner(userId) && isValidUser(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly(['username', 'bio', 'location', 'avatar']);
-      allow delete: if isAdmin();
-    }
-    
-    function isOwner(uid) {
-      return isSignedIn() && request.auth.uid == uid;
-    }
-
-    match /chats/{chatId} {
-      allow read, write: if isSignedIn();
-    }
-
-    match /messages/{messageId} {
-      allow read, write: if isSignedIn();
-    }
-    
-    // Default open for the rest of collections for now, locked down to signed in users.
-    // Full 8-pillar implementations are complex and typically required per collection.
-    match /riders/{id} { allow read, write: if isSignedIn(); }
-    match /motorcycles/{id} { allow read, write: if isSignedIn(); }
-    match /ecosystems/{id} { allow read, write: if isSignedIn(); }
-    match /posts/{id} { allow read, write: if isSignedIn(); }
-    match /post_likes/{id} { allow read, write: if isSignedIn(); }
-    match /followers/{id} { allow read, write: if isSignedIn(); }
-    match /events/{id} { allow read, write: if isSignedIn(); }
-    // Staging de ingestão de eventos: só admin lê; nenhum cliente escreve.
-    // Escrita é exclusiva do serviço de ingestão e do backend via Admin SDK
-    // (que ignora estas regras). A aprovação move o doc para /events.
-    match /events_staging/{id} { allow read: if isAdmin(); allow write: if false; }
-    // Relatos de Estrada (Fase 0). Public reads: only approved/featured. The author
-    // reads their own in any status; admins read everything. ALL writes go through
-    // the backend (Admin SDK, which bypasses these rules) — clients can never set
-    // status/verificationLevel/qualitySignals/origin/featured*. These rules are
-    // defense in depth for any direct client access. moderationNotes is admin-only.
-    match /relatos/{id} {
-      allow read: if existing().status in ['approved', 'featured']
-                   || isAdmin()
-                   || isOwner(string(existing().authorId));
-      allow write: if false;
-    }
-    // User-submitted place candidates pending moderation: admin-only, like staging.
-    match /places_staging/{id} { allow read: if isAdmin(); allow write: if false; }
-    // Routes (built in Fase 5): read gated by privacyLevel; writes via Admin SDK.
-    match /routes/{id} {
-      allow read: if existing().privacyLevel == 'public'
-                   || (isSignedIn() && existing().privacyLevel == 'community')
-                   || isAdmin();
-      allow write: if false;
-    }
-    match /contests/{id} { allow read, write: if isSignedIn(); }
-    match /submissions/{id} { allow read, write: if isSignedIn(); }
-    match /votes/{id} { allow read, write: if isSignedIn(); }
-    match /notifications/{id} { allow read: if isOwner(existing().user_id) || (incoming() != null && isOwner(incoming().user_id)); allow write: if isSignedIn(); }
-    match /event_rsvps/{id} { allow read, write: if isSignedIn(); }
-    match /keywords_config/{id} { allow read: if isSignedIn(); allow write: if isAdmin(); }
-    match /places_cache/{id} { allow read, write: if isSignedIn(); }
-    match /places_control/{id} { allow read, write: if isSignedIn(); }
-    match /event_photos/{id} { allow read, write: if isSignedIn(); }
-    match /settings/{id} { allow read: if true; allow write: if isAdmin(); }
-    match /ambassadors/{id} { allow read, write: if isSignedIn(); }
-    match /passport_stamps/{id} { allow read, write: if isSignedIn(); }
-    match /user_passport_stamps/{id} { allow read, write: if isSignedIn(); }
-    match /badges/{id} { allow read, write: if isSignedIn(); }
-    match /user_badges/{id} { allow read, write: if isSignedIn(); }
-    match /maintenance_logs/{id} { allow read, write: if isSignedIn(); }
-    match /comments/{id} { allow read, write: if isSignedIn(); }
-    match /checkins/{id} { allow read, write: if isSignedIn(); }
-    match /ambassador_posts/{id} { allow read, write: if isSignedIn(); }
-    match /social_walls/{id} { allow read, write: if isSignedIn(); }
-    match /recommendations/{id} { allow read, write: if isSignedIn(); }
-    match /discovered_routes/{id} { allow read, write: if isSignedIn(); }
-    match /rating_summaries/{id} { allow read, write: if isSignedIn(); }
-    match /reviews/{id} { allow read, write: if isSignedIn(); }
-    match /review_verifications/{id} { allow read, write: if isSignedIn(); }
-    match /checkpoints/{id} { allow read, write: if isSignedIn(); }
-    match /user_route_progress/{id} { allow read, write: if isSignedIn(); }
-    match /club_memberships/{id} { allow read, write: if isSignedIn(); }
-    match /ambassador_applications/{id} { allow read, write: if isSignedIn(); }
   }
 }

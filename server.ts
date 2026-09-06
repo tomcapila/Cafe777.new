@@ -47,7 +47,7 @@ const __dirname = path.dirname(__filename);
 if (!admin.apps.length) {
   let credential;
   const serviceAccountPath = path.resolve(__dirname, 'serviceAccountKey.json');
-  
+
   if (fs.existsSync(serviceAccountPath)) {
     console.log("Firebase Admin initializing with serviceAccountKey.json");
     const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
@@ -136,6 +136,9 @@ const collections = {
   // Gamification (Fase 4): contribution stats for the "Guia" title + per-moto mini-passport.
   relato_author_stats: firestore.collection("relato_author_stats"),
   moto_relato_stats: firestore.collection("moto_relato_stats"),
+  // Ride companion (Ride Fase 2): a persisted record of an in-app ride. Private by
+  // default (a ride reveals where the rider goes); mirrored SQLite `ride_sessions`.
+  ride_sessions: firestore.collection("ride_sessions"),
 };
 
 // Generic counter for pseudo-incrementing IDs if needed (though random IDs are preferred in Firestore)
@@ -417,6 +420,23 @@ const relatoEditSchema = z.object({
   evidence: evidenceSchema.optional(),
   requestedStatus: z.enum(["draft", "pending"]).optional(), // submit a saved draft (draft→pending)
 });
+
+// Ride companion (Ride Fase 2): payload the client sends when a ride finishes. The
+// server owns riderId/timestamps/privacy — those are never read from the body.
+// distanceMeters/durationSeconds are measured client-side during the ride.
+const rideCoordSchema = z.object({ lat: z.number(), lng: z.number() }).strip();
+const rideCreateSchema = z
+  .object({
+    routeId: z.string().max(200).nullable().optional(),        // routes entity id, if any
+    routeName: z.string().min(1).max(160),
+    routeSource: z.enum(["gpx_import", "route_entity", "discovered"]).default("gpx_import"),
+    distanceMeters: z.number().min(0).max(100_000_000).default(0),
+    durationSeconds: z.number().int().min(0).max(2_592_000).default(0), // ≤ 30 days
+    startPoint: rideCoordSchema.nullable().optional(),
+    endPoint: rideCoordSchema.nullable().optional(),
+    status: z.enum(["completed", "aborted"]).default("completed"),
+  })
+  .strip();
 
 // Plain-text discipline: strip control chars (keep \n \t), cap length, trim. The
 // real XSS defense is rendering as plain text (React escapes) on every surface;
@@ -1109,8 +1129,17 @@ async function findUserById(userId: number | string): Promise<any | null> {
   return null;
 }
 
-const JWT_SECRET = process.env.JWT_SECRET || 'cafe777-super-secret-key-for-dev';
-console.log(`JWT_SECRET initialized (length: ${JWT_SECRET.length})`);
+// Sem fallback: uma JWT_SECRET ausente tem que quebrar o boot, não degradar em
+// silêncio para uma chave fixa que está publicada no repositório (qualquer um
+// forjaria um token de admin). Não logamos o comprimento — isso denunciava, pelo
+// log, se o fallback estava em uso.
+const JWT_SECRET_ENV = process.env.JWT_SECRET;
+if (!JWT_SECRET_ENV || JWT_SECRET_ENV.length < 32) {
+  throw new Error(
+    'JWT_SECRET ausente ou com menos de 32 caracteres. Configure-a nas variáveis de ambiente antes de subir o servidor.'
+  );
+}
+const JWT_SECRET: string = JWT_SECRET_ENV;
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
@@ -1268,6 +1297,26 @@ const upload = multer({
   }
 });
 
+// Alfabeto sem I, O, 0 e 1: estes códigos são lidos e digitados à mão.
+const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+// Código aleatório com CSPRNG. 12 caracteres sobre 32 símbolos = 60 bits,
+// contra os ~41 bits mal distribuídos de `Math.random().toString(36)` — que,
+// pior que curto, era previsível: Math.random() não é criptográfico e seu
+// estado interno pode ser reconstruído a partir de saídas observadas.
+// `b % 32` não introduz viés porque 256 é múltiplo de 32; não é preciso
+// rejeitar amostras. Mantém-se em 12 para caber no limite de 20 do schema
+// Zod de `referralCode`.
+const generateSecureCode = (len = 12): string =>
+  Array.from(crypto.randomBytes(len), (b) => CODE_ALPHABET[b % 32]).join('');
+
+// Mascara e-mail para log: "thomaz@gmail.com" -> "t***@gmail.com".
+// Logs de produção (Render) são retidos e legíveis por qualquer pessoa com
+// acesso ao painel; endereço completo em log é dado pessoal exposto sem
+// necessidade operacional — o domínio basta para diagnosticar entrega.
+const maskEmail = (e: any): string =>
+  String(e ?? '').replace(/^(.).*(@.*)$/, '$1***$2') || '(vazio)';
+
 const uploadToFirebase = async (file: any, folder: string = "uploads"): Promise<string> => {
   if (!file) return "";
   const originalName = file.originalname || "image.jpg";
@@ -1306,6 +1355,28 @@ const uploadToFirebase = async (file: any, folder: string = "uploads"): Promise<
   });
 };
 
+
+// Contrapartida de uploadToFirebase. Sem ela, apagar um post ou uma foto some
+// apenas com a referência: o binário fica no bucket indefinidamente e a URL
+// `?alt=media&token=...` continua servindo o arquivo a quem já a tiver, porque
+// o token de download não expira. Isso atinge o direito de eliminação (LGPD
+// art. 18, VI) — "apagar a conta" precisa apagar também as imagens enviadas.
+//
+// Tolerante por design: nunca lança. Uma falha ao remover o binário não pode
+// derrubar a exclusão do registro, que é o que a pessoa efetivamente pediu.
+const deleteFromFirebase = async (url: any): Promise<void> => {
+  if (!url || typeof url !== "string" || !bucket) return;
+  // Só trata URLs do Firebase Storage. Caminhos legados em /uploads são locais
+  // e não têm o segmento /o/ — são ignorados aqui de propósito.
+  const m = url.match(/\/o\/([^?]+)/);
+  if (!m) return;
+  try {
+    await bucket.file(decodeURIComponent(m[1])).delete();
+  } catch (e: any) {
+    // 404 = já removido; não é erro.
+    if (e?.code !== 404) console.error("[Storage] Falha ao remover arquivo:", e?.message || e);
+  }
+};
 
 // Initialize Database Schema
 db.exec(`
@@ -1972,6 +2043,28 @@ db.exec(`
     schema_version INTEGER DEFAULT 1
   );
 
+  -- Ride companion sessions (Ride Fase 2): one row per finished in-app ride. The
+  -- companion runs client-side; this persists a lightweight record on finish. A ride
+  -- is private by default (reveals where the rider goes). route_id may be null for a
+  -- GPX-import ride (no backing routes entity).
+  CREATE TABLE IF NOT EXISTS ride_sessions (
+    id TEXT PRIMARY KEY,
+    rider_id INTEGER,
+    route_id TEXT,                        -- routes entity id, or null (GPX import)
+    route_name TEXT,
+    route_source TEXT,                    -- 'gpx_import' | 'route_entity' | 'discovered'
+    distance_meters REAL DEFAULT 0,       -- distance actually ridden
+    duration_seconds INTEGER DEFAULT 0,
+    start_point TEXT,                     -- JSON {lat,lng}
+    end_point TEXT,                       -- JSON {lat,lng}
+    status TEXT DEFAULT 'completed',      -- 'completed' | 'aborted'
+    privacy_level TEXT NOT NULL DEFAULT 'private',
+    started_at DATETIME,
+    ended_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    schema_version INTEGER DEFAULT 1
+  );
+
   -- Seed default keywords if empty
   INSERT INTO keywords_config (category_name, keywords, radius, icon)
   SELECT 'dealership', '["motorcycle dealership", "concessionária moto", "yamaha", "honda", "bmw motorrad", "triumph"]', 10000, 'Building2'
@@ -2104,7 +2197,7 @@ if (usersWithoutReferral.length > 0) {
   const updateReferral = db.prepare("UPDATE users SET referral_code = ? WHERE id = ?");
   db.transaction(() => {
     for (const u of usersWithoutReferral) {
-      updateReferral.run(Math.random().toString(36).substring(2, 10).toUpperCase(), u.id);
+      updateReferral.run(generateSecureCode(), u.id);
     }
   })();
 }
@@ -2858,7 +2951,9 @@ async function startServer() {
             const idToken = params.get('id_token') || new URLSearchParams(window.location.search).get('credential');
             
             if (window.opener) {
-              window.opener.postMessage({ type: 'OAUTH_AUTH_SUCCESS', credential: idToken }, '*');
+              // Origem fixa: com '*' qualquer site que abrisse este popup recebia o
+              // id_token do Google da vítima e o trocava por uma sessão em /api/auth/google.
+              window.opener.postMessage({ type: 'OAUTH_AUTH_SUCCESS', credential: idToken }, window.location.origin);
               window.close();
             } else {
               window.location.href = '/login';
@@ -2930,7 +3025,9 @@ async function startServer() {
         // Create new user
         isNewUser = true;
         const username = email.split('@')[0] + Math.floor(Math.random() * 1000);
-        const newReferralCode = `GOOGLE_${googleId.substring(0, 8)}`.toUpperCase();
+        // Era `GOOGLE_${googleId.substring(0,8)}` — derivado, portanto previsível
+        // para quem conhecesse o googleId. Agora é aleatório como os demais.
+        const newReferralCode = generateSecureCode();
         // `type` is NOT NULL CHECK(rider|ecosystem), so we store a placeholder — it is
         // meaningless until onboarding sets the real type. onboarding_complete=0 marks the
         // account as not-yet-onboarded, so it is routed back to onboarding on every login
@@ -3051,20 +3148,14 @@ async function startServer() {
         return res.status(401).json({ error: "Please login with Google or reset your password." });
       }
 
-      // Check if password is hashed (starts with $2a$ or $2b$ or $2y$)
-      const isHashed = user.password.startsWith('$2a$') || user.password.startsWith('$2b$') || user.password.startsWith('$2y$');
-      
-      let passwordMatch = false;
+      // Só bcrypt. A comparação em texto puro que existia aqui permitia logar com
+      // a senha fixa que /api/clubs/create gravava — e essa senha está publicada
+      // no repositório. Qualquer linha legada com senha em texto puro deixa de
+      // autenticar e precisa passar por "esqueci minha senha".
       const _tb = Date.now();
-      if (isHashed) {
-        passwordMatch = await bcrypt.compare(password, user.password);
-      } else {
-        passwordMatch = user.password === password;
-        if (passwordMatch) {
-          const hashedPassword = await bcrypt.hash(password, 10);
-          db.prepare("UPDATE users SET password = ? WHERE id = ?").run(hashedPassword, user.id);
-        }
-      }
+      const passwordMatch = user.password.startsWith('$2')
+        ? await bcrypt.compare(password, user.password)
+        : false;
       console.log(`[login] bcrypt: ${Date.now()-_tb}ms match=${passwordMatch}`);
 
       if (!passwordMatch) {
@@ -3086,30 +3177,31 @@ async function startServer() {
 
   app.post("/api/forgot-password", async (req, res) => {
     const { email } = req.body;
-    console.log(`[Forgot Password] Request for: ${email}`);
-    
+    console.log(`[Forgot Password] Request for: ${maskEmail(email)}`);
+
+    // O endpoint responde sempre a mesma coisa, exista ou não a conta: caso
+    // contrário vira oráculo de cadastro (SEC-004). Responder ANTES de falar
+    // com o MailerSend também fecha o oráculo por temporização — o caminho
+    // "e-mail existe" levava segundos a mais que o caminho "não existe", o que
+    // sozinho já denunciava a resposta.
+    res.json({ message: "Reset link sent" });
+
     try {
       const user = db.prepare("SELECT * FROM users WHERE email = ?").get(email) as any;
-      if (!user) {
-        console.log(`[Forgot Password] User not found: ${email}`);
-        return res.status(404).json({ error: "User not found" });
-      }
+      if (!user) return;
 
       const token = crypto.randomBytes(20).toString('hex');
       const expires = new Date(Date.now() + 3600000); // 1 hour
 
-      console.log(`[Forgot Password] Updating database for: ${email}`);
-      const dbResult = db.prepare("UPDATE users SET password_reset_token = ?, password_reset_expires = ? WHERE email = ?").run(token, expires.toISOString(), email);
-      console.log(`[Forgot Password] Database update result:`, dbResult);
-      
+      db.prepare("UPDATE users SET password_reset_token = ?, password_reset_expires = ? WHERE email = ?").run(token, expires.toISOString(), email);
+
       const resetLink = `${process.env.APP_URL}/reset-password/${token}`;
 
-      console.log(`[Forgot Password] Attempting to send email via MailerSend...`);
       if (!process.env.MAILERSEND_API_KEY) {
-        console.error("[Forgot Password] Error: MAILERSEND_API_KEY is not set in environment variables.");
-        throw new Error("Email service is not configured. Please contact support.");
+        console.error("[Forgot Password] MAILERSEND_API_KEY não configurada — e-mail NÃO enviado.");
+        return;
       }
-      
+
       const sentFrom = new Sender(
         process.env.MAILERSEND_SENDER_EMAIL || "no-reply@test-vz9dlem9ok74kj50.mlsender.net",
         process.env.MAILERSEND_SENDER_NAME || "Cafe 777"
@@ -3142,12 +3234,13 @@ async function startServer() {
         setTimeout(() => reject(new Error("Email service timed out")), 10000)
       );
 
-      const result = await Promise.race([sendPromise, timeoutPromise]);
-      console.log(`[Forgot Password] MailerSend result:`, result);
-      res.json({ message: "Reset link sent" });
+      await Promise.race([sendPromise, timeoutPromise]);
+      console.log(`[Forgot Password] E-mail enviado para: ${maskEmail(email)}`);
     } catch (error: any) {
-      console.error("[Forgot Password] Error:", error);
-      res.status(500).json({ error: error.message || "Failed to send email" });
+      // A resposta já foi enviada. Falha aqui é problema de operação, não do
+      // cliente — e contá-la ao cliente reabriria o oráculo, porque o erro
+      // difere conforme o destinatário exista ou não no MailerSend.
+      console.error(`[Forgot Password] Falha no envio para ${maskEmail(email)}:`, error?.message || error);
     }
   });
 
@@ -5074,6 +5167,90 @@ async function startServer() {
     }
   });
 
+  // Ride companion (Ride Fase 2): persist a finished ride. The companion runs
+  // client-side; this saves a lightweight record on finish. Server forces
+  // riderId/timestamps/privacy — a ride is private by default (it reveals where the
+  // rider goes). Dual-write Firestore (source of truth) + SQLite mirror (fast reads).
+  app.post("/api/rides", authenticateToken, async (req: any, res) => {
+    const parsed = rideCreateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues[0].message });
+    }
+    const input = parsed.data;
+    try {
+      const ref = collections.ride_sessions.doc();
+      const id = ref.id;
+      const endedAtMs = Date.now();
+      const startedAtIso = new Date(endedAtMs - input.durationSeconds * 1000).toISOString();
+      const endedAtIso = new Date(endedAtMs).toISOString();
+      const routeId = input.routeId || null;
+
+      try {
+        db.prepare(
+          `INSERT INTO ride_sessions
+            (id, rider_id, route_id, route_name, route_source, distance_meters, duration_seconds,
+             start_point, end_point, status, privacy_level, started_at, ended_at, schema_version)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'private', ?, ?, 1)`,
+        ).run(
+          id, req.user.id, routeId, input.routeName, input.routeSource,
+          input.distanceMeters, input.durationSeconds,
+          input.startPoint ? JSON.stringify(input.startPoint) : null,
+          input.endPoint ? JSON.stringify(input.endPoint) : null,
+          input.status, startedAtIso, endedAtIso,
+        );
+      } catch (e) { console.error("ride_sessions SQLite insert failed:", e); }
+
+      await ref.set({
+        id,
+        riderId: req.user.id,
+        routeId,
+        routeName: input.routeName,
+        routeSource: input.routeSource,
+        distanceMeters: input.distanceMeters,
+        durationSeconds: input.durationSeconds,
+        startPoint: input.startPoint || null,
+        endPoint: input.endPoint || null,
+        status: input.status,
+        privacyLevel: "private",       // SERVER-ASSIGNED
+        startedAt: startedAtIso,
+        endedAt: endedAtIso,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        schemaVersion: 1,
+      });
+
+      return res.status(201).json({ id, status: input.status });
+    } catch (error: any) {
+      console.error("Error saving ride:", error);
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  // The signed-in rider's own ride history (private). Most recent first.
+  app.get("/api/rides", authenticateToken, async (req: any, res) => {
+    try {
+      const rows = db.prepare(
+        `SELECT * FROM ride_sessions WHERE rider_id = ? ORDER BY ended_at DESC LIMIT 50`,
+      ).all(req.user.id) as any[];
+      const rides = rows.map((r) => ({
+        id: r.id,
+        routeId: r.route_id,
+        routeName: r.route_name,
+        routeSource: r.route_source,
+        distanceMeters: r.distance_meters,
+        durationSeconds: r.duration_seconds,
+        startPoint: safeJsonParse(r.start_point, null),
+        endPoint: safeJsonParse(r.end_point, null),
+        status: r.status,
+        startedAt: r.started_at,
+        endedAt: r.ended_at,
+      }));
+      return res.json({ rides });
+    } catch (error: any) {
+      console.error("Error listing rides:", error);
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
   app.get("/api/search", async (req, res) => {
     const { q } = req.query;
     if (!q || typeof q !== 'string') return res.json({ routes: [], events: [], clubs: [], riders: [], locations: [] });
@@ -5228,8 +5405,13 @@ async function startServer() {
         const userSnap = await collections.users.where("username", ">=", q.toLowerCase()).where("username", "<=", q.toLowerCase() + "\uf8ff").limit(5).get();
         if (!userSnap.empty) {
           userSnap.docs.forEach(doc => {
-            const data = { id: doc.id, ...(doc.data() as any) };
-            userMap.set(data.username.toLowerCase(), data);
+            // Projeção explícita: espalhar doc.data() aqui vazava password (hash),
+            // email, google_id e password_reset_token numa rota pública. Mesma
+            // forma que o ramo SQLite abaixo já usa.
+            const d = doc.data() as any;
+            if (!d?.username) return;
+            const data = { id: doc.id, username: d.username, profile_picture_url: d.profile_picture_url ?? null };
+            userMap.set(String(d.username).toLowerCase(), data);
           });
         }
       } catch (err) {}
@@ -5998,6 +6180,33 @@ async function startServer() {
     }
   });
 
+  // Allowlist dos campos públicos do perfil. Antes isto era uma blocklist de um
+  // campo só (`const { password, ...safeUser } = user`), que deixava passar email,
+  // google_id, password_reset_token e password_reset_expires — todos presentes no
+  // documento do Firestore, que é espalhado cru no handler abaixo.
+  const publicProfileFields = (user: any) => ({
+    id: user.id,
+    username: user.username,
+    fullName: user.fullName ?? null,
+    location: user.location ?? null,
+    bio: user.bio ?? null,
+    profile_picture_url: user.profile_picture_url ?? null,
+    cover_photo_url: user.cover_photo_url ?? null,
+    type: user.type ?? null,
+    role: user.role ?? null,
+    plan: user.plan ?? null,
+    status: user.status ?? null,
+    reputation: user.reputation ?? 0,
+    created_at: user.created_at ?? null,
+    motorcycle: user.motorcycle ?? null,
+    businessName: user.businessName ?? null,
+    businessType: user.businessType ?? null,
+    interests: user.interests ?? null,
+    services: user.services ?? null,
+    referralCode: user.referralCode ?? null,
+    onboarding_complete: user.onboarding_complete ?? null,
+  });
+
   app.get("/api/profile/:username", async (req, res) => {
     const { viewer_id } = req.query;
     const { username } = req.params;
@@ -6185,7 +6394,7 @@ async function startServer() {
           return { ...e, id: eDoc.id, username: host.username, profile_picture_url: host.profile_picture_url, rsvp_count: rsvps.size };
         }));
 
-        const { password: _, ...safeUser } = user;
+        const safeUser = publicProfileFields(user);
         // Relatos de Estrada gamification (Fase 4): "Guia" title + per-moto mini-passport.
         const relatoStats = (db.prepare(
           "SELECT relatos_approved, points, title FROM relato_author_stats WHERE user_id = ?",
@@ -6241,10 +6450,10 @@ async function startServer() {
           return { ...e, id: eDoc.id, username: host.username, profile_picture_url: host.profile_picture_url, rsvp_count: rsvps.size };
         }));
 
-        const { password: __, ...safeUser } = user;
-        res.json({ 
-          ...safeUser, 
-          profile: ecosystem, 
+        const safeUser = publicProfileFields(user);
+        res.json({
+          ...safeUser,
+          profile: ecosystem,
           posts, 
           events: hostedEvents, 
           rsvpd_events: rsvpdEvents.filter(e => e !== null), 
@@ -7137,6 +7346,9 @@ async function startServer() {
       try {
         db.prepare("DELETE FROM event_photos WHERE id = ?").run(photoId);
       } catch (sqe) {}
+
+      // Remove o binário do bucket (SEC-016).
+      await deleteFromFirebase(photo.image_url);
 
       res.json({ success: true });
     } catch (error: any) {
@@ -8759,6 +8971,9 @@ async function startServer() {
         db.prepare("DELETE FROM motorcycles WHERE id = ?").run(id);
       } catch (sqe) {}
 
+      // Remove o binário do bucket (SEC-016).
+      await deleteFromFirebase(moto.image_url);
+
       res.json({ success: true });
     } catch (err) {
       console.error("Error deleting motorcycle from Firestore:", err);
@@ -9283,16 +9498,19 @@ async function startServer() {
       // Find the post
       const postDoc = await collections.posts.doc(id).get();
       let isOwner = false;
+      let imageUrl: string | null = null;
 
       if (postDoc.exists) {
         isOwner = postDoc.data()?.user_id?.toString() === user.id.toString();
+        imageUrl = postDoc.data()?.image_url ?? null;
       } else {
         // Fallback to SQLite
-        const sqlitePost = db.prepare("SELECT user_id FROM posts WHERE id = ?").get(id) as any;
+        const sqlitePost = db.prepare("SELECT user_id, image_url FROM posts WHERE id = ?").get(id) as any;
         if (!sqlitePost) {
           return res.status(404).json({ error: "Post not found" });
         }
         isOwner = sqlitePost.user_id?.toString() === user.id.toString();
+        imageUrl = sqlitePost.image_url ?? null;
       }
 
       if (!isOwner && user.role !== 'admin') {
@@ -9307,6 +9525,10 @@ async function startServer() {
       db.prepare("DELETE FROM post_likes WHERE post_id = ?").run(id);
       db.prepare("DELETE FROM user_pinned_posts WHERE post_id = ?").run(id);
       db.prepare("DELETE FROM posts WHERE id = ?").run(id);
+
+      // Remove o binário do bucket (SEC-016). Por último e sem await crítico:
+      // se falhar, o registro já saiu, que é o que a pessoa pediu.
+      await deleteFromFirebase(imageUrl);
 
       res.json({ success: true, message: "Post deleted successfully" });
     } catch (error: any) {
@@ -10093,8 +10315,12 @@ async function startServer() {
       // Create a new user entry for the club (ecosystem type)
       const username = name.toLowerCase().replace(/\s+/g, '_') + '_club_' + Date.now();
       const email = `${username}@motoclub.local`;
-      const password = 'NoLoginRequired123!';
-      const result = db.prepare("INSERT INTO users (username, email, password, type, role) VALUES (?, ?, ?, 'ecosystem', 'user')").run(username, email, password);
+      // A conta do clube não faz login própria — é gerida pelo embaixador dono.
+      // password NULL em vez de uma senha fixa: /api/login já barra usuário sem
+      // senha com "Please login with Google or reset your password.". A senha fixa
+      // anterior era pública (repo aberto) e o username sai em GET /api/clubs, o
+      // que tornava toda conta de clube assumível por qualquer um.
+      const result = db.prepare("INSERT INTO users (username, email, password, type, role) VALUES (?, ?, NULL, 'ecosystem', 'user')").run(username, email);
       const clubUserId = result.lastInsertRowid;
 
       // Create ecosystem entry
@@ -10204,7 +10430,7 @@ async function startServer() {
   // Ambassador Invite Links
   app.post("/api/ambassadors/invites", authenticateToken, checkAmbassador, async (req: any, res) => {
     try {
-      const code = Math.random().toString(36).substring(2, 10).toUpperCase();
+      const code = generateSecureCode();
       const inviteId = await getNextId("invite_links");
       const inviteData: any = {
         id: inviteId,
@@ -10861,7 +11087,7 @@ async function startServer() {
 
       let userId: any;
       const initialStatus = type === 'rider' ? 'active' : 'pending';
-      const newReferralCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+      const newReferralCode = generateSecureCode();
       
       let hashedPassword = null;
       if (password) {
@@ -11135,6 +11361,27 @@ async function startServer() {
   app.delete("/api/user", authenticateToken, async (req: any, res) => {
     const userId = req.user.id;
     try {
+      // Coleta as URLs de mídia ANTES da transação: depois que as linhas somem
+      // não há mais como saber quais binários pertenciam a esta pessoa, e eles
+      // ficariam no bucket para sempre, acessíveis por quem tivesse a URL
+      // (SEC-016 / LGPD art. 18, VI). Cada consulta é isolada para que uma
+      // tabela ausente não impeça a coleta das demais.
+      const mediaUrls: any[] = [];
+      const collect = (sql: string) => {
+        try {
+          for (const r of db.prepare(sql).all(userId) as any[]) mediaUrls.push(r.u);
+        } catch (e: any) {
+          console.error("[Delete user] Falha ao coletar mídia:", e?.message || e);
+        }
+      };
+      collect("SELECT profile_picture_url AS u FROM users WHERE id = ?");
+      collect("SELECT cover_photo_url AS u FROM users WHERE id = ?");
+      collect("SELECT image_url AS u FROM posts WHERE user_id = ?");
+      collect("SELECT image_url AS u FROM motorcycles WHERE rider_id = ?");
+      collect("SELECT image_url AS u FROM events WHERE user_id = ?");
+      collect("SELECT image_url AS u FROM event_photos WHERE user_id = ?");
+      collect("SELECT photo_url AS u FROM submissions WHERE user_id = ?");
+
       db.transaction(() => {
         // Delete from all related tables
         db.prepare("DELETE FROM messages WHERE sender_id = ?").run(userId);
@@ -11154,6 +11401,10 @@ async function startServer() {
         db.prepare("DELETE FROM motorcycles WHERE rider_id = ?").run(userId);
         db.prepare("DELETE FROM events WHERE user_id = ?").run(userId);
         db.prepare("DELETE FROM submissions WHERE user_id = ?").run(userId);
+        // event_photos não constava desta lista — as fotos enviadas pela pessoa
+        // sobreviviam à exclusão da conta, o que não cumpre o direito de
+        // eliminação. Incluída junto com a limpeza do Storage (SEC-016).
+        db.prepare("DELETE FROM event_photos WHERE user_id = ?").run(userId);
         db.prepare("DELETE FROM votes WHERE user_id = ?").run(userId);
         db.prepare("DELETE FROM user_reports WHERE reporter_id = ? OR reported_id = ?").run(userId, userId);
         db.prepare("DELETE FROM riders WHERE user_id = ?").run(userId);
@@ -11167,6 +11418,10 @@ async function startServer() {
       // Also purge Firestore — otherwise login / authenticateToken re-hydrate the
       // Turso row from the durable mirror and the account stays active.
       await deleteUserFromFirestore(userId);
+
+      // Elimina os binários do Storage. Sem isto a conta some das duas bases
+      // mas as imagens continuam servidas indefinidamente (SEC-016).
+      await Promise.all(mediaUrls.map((u) => deleteFromFirebase(u)));
 
       res.json({ success: true, message: "Account deleted successfully" });
     } catch (error: any) {
